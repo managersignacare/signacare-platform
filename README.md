@@ -1,14 +1,18 @@
-# Signacare EMR
+# Signacare Platform
 
-Australian mental-health EMR. Multi-tenant, RLS-enforced, integrated
+Australian mental-health EMR platform. Multi-tenant, RLS-enforced, integrated
 with MHR / HealthLink / Medicare / NHSD / Ollama.
+
+This repository is the platform split only. Sara and Viva are maintained in
+separate repositories:
+
+- Sara clinician app: `managersignacare/Sara`
+- Viva patient app: `managersignacare/viva`
 
 ## Workspaces
 
 - `apps/api` — Node/TypeScript/Express backend + Knex migrations + BullMQ
 - `apps/web` — React 18 + MUI v6 + TanStack Query + Formik
-- `apps/mobile` — Sara (Flutter, clinician)
-- `apps/patient-app` — Viva (Flutter, patient)
 - `apps/emr-gateway` — eRx / SafeScript / HealthLink gateway shim
 - `packages/shared` — Zod schemas + DTOs (single source of truth)
 
@@ -43,8 +47,6 @@ with MHR / HealthLink / Medicare / NHSD / Ollama.
    ```
    - API: `http://localhost:4000` (HTTPS via `TLS_CERT_PATH` in prod)
    - Web: `http://localhost:5173`
-   - Sara (Flutter): `flutter run -d chrome --web-port=5174`
-   - Viva (Flutter): `flutter run -d chrome --web-port=5175`
 
 ## Required environment variables
 
@@ -65,11 +67,9 @@ full list.
 
 - **CLAUDE.md** — development rules (13 sections, including §12.4
   gold-standard migration skeleton).
-- **docs/audit-2026-04-19/FINDINGS.md** — clinical-safety findings
-  (112 bugs) that drove Tiers 1-19 of the remediation plan.
-- **docs/fix-registry.md** — every fix has a row with an ERE anchor
+- **docs/quality/fix-registry.md** — every fix has a row with an ERE anchor
   verified by `check-fix-registry.sh`.
-- **docs/tga-classification.md** — TGA non-device classification
+- **docs/compliance/tga-classification.md** — TGA non-device classification
   evidence for the scribe pipeline.
 
 ## CI guards
