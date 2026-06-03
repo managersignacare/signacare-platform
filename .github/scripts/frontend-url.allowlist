@@ -1,0 +1,63 @@
+# frontend-url.allowlist — dynamic apiClient URLs that can't be
+# resolved to a backend route by the static guard.
+#
+# One entry per line. Two forms accepted:
+#   "METHOD url"   e.g. "GET patients/search"
+#   "url"          e.g. "patients/search"
+#
+# Every entry MUST carry a `# reason` comment on the line above
+# or inline so a future reader knows why this dynamic path was
+# allowlisted. Adding new entries without a reason fails review.
+#
+# The guard is scripts/guards/check-frontend-calls-backend-route.ts
+# and runs in CI. See CLAUDE.md §9.4 for the rationale.
+
+# ── Pre-existing dead calls discovered on 2026-04-16 ──────────
+# These 9 apiClient calls target URLs with no backend handler.
+# Each became a 404 the first time the UI exercised it and
+# lived in tree unflagged until this guard caught them.
+#
+# Every line below is a TODO — the long-term fix is to either
+# implement the backend handler OR change the frontend caller,
+# then remove the allowlist entry. Each entry MUST carry a
+# rationale comment until it's drained.
+
+# TODO — PasswordResetForm has no backend. Either wire the
+# forgot-password flow on authRouter or hide the UI until it's
+# implemented.
+POST auth/password-reset/request
+POST auth/password-reset/confirm
+
+# TODO — Correspondence loads clinical note content for letter
+# body injection. No GET /clinical-notes/:id/content handler
+# exists — the existing clinical-notes endpoints return the full
+# note row (content included in JSONB). Either add a thin
+# `/content` variant that returns only the rendered text, or
+# change correspondenceApi.getNoteContent to use the existing
+# detail endpoint + project the content field.
+GET clinical-notes/:DYNAMIC/content
+
+# TODO — Messaging: the thread GET handler "also marks thread
+# read" as a side effect (messageRoutes.ts:16 comment). There is
+# no separate PATCH /threads/:id/read and no PATCH
+# /threads/:id/archive. Either split the read-mark into a
+# dedicated PATCH endpoint or remove the frontend calls and rely
+# on the GET side-effect.
+PATCH messages/threads/:DYNAMIC/read
+PATCH messages/threads/:DYNAMIC/archive
+
+# TODO — Pathology order cancel has no backend handler. Pathology
+# prescriptions use a similar /:id/cancel pattern on prescriptions
+# but not on orders. Either add the handler to pathologyRoutes or
+# hide the UI.
+PATCH pathology/orders/:DYNAMIC/cancel
+
+# TODO — Role-types CRUD (PUT + DELETE) not in staffSettingsRoutes.
+# The staff-settings routes file has list/create but no per-id
+# mutations. Either finish the CRUD or hide the UI.
+PUT staff-settings/role-types/:DYNAMIC
+DELETE staff-settings/role-types/:DYNAMIC
+
+# TODO — Backup location delete not in backupRoutes. Either
+# implement the handler or remove the delete button.
+DELETE backup/locations/:DYNAMIC

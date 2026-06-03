@@ -1,0 +1,67 @@
+# .github/safety-surfaces.txt — BUG-527
+#
+# Canonical machine-readable list of safety-surface paths. The
+# atomic-flip CI guard (.github/scripts/check-atomic-flip.sh) reads
+# this file to decide whether a commit's changed-file list intersects
+# a safety surface — and if so, requires an atomic catalogue flip
+# (delta to docs/quality/fix-registry.md or docs/quality/bugs-remaining.md
+# in the same commit).
+#
+# This file is the SSoT, mirrored by docs/quality/l4-reviewer-checklist.md
+# §F. Updates MUST happen in the same commit per BUG-526 §G + the
+# `feedback_no_silent_out_of_scope.md` rule.
+#
+# Format:
+#   - One bash-prefix-match pattern per line.
+#   - Trailing slash means "directory; match any file under this prefix".
+#   - File entries (.ts/.tsx) match exactly.
+#   - Lines starting with # are comments. Empty lines are ignored.
+
+# ── API safety surfaces ─────────────────────────────────────────────
+apps/api/src/features/medications/
+apps/api/src/features/clinical-notes/
+apps/api/src/features/llm/
+apps/api/src/features/scribe/
+apps/api/src/features/ect/
+apps/api/src/features/tms/
+apps/api/src/features/risk/
+apps/api/src/features/advance-directives/
+apps/api/src/features/legal/
+apps/api/src/features/clozapine/
+apps/api/src/features/auth/
+apps/api/src/features/audit/
+apps/api/src/features/prescriptions/
+apps/api/src/features/pathology/
+apps/api/src/features/patient-app/
+apps/api/src/features/patient-outreach/
+apps/api/src/features/power-settings/
+
+# ── Web safety surfaces ─────────────────────────────────────────────
+apps/web/src/features/medications/
+apps/web/src/features/clinical-notes/
+apps/web/src/features/llm/
+apps/web/src/features/scribe/
+apps/web/src/features/receptionist/
+apps/web/src/features/beds/
+# BUG-619 — psychiatrist's primary AIMS+metabolic monitoring view is a
+# clinical-safety surface (tardive dyskinesia / lipid panel / glucose
+# monitoring AHPRA-required surveillance). Registered post-BUG-619
+# closure so future regressions on this surface trigger the atomic-flip
+# CI guard requiring a catalogue delta in the same commit.
+apps/web/src/features/psychiatrist/
+
+# ── Web safety-tab files (named individually per L4 §F) ─────────────
+apps/web/src/features/patients/components/detail/tabs/MedicationsTab.tsx
+apps/web/src/features/patients/components/detail/tabs/MedicationHistoryTab.tsx
+apps/web/src/features/patients/components/detail/tabs/VivaTab.tsx
+apps/web/src/features/patients/components/detail/tabs/SummaryTab.tsx
+apps/web/src/features/patients/components/detail/tabs/PathologyTab.tsx
+apps/web/src/features/patients/components/detail/tabs/MhaTab.tsx
+apps/web/src/features/patients/components/detail/tabs/LegalTab.tsx
+apps/web/src/features/patients/components/detail/tabs/EctTmsTab.tsx
+
+# ── Web shared hooks gating clinical access (BUG-416) ───────────────
+apps/web/src/shared/hooks/useModuleVisibility.ts
+
+# ── API shared db helpers gating clinical mutations (BUG-371) ───────
+apps/api/src/shared/db/optimisticLock.ts

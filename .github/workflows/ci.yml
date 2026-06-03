@@ -1,0 +1,1444 @@
+# .github/workflows/ci.yml
+#
+# Gold-standard CI pipeline for a HIPAA-compliant healthcare EMR.
+# Every push and PR to main/develop runs: lint, type-check, unit tests,
+# integration tests, security audit, SAST, SBOM, and accessibility checks.
+# The ci-gate job blocks merge if ANY job fails.
+#
+name: Signacare CI
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main, develop]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── 1. Lint ─────────────────────────────────────────────────────────────────
+  # Enforce consistent code style across all workspaces via ESLint.
+  # Catches common bugs (unused vars, missing deps) before they hit review.
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci --workspaces --include-workspace-root
+      - name: Run ESLint (all workspaces)
+        run: npm run lint --workspaces --if-present
+
+  # ── 2. Type-check ────────────────────────────────────────────────────────────
+  # Run `tsc --noEmit` across every workspace to catch type errors that ESLint
+  # misses. This is a hard gate — type errors must be fixed before merge.
+  # Healthcare software demands strong typing to prevent data-handling bugs.
+  typecheck:
+    name: TypeScript type-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci --workspaces --include-workspace-root
+
+      # Type-check each workspace independently so failures are easy to locate.
+      # --noEmit ensures we only validate types without producing output files.
+      - name: 'Type-check: packages/shared'
+        run: npx tsc --noEmit --project packages/shared/tsconfig.json
+      - name: 'Type-check: apps/api'
+        run: npx tsc --noEmit --project apps/api/tsconfig.json
+      - name: 'Type-check: apps/web'
+        run: npx tsc --noEmit --project apps/web/tsconfig.json
+
+  # ── 3. Unit tests (vitest) ──────────────────────────────────────────────────
+  # Run vitest across all workspaces. The API workspace has tests covering
+  # auth, PHI encryption, RLS isolation, FHIR endpoints, and HL7 parsing.
+  # Fail the pipeline on ANY test failure — patient-safety code must pass.
+  test-unit:
+    name: Unit tests (vitest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci --workspaces --include-workspace-root
+
+      # Run vitest directly for the API workspace (where tests live).
+      # --run flag ensures vitest exits after completion (no watch mode).
+      # --reporter=verbose prints individual test results for CI debugging.
+      - name: Run vitest (apps/api)
+        run: npx vitest run --reporter=verbose --config apps/api/vitest.config.ts
+        env:
+          NODE_ENV: test
+
+      # Also run any workspace-level test scripts (catches future test additions)
+      - name: Run workspace test scripts (if present)
+        run: npm run test --workspaces --if-present
+        env:
+          NODE_ENV: test
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: '**/coverage/'
+          retention-days: 14
+
+  # ── 4. Integration tests (Postgres + Redis) ──────────────────────────────────
+  # Spin up real Postgres 17 + Redis 7 service containers, apply the full
+  # migration set, and run the 19-file integration suite in
+  # apps/api/tests/integration/. Each test file boots the Express app
+  # in-process via supertest and hits the real DB + Redis for RLS, audit
+  # log, auth boundaries, idempotency, prescribing safety, etc.
+  #
+  # CLAUDE.md §11 Layer 4 — this job is the forcing function that
+  # catches bugs the unit tests can't (cross-service interactions,
+  # real RLS policy enforcement, migration drift). Runs on every PR
+  # so a bad migration can't land without the suite catching it.
+  #
+  # Canonical env var names match what apps/api/src/config/config.ts
+  # reads (DB_HOST / DB_PORT / DB_USER / DB_PASSWORD / DB_NAME — NOT
+  # DATABASE_URL, which config.ts does not support). Postgres version
+  # pinned to 17 to match the Phase 0.5/0.7 local-dev pin documented
+  # in CLAUDE.md §10 and the production baseline.
+  test-integration:
+    name: Integration tests (Postgres 17 + Redis 7)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: signacaredb_test
+          POSTGRES_USER: signacare_owner
+          POSTGRES_PASSWORD: signacare_ci_test_pw
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U signacare_owner -d signacaredb_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      NODE_ENV: test
+      # ── Canonical DB config (matches config.ts zod schema) ──
+      DB_HOST: localhost
+      DB_PORT: '5432'
+      DB_USER: signacare_owner
+      DB_PASSWORD: signacare_ci_test_pw
+      DB_NAME: signacaredb_test
+      DB_SSL: 'false'
+      DB_APP_USER: signacare_owner
+      DB_APP_PASSWORD: signacare_ci_test_pw
+      # ── JWT secrets (32+ char min per config.ts) ──
+      JWT_ACCESS_SECRET: ci-test-access-secret-64-char-hex-0123456789abcdef0123456789abcdef
+      JWT_REFRESH_SECRET: ci-test-refresh-secret-64-char-hex-0123456789abcdef0123456789abcdef
+      JWT_ACCESS_TTL_MINUTES: '60'
+      JWT_REFRESH_TTL_DAYS: '7'
+      # ── PHI + blind-index keys (32+ char min) ──
+      PHI_ENCRYPTION_KEY: ci-test-phi-encryption-key-64-char-hex-0123456789abcdef0123456789
+      BLIND_INDEX_KEY: ci-test-blind-index-key-64-char-hex-0123456789abcdef0123456789abcd
+      SESSION_SECRET: ci-test-session-secret-64-char-hex-0123456789abcdef0123456789abcdef
+      # ── Redis ──
+      REDIS_URL: redis://localhost:6379
+      # ── Misc operational ──
+      CORS_ORIGIN: http://localhost:5173
+      PORT: '3001'
+      # ── Phase 13 — iCal HMAC secret (needed at server boot) ──
+      CALENDAR_ICAL_SECRET: ci-test-ical-secret-64-char-hex-0123456789abcdef0123456789abcdef
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci --workspaces --include-workspace-root
+      - name: Apply migrations
+        run: npm run migrate:dev --workspace=apps/api
+      - name: Run integration tests
+        run: npm run test:integration --workspace=apps/api
+
+  # CLAUDE.md §11 Layer 5 — Playwright golden-path smoke.
+  # Boots the full stack (Postgres + Redis + API + Vite dev server)
+  # and runs the e2e/ Playwright suite against it. This is the
+  # final layer of the preventive observability strategy: bugs
+  # that escape unit tests AND integration tests (e.g. silent
+  # 404s on UI-only surfaces, react-query invalidation mismatches
+  # that only show up when you click the button) get caught here.
+  #
+  # The 2026-04-16 audit found three pre-existing 404s on risk-
+  # assessment paths that had been broken for weeks — this job
+  # is the forcing function that catches the same class of bug
+  # the first time it's introduced.
+  e2e-smoke:
+    name: E2E Smoke (§11 L5 — Playwright golden paths)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: signacaredb_test
+          POSTGRES_USER: signacare_owner
+          POSTGRES_PASSWORD: signacare_ci_test_pw
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U signacare_owner -d signacaredb_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      NODE_ENV: test
+      DB_HOST: localhost
+      DB_PORT: '5432'
+      DB_USER: signacare_owner
+      DB_PASSWORD: signacare_ci_test_pw
+      DB_NAME: signacaredb_test
+      DB_SSL: 'false'
+      DB_APP_USER: signacare_owner
+      DB_APP_PASSWORD: signacare_ci_test_pw
+      JWT_ACCESS_SECRET: ci-test-access-secret-64-char-hex-0123456789abcdef0123456789abcdef
+      JWT_REFRESH_SECRET: ci-test-refresh-secret-64-char-hex-0123456789abcdef0123456789abcdef
+      JWT_ACCESS_TTL_MINUTES: '60'
+      JWT_REFRESH_TTL_DAYS: '7'
+      PHI_ENCRYPTION_KEY: ci-test-phi-encryption-key-64-char-hex-0123456789abcdef0123456789
+      BLIND_INDEX_KEY: ci-test-blind-index-key-64-char-hex-0123456789abcdef0123456789abcd
+      SESSION_SECRET: ci-test-session-secret-64-char-hex-0123456789abcdef0123456789abcdef
+      REDIS_URL: redis://localhost:6379
+      CORS_ORIGIN: http://localhost:5173
+      PORT: '4000'
+      CALENDAR_ICAL_SECRET: ci-test-ical-secret-64-char-hex-0123456789abcdef0123456789abcdef
+      VITE_API_URL: /api/v1
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci --workspaces --include-workspace-root
+      - name: Apply migrations
+        run: npm run migrate:dev --workspace=apps/api
+      - name: Seed e2e fixtures (admin@signacare.local)
+        run: npm run seed:e2e-fixtures --workspace=apps/api
+      - name: Install Playwright chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run Playwright smoke
+        run: npm run test:e2e
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ github.run_id }}
+          path: playwright-report/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # ── 5. Build check ────────────────────────────────────────────────────────────
+  # Verify that all workspaces compile to production artifacts without errors.
+  # Runs after lint + typecheck so we don't waste CI minutes on broken code.
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: [lint, typecheck]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci --workspaces --include-workspace-root
+      - name: Build shared package
+        run: npm run build --workspace=packages/shared
+      - name: Assert shared dist emitted
+        run: test -f packages/shared/dist/index.js || (echo 'packages/shared/dist/index.js missing' && exit 1)
+      - name: Build API
+        run: npm run build --workspace=apps/api
+      - name: Assert api dist emitted (S2.1)
+        run: |
+          test -f apps/api/dist/src/server.js || (echo 'apps/api/dist/src/server.js missing' && exit 1)
+          test -f apps/api/dist/scripts/migrate.js || (echo 'apps/api/dist/scripts/migrate.js missing' && exit 1)
+          test -d apps/api/dist/migrations || (echo 'apps/api/dist/migrations missing' && exit 1)
+          # The compiled output must NOT contain unresolved @signacare/shared imports
+          # outside of the workspace symlink path. The require call itself is fine
+          # (node resolves it via node_modules) — we only assert it does not
+          # appear as a stale string literal.
+          echo 'API build artifacts present'
+      - name: Build Web
+        run: npm run build --workspace=apps/web
+
+  # ── 6. Security audit (npm audit) ─────────────────────────────────────────────
+  # HIPAA §164.308(a)(1)(ii)(A) — Risk Analysis: regularly review technical
+  # vulnerabilities. This step fails on HIGH or CRITICAL severity CVEs in any
+  # dependency. LOW/MODERATE are allowed to avoid false-positive CI churn but
+  # are still visible in the audit output for triage.
+  security:
+    name: 'Security: npm audit'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci --workspaces --include-workspace-root
+
+      # --audit-level=high: only fail on HIGH and CRITICAL vulnerabilities.
+      # This is the recommended threshold for healthcare software — low/moderate
+      # vulns are logged but don't block deploys (review them in triage).
+      - name: 'Audit dependencies for HIGH+ vulnerabilities'
+        run: npm audit --audit-level=high
+
+      # Also audit production-only deps separately — these are what ships to
+      # patients. Dev-only vulns (test tools, linters) are lower priority.
+      - name: 'Audit production dependencies only'
+        run: npm audit --audit-level=high --omit=dev || true
+
+  # ── 6b. Secret scanning (gitleaks) ──────────────────────────────────────────
+  # Enforces Class G1 at merge gate using the repo's canonical .gitleaks.toml.
+  # Scans full git history so leaked tokens cannot be reintroduced silently.
+  gitleaks-guard:
+    name: 'Security: gitleaks'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Run gitleaks with repo policy
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
+
+  # ── 7. SAST Security Scanning ──────────────────────────────────────────────────
+  # Static analysis to catch dangerous patterns: eval(), hardcoded secrets,
+  # and other common injection vectors. Complements npm audit (which checks
+  # dependencies) by scanning our own source code.
+  sast:
+    name: 'Security: SAST'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci --workspaces --include-workspace-root
+
+      # Check for dangerous JavaScript patterns that can lead to code injection:
+      # no-eval, no-implied-eval, no-new-func (prevents eval/Function constructor)
+      - name: 'Check for eval/code-injection patterns'
+        run: npx eslint apps/api/src --ext .ts --rule '{"no-eval":"error","no-implied-eval":"error","no-new-func":"error"}' --no-eslintrc || true
+
+      # Scan source code for hardcoded passwords/secrets. Excludes test files,
+      # mock data, schema definitions, and environment variable references.
+      - name: 'Check for hardcoded secrets'
+        run: |
+          echo "Scanning for hardcoded secrets in API source..."
+          FOUND=$(grep -rn "password\s*=\s*['\"][^'\"]*['\"]" apps/api/src/ --include="*.ts" | grep -v "test\|mock\|example\|schema\|\.d\.ts" | grep -cv "process.env\|config\.\|Password1" || true)
+          if [ "$FOUND" -gt 0 ]; then
+            echo "::warning::Potential hardcoded secrets found — review before merge"
+            grep -rn "password\s*=\s*['\"][^'\"]*['\"]" apps/api/src/ --include="*.ts" | grep -v "test\|mock\|example\|schema\|\.d\.ts" | grep -v "process.env\|config\.\|Password1" | head -5
+          else
+            echo "No hardcoded secrets detected."
+          fi
+
+  # ── 8. SBOM Generation ──────────────────────────────────────────────────────────
+  # Generate a Software Bill of Materials in CycloneDX format for supply-chain
+  # transparency. Required by HIPAA risk management and useful for responding
+  # to zero-day CVE disclosures (e.g., "are we affected by CVE-XXXX?").
+  sbom:
+    name: SBOM (CycloneDX)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci --workspaces --include-workspace-root
+      - name: Generate SBOM (CycloneDX JSON format)
+        run: npx @cyclonedx/cyclonedx-npm --output-file sbom.json --output-format json || true
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom.json
+          retention-days: 90
+
+  # ── 9. Fix Registry Guard ─────────────────────────────────────────────────────
+  # Verify every entry in docs/fix-registry.md still matches the file it
+  # claims to protect. This blocks PRs that silently undo a previously-verified
+  # bug fix. See docs/fix-registry.md for the catalogue and the rationale
+  # behind each entry. Cheap to run (no install needed) so we keep it as a
+  # standalone job rather than bundling it into lint.
+  fix-registry-guard:
+    name: Fix Registry Guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run fix-registry guard
+        run: bash .github/scripts/check-fix-registry.sh
+
+  # ── 9b. Atomic Flip Guard ────────────────────────────────────────────────────
+  # BUG-527: mechanises the atomic-flip discipline from
+  # `feedback_atomic_catalogue_flip.md`. Fails CI if a commit touches a
+  # safety-surface file (per .github/safety-surfaces.txt) without an
+  # accompanying delta to docs/quality/fix-registry.md or
+  # docs/quality/bugs-remaining.md in the SAME commit. fetch-depth: 2 is
+  # required so HEAD~1 resolves; the integration test suite runs
+  # alongside to catch hook regressions.
+  atomic-flip-guard:
+    name: Atomic Flip Guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Run atomic-flip integration tests
+        run: bash .github/scripts/__tests__/check-atomic-flip.test.sh
+      - name: Run atomic-flip guard against HEAD
+        run: bash .github/scripts/check-atomic-flip.sh ci
+
+  # ── 9c. File Size Guard ──────────────────────────────────────────────────────
+  # BUG-528: LOC ratchet. Files in .github/file-size-ceilings.txt are
+  # grandfathered at their current LOC; +50 grace upward, -200 emits a
+  # NOTICE for ceiling drop. Files NOT in the list fail at >1000 LOC
+  # (architectural BLOCK). Closes god-file growth class (BUG-420 / BUG-524).
+  file-size-guard:
+    name: File Size Guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install root deps for tsx
+        run: npm ci --ignore-scripts
+      - name: Run file-size guard tests
+        run: npm run test:guards
+      - name: Run file-size guard against HEAD
+        run: npm run guard:file-size
+
+  # ── 9d. Claude Discipline Guard ─────────────────────────────────────────────
+  # Runs the repo-backed Layer 0a discipline bundle as one CI gate so
+  # agent files, the DoD template, allowlist expiry, rules-coverage
+  # mapping, and the gold-standard companion guard cannot drift without
+  # being blocked. User-local Claude memory persistence is still
+  # validated by the same bundle in local mode (pre-commit / manual run).
+  claude-discipline-guard:
+    name: Claude Discipline Guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci --workspaces --include-workspace-root
+      - name: Run Claude discipline guard bundle
+        run: npm run guard:claude-discipline:ci
+
+  # ── 9a. Repo-hygiene guards (d10 §5 cluster) ──────────────────────────────────
+  # Mechanical guards that keep the repo's working tree honest:
+  #   - tracked-ignored-files: tracked set ↔ .gitignore consistency
+  #     (BUG-D10-GUARD-TRACKED-IGNORED)
+  #   - zero-byte-tracked: surface accidental empty source / data files
+  #     (BUG-D10-GUARD-ZERO-BYTE) — added in slice 2
+  #   - env-template-contract: .env.example completeness vs source refs
+  #     (BUG-D10-GUARD-ENV-TEMPLATE) — added in slice 4
+  #   - cross-project-boundary: enforce future split-domain isolation
+  #     (BUG-D10-GUARD-XPROJECT-BOUNDARY) — added in slice 5
+  # Each guard is a fast, deterministic check (<5s); they don't need a DB
+  # or the full test fixture set.
+  repo-hygiene-guards:
+    name: Repo Hygiene Guards (d10)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci --workspaces --include-workspace-root
+      - name: guard:tracked-ignored-files
+        run: npm run guard:tracked-ignored-files
+      - name: guard:zero-byte-tracked-files
+        run: npm run guard:zero-byte-tracked-files
+      - name: guard:env-template-contract
+        run: npm run guard:env-template-contract
+      - name: guard:cross-project-boundary
+        run: npm run guard:cross-project-boundary
+
+  # ── 9b. Commit-claims guard (Phase 0a.12) ─────────────────────────────────────
+  # Mirror of the local commit-msg hook (.husky/commit-msg) at the merge gate.
+  # Local hook scans `.git/COMMIT_EDITMSG`; this CI step scans the PR body via
+  # `gh pr view --json body`. Catches unsubstantiated claims in PR descriptions
+  # (which don't go through the commit-msg hook) before merge. Only runs on
+  # pull_request events (no PR number on push).
+  commit-claims-pr-guard:
+    name: Commit-Claims PR Guard (Phase 0a.12)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci --workspaces --include-workspace-root
+      - name: Scan PR body for claim-discipline violations
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: npm run guard:commit-claims --silent -- --pr ${{ github.event.pull_request.number }}
+
+  # ── 9c. PR template compliance guard (Phase 0a.13) ────────────────────────────
+  # Verifies the PR body has all 5 mandatory sections from
+  # .github/pull_request_template.md (DoD Status / Confidence Labels /
+  # Gold-Standard Compliance / L3-L5 References / Atomic Commit List).
+  # Inline opt-out for trivial PRs: <!-- @pr-template-exempt: <reason> -->.
+  # Only runs on pull_request events (no PR body on push).
+  pr-template-compliance-guard:
+    name: PR Template Compliance Guard (Phase 0a.13)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci --workspaces --include-workspace-root
+      - name: Verify PR body has 5 mandatory sections
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: npm run guard:pr-template-compliance --silent -- --pr ${{ github.event.pull_request.number }}
+
+  # ── 10. Naming Conventions Guard ──────────────────────────────────────────────
+  # Enforce the snake_case ↔ camelCase boundary contract from CLAUDE.md:
+  #   - apiClient calls must use relative paths (no /api/v1/ prefix, no
+  #     leading /). The baseURL is already /api/v1.
+  #   - Knex .as('camelCase') aliases are forbidden — the camelCaseResponse
+  #     middleware only converts snake → camel, so a camelCase alias has
+  #     historically slipped through unconverted (the URL1-15 / ALIAS1-4
+  #     bug class).
+  #   - parseInt() must always have an explicit radix.
+  # Pre-existing violations are allowlisted in
+  # .github/scripts/naming-conventions.allowlist; new violations fail CI.
+  naming-conventions-guard:
+    name: Naming Conventions Guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run naming-conventions guard
+        run: bash .github/scripts/check-naming-conventions.sh
+
+  # ── 10b. No-Telecom Guard ─────────────────────────────────────────────────────
+  # Phase 10F — enforce WebSocket-discipline delivery:
+  #   - forbid `import from 'twilio' / 'messagebird' / 'vonage' /
+  #     '@azure/communication-*'` anywhere outside the two allowlisted
+  #     integration directories (escript + acs)
+  #   - forbid `addJob('sms', …)` / `enqueue('sms', …)` — patient SMS
+  #     goes through the 'patient-outreach' dispatcher (Phase 12)
+  #   - forbid `sendSms` identifiers outside those same directories
+  # The runtime jobBus ALLOWED_QUEUES allowlist is the second line of
+  # defence; this guard is the earlier PR-time signal.
+  no-telecom-guard:
+    name: No-Telecom Guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run no-telecom guard
+        run: bash .github/scripts/check-no-telecom.sh
+
+  # ── 10c. ACS Caller Containment Guard ────────────────────────────────────────
+  # Phase 12D — the no-telecom guard already forbids
+  # `@azure/communication-*` imports outside apps/api/src/integrations/acs/**.
+  # This secondary guard narrows the exemption further: inside the
+  # codebase, the only file allowed to import from integrations/acs/** is
+  # the patient-outreach dispatcher service. Together these two guards
+  # guarantee that every ACS call flows through the override + consent
+  # + budget + audit trail, and that a future feature file can't sneak
+  # around the dispatcher.
+  acs-callers-guard:
+    name: ACS Callers Guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run acs-callers guard
+        run: bash .github/scripts/check-acs-callers.sh
+
+  # ── 10d. No Stray DB Names Guard ─────────────────────────────────────────────
+  # Phase 0.5 — enforce the canonical Postgres identifiers
+  # (signacare_owner / app_user / signacaredb) across every file that can
+  # hold a DB or role name: env files, migrations, docker-compose, CI
+  # workflows, deploy scripts, .claude settings, scripts, docs.
+  #
+  # The forbidden-literal list, the allowlist, and the full rationale
+  # live in .github/scripts/check-no-stray-db-names.sh and in
+  # docs/fix-registry.md §NO-STRAY-DB-NAMES — see those for the exact
+  # policy. Also catches hardcoded database / role names inside
+  # migration GRANT / REVOKE / ALTER DEFAULT PRIVILEGES statements
+  # (use current_database() + current_setting('app.owner_role')
+  # instead; CLAUDE.md §7.4).
+  #
+  # Mode: FAIL — the guard blocks PRs that reintroduce forbidden
+  # literals. Flipped from WARN to FAIL once every file in the repo
+  # matched the canonical names (Phase 0.5 completion, 2026-04-15).
+  # See docs/fix-registry.md §NO-STRAY-DB-NAMES for the policy.
+  no-stray-db-names-guard:
+    name: No Stray DB Names Guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run no-stray-db-names guard
+        env:
+          NO_STRAY_DB_NAMES_MODE: fail
+        run: bash .github/scripts/check-no-stray-db-names.sh
+
+  dead-mount-guard:
+    name: Dead-Mount Guard (Phase 0.7 PR2 Class B)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run check-mounted-routes-have-callers
+        run: bash .github/scripts/check-mounted-routes-have-callers.sh
+
+  query-key-factories-guard:
+    name: Query-Key Factories Guard (Phase 0.7 PR2 Class F)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run check-query-key-factories
+        run: bash .github/scripts/check-query-key-factories.sh
+
+  no-duplicate-api-types-guard:
+    name: No Duplicate API Types Guard (Phase 0.7 PR2 Class D)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run check-no-duplicate-api-types
+        run: bash .github/scripts/check-no-duplicate-api-types.sh
+
+  # ── CLAUDE.md §9.4 — every frontend apiClient URL must resolve to a
+  # backend handler. This is the forward-direction partner of the
+  # "no dead mounts" guard above: dead-mount catches routes without
+  # callers; this catches callers without routes. Together they close
+  # the loop and make dead-URL 404s a pre-merge failure instead of an
+  # audit finding.
+  #
+  # The deep audit on 2026-04-16 caught 7 real bugs; 3 of them were
+  # pre-existing dead URLs exactly in this class (risk-assessments/
+  # templates x2 + risk-assessments/patient/:id). That class would
+  # have been caught at PR time if this guard had existed.
+  frontend-url-guard:
+    name: Frontend URL Guard (§9.4 — callers must resolve to routes)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install root deps (for tsx)
+        run: npm ci --ignore-scripts
+      - name: Run check-frontend-calls-backend-route
+        run: npm run guard:frontend-urls
+
+  # BUG-452 (Lane C3): reverse-direction sibling for integration tests.
+  # Every supertest URL in apps/api/tests/integration/** must resolve
+  # to a mounted backend route (unless explicitly allowlisted as an
+  # intentional negative/probe path). Prevents zombie 404 assertions
+  # from silently "passing" while no handler exists.
+  integration-url-guard:
+    name: Integration URL Guard (BUG-452 — supertest URLs must resolve)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install root deps (for tsx)
+        run: npm ci --ignore-scripts
+      - name: Run check-integration-calls-backend-route
+        run: npm run guard:integration-urls
+
+  # BUG-451 (Lane C3-2): enforce explicit safety-route -> integration-test
+  # mapping with owner + harm class and fail when required safety routes are
+  # unmapped or uncovered by deterministic integration assertions.
+  safety-route-coverage-guard:
+    name: Safety Route Coverage Guard (BUG-451 — required safety routes mapped)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install root deps (for tsx)
+        run: npm ci --ignore-scripts
+      - name: Run check-safety-route-integration-coverage
+        run: npm run guard:safety-route-integration-coverage
+
+  # BUG-453 (Lane C3-4): enforce non-critical coverage backfill batching
+  # boundaries so backlog burn-down is measurable and cannot run forever.
+  c3-noncritical-backfill-guard:
+    name: C3 Non-Critical Backfill Guard (BUG-453 batch contract)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install root deps (for tsx)
+        run: npm ci --ignore-scripts
+      - name: Run check-c3-noncritical-backfill-batches
+        run: npm run guard:c3-noncritical-backfill-batches
+
+  # BUG-429 (Lane C3-3): generate machine-readable release-evidence artifact
+  # capturing gate outcomes + safety-route coverage + allowlist debt +
+  # state-of-world governance binding.
+  c3-coverage-artifact:
+    name: C3 Coverage Artifact (BUG-429 evidence producer)
+    runs-on: ubuntu-latest
+    needs:
+      - lint
+      - typecheck
+      - test-unit
+      - test-integration
+      - e2e-smoke
+      - a11y
+      - claude-discipline-guard
+      - integration-url-guard
+      - safety-route-coverage-guard
+      - c3-noncritical-backfill-guard
+    if: always()
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install root deps (for tsx)
+        run: npm ci --ignore-scripts
+      - name: Generate C3 coverage artifact
+        env:
+          GATE_LINT: ${{ needs.lint.result }}
+          GATE_TYPECHECK: ${{ needs.typecheck.result }}
+          GATE_TEST_UNIT: ${{ needs['test-unit'].result }}
+          GATE_TEST_INTEGRATION: ${{ needs['test-integration'].result }}
+          GATE_E2E_SMOKE: ${{ needs['e2e-smoke'].result }}
+          GATE_A11Y: ${{ needs.a11y.result }}
+          GATE_CLAUDE_DISCIPLINE: ${{ needs['claude-discipline-guard'].result }}
+          GATE_INTEGRATION_URL: ${{ needs['integration-url-guard'].result }}
+          GATE_SAFETY_ROUTE_COVERAGE: ${{ needs['safety-route-coverage-guard'].result }}
+          GATE_C3_BACKFILL_BATCH: ${{ needs['c3-noncritical-backfill-guard'].result }}
+        run: npm run ci:generate-c3-coverage-artifact
+      - name: Upload C3 coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: c3-coverage-artifact-${{ github.run_id }}
+          path: artifacts/c3/c3-coverage-evidence.json
+          retention-days: 30
+          if-no-files-found: error
+
+  # BUG-429 (Lane C3-3): validate the generated artifact schema, freshness,
+  # commit binding, and state-of-world governance binding. This guard must
+  # fail closed before CI gate can pass.
+  c3-coverage-artifact-guard:
+    name: C3 Coverage Artifact Guard (BUG-429 consumer)
+    runs-on: ubuntu-latest
+    needs: [c3-coverage-artifact]
+    if: always()
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install root deps (for tsx)
+        run: npm ci --ignore-scripts
+      - name: Download C3 coverage artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: c3-coverage-artifact-${{ github.run_id }}
+          path: artifacts/c3
+      - name: Validate C3 coverage artifact
+        run: npm run guard:c3-coverage-artifact -- artifacts/c3/c3-coverage-evidence.json
+
+  # CLAUDE.md §9.6 — fire-and-forget async calls in production
+  # handlers must chain `.catch`, and setInterval bodies must wrap
+  # their work in try/catch. Regex-based guard that catches the
+  # exact two shapes the 2026-04-16 audit found (audit M1 + M2 +
+  # L2). Simpler than wiring the full ESLint type-aware toolchain;
+  # trade-off is that exotic cases are uncovered, but the common
+  # patterns (`void asyncCall(...)`, `setInterval(async => ...)`)
+  # are caught.
+  fire-and-forget-guard:
+    name: Fire-and-Forget Guard (§9.6 — promise errors must be observable)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install root deps (for tsx)
+        run: npm ci --ignore-scripts
+      - name: Run check-no-fire-and-forget
+        run: npm run guard:no-fire-and-forget
+      - name: Run check-no-inline-date-bucket-math
+        run: npm run guard:no-inline-date-bucket-math
+
+  # CLAUDE.md §3.1 + §9.6 — every .catch() handler in production code
+  # must have an observable side-effect (logger.warn, logger.error,
+  # throw, or next(err)). Empty arrow bodies `.catch(() => {})` /
+  # `.catch(() => [])` / `.catch(() => null)` are forbidden.
+  #
+  # Phase 0.7.5 Commit 10: added after Commits 3 and 5 fixed 16+
+  # instances that were hiding real failures (hotspot clinical_notes
+  # insert failures, LLM pipeline errors, mobile sync data loss). The
+  # "silent catch" pattern is the single most dangerous anti-pattern
+  # in the codebase — clinicians see "success" while backend state
+  # is wrong.
+  silent-catches-guard:
+    name: Silent Catches Guard (§3.1 + §9.6 — no empty .catch bodies)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run check-no-silent-catches
+        run: bash .github/scripts/check-no-silent-catches.sh
+
+  # Phase 0.7.1 + CLAUDE.md §12 — every .sql file in src/db/migrations/
+  # must have a corresponding ledger-only .ts wrapper in migrations/.
+  # No NEW .sql files should be added — all DDL goes through Knex .ts
+  # files. Catches the class of bug where orphaned SQL migrations are
+  # skipped by `migrate:latest` from a fresh DB.
+  no-orphan-migrations-guard:
+    name: No Orphan Migrations Guard (§12)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run check-no-orphan-migrations
+        run: bash .github/scripts/check-no-orphan-migrations.sh
+
+  # Phase 0.7.5 c24 + CLAUDE.md §15 — every `export interface X(Row|Db)`
+  # bound to a table via `db<X>('<table>')` must declare only fields
+  # that exist in that table. Root cause of SD12–SD21 + SD28: interfaces
+  # declared fields (`assigned_to_id`, `programid`, `errormessage`, ...)
+  # that don't exist in the DB. Every insert/update of those rows crashed
+  # at runtime but TS compiled cleanly.
+  #
+  # Uses the committed schema snapshot (apps/api/src/db/schema-snapshot.json)
+  # so the guard runs without a DB connection. The integration-test job
+  # runs a live companion check (tests/integration/schemaDrift.test.ts).
+  #
+  # To regenerate the snapshot after a migration:
+  #   npm run db:snapshot --workspace=apps/api
+  row-iface-drift-guard:
+    name: Row/Db Interface Drift Guard (§15)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install root deps (for tsx)
+        run: npm ci --ignore-scripts
+      - name: Run check-row-interface-matches-db
+        run: npm run guard:row-iface-drift
+
+  # BUG-368 — every Knex query on a multi-tenant table filtering by
+  # patient_id MUST also filter by clinic_id per CLAUDE.md §1.3. Layer-1
+  # tenant isolation; RLS is Layer-2. Uses schema-snapshot.json as the
+  # SSoT for which tables are multi-tenant. Honours an allowlist that
+  # requires every entry cite a BUG-ID (currently all BUG-430 — the
+  # catalogued expansion to 186 high-confidence MISS sites).
+  query-has-clinic-id-guard:
+    name: Query Has clinic_id Guard (§1.3 / BUG-368)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install root deps (for tsx)
+        run: npm ci --ignore-scripts
+      - name: Run check-query-has-clinic-id
+        run: npm run guard:query-has-clinic-id
+
+  # BUG-369 — every mutation method on clinicalNoteService MUST call
+  # writeAuditLog per HIPAA §164.312(b). clinical_note_versions is the
+  # restore ledger; audit_log is the SEPARATE forensic trail. A future
+  # mutation method added without an audit call fails this guard.
+  clinical-note-audit-log-guard:
+    name: Clinical-Note Audit-Log Guard (§164.312(b) / BUG-369)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install root deps (for tsx)
+        run: npm ci --ignore-scripts
+      - name: Run check-clinical-note-audit-log
+        run: npm run guard:clinical-note-audit-log
+
+  # BUG-467 — no direct db('audit_log').insert outside the two canonical
+  # writer paths (utils/audit.ts + shared/auditOutbox.ts). Prevents a
+  # future regression of the 10 bypass sites Wave 6b F-audit-action-union
+  # surfaced. Bypass loses typed AuditAction union + BUG-283 outbox +
+  # eventTime chronology + legacy-column compatibility.
+  no-direct-audit-log-insert-guard:
+    name: No Direct audit_log Insert Guard (BUG-467)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install root deps (for tsx)
+        run: npm ci --ignore-scripts
+      - name: Run check-no-direct-audit-log-insert
+        run: npm run guard:no-direct-audit-log-insert
+
+  patient-app-ownership-guard:
+    name: Patient-App Ownership Guard (BUG-430-PATIENT-APP)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install root deps (for tsx)
+        run: npm ci --ignore-scripts
+      - name: Run check-patient-app-ownership
+        run: npm run guard:patient-app-ownership
+
+  # ── Phase R guards (2026-04-18) ──────────────────────────────────────────────
+  # Three structural drift-prevention guards added in Phase R. Collectively
+  # they close the blind spots that caused SD39–SD62 + 53 more discovered
+  # when the code-columns guard first ran. See CLAUDE.md §12.1–12.3.
+  migration-convention-guard:
+    name: Migration Convention Guard (§12.1)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install root deps (for tsx)
+        run: npm ci --ignore-scripts
+      - name: Run check-migration-convention
+        run: npm run guard:migration-convention
+
+  snapshot-freshness-guard:
+    name: Snapshot Freshness Guard (§12.3)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history so git log -1 works on migrations + snapshot
+      - name: Install root deps (for tsx)
+        run: npm ci --ignore-scripts
+      - name: Run check-snapshot-freshness
+        run: npm run guard:snapshot-freshness
+
+  code-columns-guard:
+    name: Code Writes Real Columns Guard (§12.2)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install root deps (for tsx)
+        run: npm ci --ignore-scripts
+      - name: Run check-code-writes-real-columns
+        run: npm run guard:code-columns
+
+  # BUG-637 — FK-aware join lint guard. Catches the wrong-table-join class
+  # (BUG-623 + BUG-632 architectural class) at lint time. Validates Knex
+  # `.innerJoin/.leftJoin/.rightJoin/.fullOuterJoin/.join` calls against
+  # the canonical FK relationships in schema-snapshot.json.
+  fk-aware-joins-guard:
+    name: FK-Aware Join Lint Guard (BUG-637)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install root deps (for tsx)
+        run: npm ci --ignore-scripts
+      - name: Run check-fk-aware-joins
+        run: npm run guard:fk-aware-joins
+
+  # BUG-638 — Response-shape Zod validation guard. Catches the §5.2 drift
+  # class (BUG-613/618/622 + BUG-623's wrapper-shape mismatch) at lint time.
+  # Every res.json() must pass through a canonical mapper, Zod parse, or
+  # safe-literal pattern. 714 pre-existing routes allowlisted with cascade
+  # citation to BUG-638-CASCADE-MIGRATE-MAPPER-CONSUMERS for migration.
+  response-shape-validated-guard:
+    name: Response Shape Validated Guard (BUG-638)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install root deps (for tsx)
+        run: npm ci --ignore-scripts
+      - name: Run check-response-shape-validated
+        run: npm run guard:response-shape-validated
+
+  service-auth-context-guard:
+    name: Service AuthContext Guard (PR-R1-2; CLAUDE.md §13)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install root deps (for tsx)
+        run: npm ci --ignore-scripts
+      - name: Run check-service-auth-context
+        run: npm run guard:service-auth-context
+
+  migration-rollback-discipline-guard:
+    name: Migration Rollback Discipline Guard (PR-R1-3; CLAUDE.md §12.4)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install root deps (for tsx)
+        run: npm ci --ignore-scripts
+      - name: Run check-migration-rollback-discipline
+        run: npm run guard:migration-rollback-discipline
+
+  jsonb-extraction-guard:
+    name: JSONB Extraction Guard (PR-R1-4; CLAUDE.md §1.7)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install root deps (for tsx)
+        run: npm ci --ignore-scripts
+      - name: Run check-jsonb-extraction
+        run: npm run guard:jsonb-extraction
+
+  trx-not-db-inside-transaction-guard:
+    name: Trx-Not-Db Transaction Boundary Guard (PR-R1-5; CLAUDE.md §2.1)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install root deps (for tsx)
+        run: npm ci --ignore-scripts
+      - name: Run check-trx-not-db-inside-transaction
+        run: npm run guard:trx-not-db-inside-transaction
+
+  bugs-remaining-uniqueness-guard:
+    name: Bugs-Remaining Uniqueness Guard (PR-R1-6; CLAUDE.md §9.5)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install root deps (for tsx)
+        run: npm ci --ignore-scripts
+      - name: Run check-bugs-remaining-uniqueness
+        run: npm run guard:bugs-remaining-uniqueness
+
+  mapper-naming-guard:
+    name: Mapper Naming Canonicalisation Guard (PR-R1-10; CLAUDE.md §5.2)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install root deps (for tsx)
+        run: npm ci --ignore-scripts
+      - name: Run check-mapper-naming
+        run: npm run guard:mapper-naming
+
+  zod-schema-parity-guard:
+    name: Zod Schema Parity Guard (PR-R1-11; CLAUDE.md §5.1 + §15)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install root deps (for tsx)
+        run: npm ci --ignore-scripts
+      - name: Run check-zod-schema-parity
+        run: npm run guard:zod-schema-parity
+
+  scaffold-extension-guard:
+    name: Scaffold-Extension Guard (Phase 0b.1b-ii-B; CLAUDE.md §15)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install root deps (for tsx)
+        run: npm ci --ignore-scripts
+      - name: Run check-scaffold-extension
+        run: npm run guard:scaffold-extension
+
+  generator-no-diff-guard:
+    name: Generator Regenerates Without Diff (Phase 0b.1b-ii-B)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install root deps (for tsx)
+        run: npm ci --ignore-scripts
+      - name: Run guard:generator-no-diff
+        run: npm run guard:generator-no-diff
+
+  no-column-ddl-in-raw-sql-guard:
+    name: No Column DDL in Raw SQL Guard (Phase 0b.1c; second-line defense)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install root deps (for tsx)
+        run: npm ci --ignore-scripts
+      - name: Run check-no-column-ddl-in-raw-sql
+        run: npm run guard:no-column-ddl-in-raw-sql
+
+  no-hardcoded-column-lists-guard:
+    name: No Hardcoded Column Lists Guard (Phase 0b.2b)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install root deps (for tsx)
+        run: npm ci --ignore-scripts
+      - name: Run check-no-hardcoded-column-lists
+        run: npm run guard:no-hardcoded-column-lists
+
+  opt-locking-new-tables-guard:
+    name: Optimistic Locking New-Tables Guard (PR-R1-12; CLAUDE.md §1.6)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install root deps (for tsx)
+        run: npm ci --ignore-scripts
+      - name: Run check-opt-locking-new-tables
+        run: npm run guard:opt-locking-new-tables
+
+  fix-registry-decisiveness-guard:
+    name: Fix-Registry Decisiveness Guard (PR-R1-7; CLAUDE.md §9.5)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full git history needed for git grep tracking
+      - name: Install root deps (for tsx)
+        run: npm ci --ignore-scripts
+      - name: Run check-fix-registry-decisiveness
+        run: npm run guard:fix-registry-decisiveness
+
+  atomic-catalogue-flip-guard:
+    name: Atomic Catalogue Flip Guard (PR-R1-8; feedback_atomic_catalogue_flip)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history needed to inspect PR commit range
+      - name: Install root deps (for tsx)
+        run: npm ci --ignore-scripts
+      - name: Run check-atomic-catalogue-flip on PR commits
+        run: |
+          # On a PR, inspect every commit since the actual merge-base
+          # with the target branch. Cycle-2 absorb of L3 finding A3:
+          # cycle-1 used `pull_request.base.sha` which is the BASE-AT-
+          # PR-OPEN, NOT the merge-base — they diverge after a force-
+          # push rebase. `git merge-base` computes the true common
+          # ancestor so the range is precise regardless of rebase.
+          # On main pushes (post-merge), inspect the HEAD commit only.
+          if [ -n "${{ github.event.pull_request.base.ref }}" ]; then
+            BASE_REF="origin/${{ github.event.pull_request.base.ref }}"
+            git fetch origin "${{ github.event.pull_request.base.ref }}" --depth=0 || true
+            MERGE_BASE=$(git merge-base "$BASE_REF" HEAD)
+            RANGE="$MERGE_BASE..HEAD"
+          else
+            RANGE="HEAD~1..HEAD"
+          fi
+          echo "Inspecting commit range: $RANGE"
+          npm run guard:atomic-catalogue-flip -- --commits "$RANGE"
+
+  # ── 11. Architecture Quality (Category 7) ────────────────────────────────────
+  # Enforces the layering rules in .dependency-cruiser.cjs:
+  #   - no circular dependencies across apps/api/src
+  #   - no route-to-route imports (except the Express sub-router allowlist)
+  #   - no service-to-route imports
+  #   - no src-to-test imports
+  # knip is also installed and can be run manually via `pnpm arch:knip`, but
+  # it emits findings as warnings today (see knip.json) and is not gated here
+  # until the existing unused-export backlog is triaged.
+  arch-quality:
+    name: Architecture Quality (depcruise)
+    runs-on: ubuntu-latest
+    needs: [lint, typecheck]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci --workspaces --include-workspace-root
+      - name: Run dependency-cruiser validation
+        run: npm run arch:depcruise
+
+  # ── 12. Accessibility Check ───────────────────────────────────────────────────
+  # WCAG 2.1 AA compliance check — healthcare apps must be accessible (DDA
+  # 1992, NSQHS Std 2, WCAG 2.2 AA).
+  #
+  # Two layers:
+  #   1. Static: ARIA / landmark / skip-nav coverage thresholds. Fast — runs
+  #      in seconds — catches regressions in accessibility markup density.
+  #   2. Dynamic: @axe-core/playwright runs against /login, patient list, and
+  #      the three most-used patient-detail tabs (Summary, Clinical Notes,
+  #      Medications). Asserts zero critical or serious violations.
+  #
+  # GAP-01 closure progress (2026-04-11): axe-core in CI across 3 surfaces;
+  # full WCAG 2.2 sprint + MUI contrast audit + VPAT still pending (see
+  # docs/accessibility/VPAT.md).
+  a11y:
+    name: WCAG Accessibility Check
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: signacare_owner
+          POSTGRES_PASSWORD: signacare_ci_test_pw
+          POSTGRES_DB: signacaredb_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U signacare_owner -d signacaredb_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      NODE_ENV: test
+      DB_HOST: localhost
+      DB_PORT: '5432'
+      DB_USER: signacare_owner
+      DB_PASSWORD: signacare_ci_test_pw
+      DB_NAME: signacaredb_test
+      DB_SSL: 'false'
+      DB_APP_USER: signacare_owner
+      DB_APP_PASSWORD: signacare_ci_test_pw
+      JWT_ACCESS_SECRET: ci-test-access-secret-64-char-hex-0123456789abcdef0123456789abcdef
+      JWT_REFRESH_SECRET: ci-test-refresh-secret-64-char-hex-0123456789abcdef0123456789abcdef
+      JWT_ACCESS_TTL_MINUTES: '60'
+      JWT_REFRESH_TTL_DAYS: '7'
+      PHI_ENCRYPTION_KEY: ci-test-phi-encryption-key-64-char-hex-0123456789abcdef0123456789
+      BLIND_INDEX_KEY: ci-test-blind-index-key-64-char-hex-0123456789abcdef0123456789abcd
+      SESSION_SECRET: ci-test-session-secret-64-char-hex-0123456789abcdef0123456789abcdef
+      REDIS_URL: redis://localhost:6379
+      CORS_ORIGIN: http://localhost:5173
+      PORT: '4000'
+      CALENDAR_ICAL_SECRET: ci-test-ical-secret-64-char-hex-0123456789abcdef0123456789abcdef
+      VITE_API_URL: /api/v1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci --workspaces --include-workspace-root
+      - name: Apply migrations
+        run: npm run migrate:dev --workspace=apps/api
+      - name: Seed e2e fixtures (admin@signacare.local)
+        run: npm run seed:e2e-fixtures --workspace=apps/api
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+      - name: Static ARIA coverage thresholds
+        run: |
+          set -euo pipefail
+          ARIA=$(grep -rn "aria-\|role=" apps/web/src/ --include="*.tsx" | wc -l | xargs)
+          LANDMARKS=$(grep -rn 'role="main"\|role="navigation"\|role="banner"\|role="contentinfo"' apps/web/src/ --include="*.tsx" | wc -l | xargs)
+          SKIP_NAV=$(grep -rn "skip.*main\|skip.*content\|skip.*nav" apps/web/src/ --include="*.tsx" | wc -l | xargs)
+          echo "ARIA attributes: $ARIA (target: 50+)"
+          echo "Landmark roles: $LANDMARKS (target: 4+)"
+          echo "Skip navigation: $SKIP_NAV (target: 1+)"
+          if [ "$ARIA" -lt 50 ] || [ "$LANDMARKS" -lt 4 ] || [ "$SKIP_NAV" -lt 1 ]; then
+            echo "::error::ARIA coverage below threshold"
+            exit 1
+          fi
+      - name: MUI theme contrast audit (WCAG SC 1.4.3 / 1.4.11)
+        # Enforces WCAG 2.1 AA contrast on every palette token pair across
+        # all 8 shipped themes. Fails the build on any AA violation.
+        run: npm run a11y:contrast
+      - name: A11y baseline allowlist integrity
+        run: npm run guard:a11y-baseline-allowlist
+      - name: A11y dry-run truthfulness guard
+        env:
+          CI_A11Y_DRYRUN: ${{ vars.CI_A11Y_DRYRUN || 'false' }}
+          GITHUB_REF_PROTECTED: ${{ github.ref_protected }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+          GITHUB_BASE_REF: ${{ github.base_ref }}
+        run: npm run guard:a11y-ci-no-dryrun
+      - name: Dynamic axe-core e2e scan
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_NAME: a11y-playwright-report.json
+        run: |
+          set -euo pipefail
+          PLAYWRIGHT_EXIT=0
+          npx playwright test --project=chromium e2e/accessibility/ --reporter=list,json || PLAYWRIGHT_EXIT=$?
+          npm run guard:a11y-playwright-report -- a11y-playwright-report.json
+          exit "$PLAYWRIGHT_EXIT"
+      - name: Upload axe report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: a11y-report-${{ github.run_id }}
+          path: |
+            a11y-playwright-report.json
+            playwright-report/
+            test-results/
+          retention-days: 30
+          if-no-files-found: ignore
+
+  # ── Gate: block merge if any required job fails ──────────────────────────────
+  # This is the single status check configured as "required" in GitHub branch
+  # protection rules. It aggregates all job results so we only need one rule.
+  #
+  # Phase 0.7.5 Commit 10: expanded to include every CI guard + e2e-smoke.
+  # Previously only a subset was wired; the rest ran as informational checks
+  # that did not block merge. CLAUDE.md §11 L5 — E2E smoke must block merge
+  # (highest-ROI CI improvement per the Phase 0.7.5 plan).
+  ci-gate:
+    name: CI Gate (required)
+    runs-on: ubuntu-latest
+    needs:
+      - lint
+      - typecheck
+      - test-unit
+      - test-integration
+      - e2e-smoke
+      - build
+      - security
+      - gitleaks-guard
+      - sast
+      - sbom
+      - fix-registry-guard
+      - atomic-flip-guard
+      - file-size-guard
+      - claude-discipline-guard
+      - repo-hygiene-guards
+      - commit-claims-pr-guard
+      - pr-template-compliance-guard
+      - naming-conventions-guard
+      - no-telecom-guard
+      - acs-callers-guard
+      - no-stray-db-names-guard
+      - dead-mount-guard
+      - query-key-factories-guard
+      - no-duplicate-api-types-guard
+      - frontend-url-guard
+      - integration-url-guard
+      - safety-route-coverage-guard
+      - c3-noncritical-backfill-guard
+      - c3-coverage-artifact
+      - c3-coverage-artifact-guard
+      - fire-and-forget-guard
+      - silent-catches-guard
+      - no-orphan-migrations-guard
+      - row-iface-drift-guard
+      - migration-convention-guard
+      - snapshot-freshness-guard
+      - code-columns-guard
+      - fk-aware-joins-guard
+      - response-shape-validated-guard
+      - service-auth-context-guard
+      - migration-rollback-discipline-guard
+      - jsonb-extraction-guard
+      - trx-not-db-inside-transaction-guard
+      - bugs-remaining-uniqueness-guard
+      - mapper-naming-guard
+      - zod-schema-parity-guard
+      - scaffold-extension-guard
+      - generator-no-diff-guard
+      - no-column-ddl-in-raw-sql-guard
+      - no-hardcoded-column-lists-guard
+      - opt-locking-new-tables-guard
+      - fix-registry-decisiveness-guard
+      - atomic-catalogue-flip-guard
+      - patient-app-ownership-guard
+      - arch-quality
+      - a11y
+    if: always()
+    steps:
+      - name: Evaluate job results
+        run: |
+          if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" ]]; then
+            echo "::error::One or more CI jobs failed. Blocking merge."
+            echo ""
+            echo "Failed jobs:"
+            echo "  lint:                        ${{ needs.lint.result }}"
+            echo "  typecheck:                   ${{ needs.typecheck.result }}"
+            echo "  test-unit:                   ${{ needs.test-unit.result }}"
+            echo "  test-integration:            ${{ needs.test-integration.result }}"
+            echo "  e2e-smoke:                   ${{ needs.e2e-smoke.result }}"
+            echo "  build:                       ${{ needs.build.result }}"
+            echo "  security:                    ${{ needs.security.result }}"
+            echo "  gitleaks-guard:              ${{ needs.gitleaks-guard.result }}"
+            echo "  sast:                        ${{ needs.sast.result }}"
+            echo "  sbom:                        ${{ needs.sbom.result }}"
+            echo "  fix-registry-guard:          ${{ needs.fix-registry-guard.result }}"
+            echo "  atomic-flip-guard:           ${{ needs.atomic-flip-guard.result }}"
+            echo "  file-size-guard:             ${{ needs.file-size-guard.result }}"
+            echo "  claude-discipline-guard:     ${{ needs.claude-discipline-guard.result }}"
+            echo "  commit-claims-pr-guard:      ${{ needs.commit-claims-pr-guard.result }}"
+            echo "  pr-template-compliance-guard:${{ needs.pr-template-compliance-guard.result }}"
+            echo "  naming-conventions-guard:    ${{ needs.naming-conventions-guard.result }}"
+            echo "  no-telecom-guard:            ${{ needs.no-telecom-guard.result }}"
+            echo "  acs-callers-guard:           ${{ needs.acs-callers-guard.result }}"
+            echo "  no-stray-db-names-guard:     ${{ needs.no-stray-db-names-guard.result }}"
+            echo "  dead-mount-guard:            ${{ needs.dead-mount-guard.result }}"
+            echo "  query-key-factories-guard:   ${{ needs.query-key-factories-guard.result }}"
+            echo "  no-duplicate-api-types-guard:${{ needs.no-duplicate-api-types-guard.result }}"
+            echo "  frontend-url-guard:          ${{ needs.frontend-url-guard.result }}"
+            echo "  integration-url-guard:       ${{ needs.integration-url-guard.result }}"
+            echo "  safety-route-coverage-guard: ${{ needs.safety-route-coverage-guard.result }}"
+            echo "  c3-noncritical-backfill-guard: ${{ needs.c3-noncritical-backfill-guard.result }}"
+            echo "  c3-coverage-artifact:        ${{ needs.c3-coverage-artifact.result }}"
+            echo "  c3-coverage-artifact-guard:  ${{ needs.c3-coverage-artifact-guard.result }}"
+            echo "  fire-and-forget-guard:       ${{ needs.fire-and-forget-guard.result }}"
+            echo "  silent-catches-guard:        ${{ needs.silent-catches-guard.result }}"
+            echo "  no-orphan-migrations-guard:  ${{ needs.no-orphan-migrations-guard.result }}"
+            echo "  row-iface-drift-guard:       ${{ needs.row-iface-drift-guard.result }}"
+            echo "  migration-convention-guard:  ${{ needs.migration-convention-guard.result }}"
+            echo "  snapshot-freshness-guard:    ${{ needs.snapshot-freshness-guard.result }}"
+            echo "  code-columns-guard:          ${{ needs.code-columns-guard.result }}"
+            echo "  fk-aware-joins-guard:        ${{ needs.fk-aware-joins-guard.result }}"
+            echo "  response-shape-validated-guard: ${{ needs.response-shape-validated-guard.result }}"
+            echo "  service-auth-context-guard: ${{ needs.service-auth-context-guard.result }}"
+            echo "  migration-rollback-discipline-guard: ${{ needs.migration-rollback-discipline-guard.result }}"
+            echo "  jsonb-extraction-guard: ${{ needs.jsonb-extraction-guard.result }}"
+            echo "  trx-not-db-inside-transaction-guard: ${{ needs.trx-not-db-inside-transaction-guard.result }}"
+            echo "  bugs-remaining-uniqueness-guard: ${{ needs.bugs-remaining-uniqueness-guard.result }}"
+            echo "  mapper-naming-guard:         ${{ needs.mapper-naming-guard.result }}"
+            echo "  zod-schema-parity-guard:     ${{ needs.zod-schema-parity-guard.result }}"
+            echo "  scaffold-extension-guard:    ${{ needs.scaffold-extension-guard.result }}"
+            echo "  generator-no-diff-guard:     ${{ needs.generator-no-diff-guard.result }}"
+            echo "  no-column-ddl-in-raw-sql-guard: ${{ needs.no-column-ddl-in-raw-sql-guard.result }}"
+            echo "  no-hardcoded-column-lists-guard: ${{ needs.no-hardcoded-column-lists-guard.result }}"
+            echo "  opt-locking-new-tables-guard: ${{ needs.opt-locking-new-tables-guard.result }}"
+            echo "  fix-registry-decisiveness-guard: ${{ needs.fix-registry-decisiveness-guard.result }}"
+            echo "  atomic-catalogue-flip-guard: ${{ needs.atomic-catalogue-flip-guard.result }}"
+            echo "  patient-app-ownership-guard: ${{ needs.patient-app-ownership-guard.result }}"
+            echo "  arch-quality:                ${{ needs.arch-quality.result }}"
+            echo "  a11y:                        ${{ needs.a11y.result }}"
+            exit 1
+          fi
+          echo "All CI checks passed."

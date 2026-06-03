@@ -1,0 +1,17 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "namePrefix":         { "value": "signacare" },
+    "environment":        { "value": "dev" },
+    "location":           { "value": "australiaeast" },
+    "vmSize":             { "value": "Standard_D4s_v5" },
+    "adminUsername":      { "value": "signacareadmin" },
+    "rdpAllowedSource":   { "value": "REPLACE_ME_WITH_CORPORATE_IP_CIDR" },
+    "winrmAllowedSource": { "value": "None" },
+    "httpsAllowedSource": { "value": "Internet" },
+    "osDiskSizeGB":       { "value": 128 },
+    "dataDiskSizeGB":     { "value": 256 },
+    "costCentreTag":      { "value": "signacare-emr-dev" }
+  }
+}

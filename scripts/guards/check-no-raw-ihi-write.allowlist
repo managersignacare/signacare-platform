@@ -1,0 +1,9 @@
+# Allowlist for check-no-raw-ihi-write.ts (BUG-A5.0)
+# Format: <file> <fp>  # <preview> | BUG-XXX — <reason>
+# Cascade: BUG-A5.0-CASCADE-DRAIN-IHI-WRITES (none expected; baseline is clean)
+# Expiry-policy: per-entry (added 2026-05-03 cycle Phase 0a.7)
+# Each non-comment line carries an `| expires: <YYYY-MM-DD> (cascade: <BUG>)`
+# OR `| permanent: <reason>` annotation. Entries past their expiry date
+# fail the merge gate via `scripts/guards/check-allowlist-expiry.ts`.
+# Renewal: when a target close-by date passes, EITHER drain the entry
+# (preferred) OR explicitly extend the date with operator authorization.

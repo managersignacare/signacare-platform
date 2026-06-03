@@ -1,0 +1,381 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://signacare.local/schemas/c3-coverage-evidence.schema.json",
+  "title": "C3 Coverage Evidence Artifact",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "artifactType",
+    "generatedAt",
+    "commitSha",
+    "ref",
+    "runId",
+    "suiteResults",
+    "routeCoverageSummary",
+    "allowlistDebt",
+    "nonCriticalBackfill",
+    "gateVerdicts",
+    "overallVerdict",
+    "stateOfWorldGovernance"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "const": 1
+    },
+    "artifactType": {
+      "type": "string",
+      "const": "c3-coverage-evidence"
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "commitSha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "runId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "suiteResults": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "key",
+          "label",
+          "required",
+          "status"
+        ],
+        "properties": {
+          "key": {
+            "type": "string",
+            "minLength": 1
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "success",
+              "failure",
+              "cancelled",
+              "skipped",
+              "unknown"
+            ]
+          }
+        }
+      }
+    },
+    "routeCoverageSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "manifestPath",
+        "totalRequiredRoutes",
+        "coveredRoutes",
+        "uncoveredRoutes",
+        "mappingViolations"
+      ],
+      "properties": {
+        "manifestPath": {
+          "type": "string",
+          "minLength": 1
+        },
+        "totalRequiredRoutes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "coveredRoutes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "uncoveredRoutes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "mappingViolations": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "allowlistDebt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "filesScanned",
+        "totalEntries",
+        "entriesWithExpiry",
+        "entriesPermanent",
+        "expiredOrInvalidEntries"
+      ],
+      "properties": {
+        "filesScanned": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "totalEntries": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "entriesWithExpiry": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "entriesPermanent": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "expiredOrInvalidEntries": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "nonCriticalBackfill": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "manifestPath",
+        "inventoryStatus",
+        "policy",
+        "batchCount",
+        "batches",
+        "residualThreshold",
+        "residualUncoveredCount",
+        "residualRoutes",
+        "retriagePerformed"
+      ],
+      "properties": {
+        "manifestPath": {
+          "type": "string",
+          "minLength": 1
+        },
+        "inventoryStatus": {
+          "type": "string",
+          "enum": [
+            "baseline_pending",
+            "active",
+            "ready_for_closure"
+          ]
+        },
+        "policy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "maxRoutesPerBatchPr",
+            "minCoveredRoutesDelta",
+            "minCoverageGainPercent",
+            "maxBatchesBeforeRetriage"
+          ],
+          "properties": {
+            "maxRoutesPerBatchPr": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "minCoveredRoutesDelta": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "minCoverageGainPercent": {
+              "type": "number",
+              "minimum": 0
+            },
+            "maxBatchesBeforeRetriage": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        },
+        "batchCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "batches": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "batchId",
+              "date",
+              "prRef",
+              "owner",
+              "routeCount",
+              "coveredRoutesDelta",
+              "coverageGainPercent",
+              "nonCriticalUncoveredAfter"
+            ],
+            "properties": {
+              "batchId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "date": {
+                "type": "string",
+                "format": "date"
+              },
+              "prRef": {
+                "type": "string",
+                "minLength": 1
+              },
+              "owner": {
+                "type": "string",
+                "minLength": 1
+              },
+              "routeCount": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "coveredRoutesDelta": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "coverageGainPercent": {
+                "type": "number",
+                "minimum": 0
+              },
+              "nonCriticalUncoveredAfter": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          }
+        },
+        "residualThreshold": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "residualUncoveredCount": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "residualRoutes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "method",
+              "route",
+              "owner",
+              "deadline",
+              "note"
+            ],
+            "properties": {
+              "method": {
+                "type": "string",
+                "enum": [
+                  "GET",
+                  "POST",
+                  "PUT",
+                  "PATCH",
+                  "DELETE",
+                  "HEAD"
+                ]
+              },
+              "route": {
+                "type": "string",
+                "minLength": 1
+              },
+              "owner": {
+                "type": "string",
+                "minLength": 1
+              },
+              "deadline": {
+                "type": "string",
+                "format": "date"
+              },
+              "note": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "retriagePerformed": {
+          "type": "boolean"
+        }
+      }
+    },
+    "gateVerdicts": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "enum": [
+          "success",
+          "failure",
+          "cancelled",
+          "skipped",
+          "unknown"
+        ]
+      }
+    },
+    "overallVerdict": {
+      "type": "string",
+      "enum": [
+        "green",
+        "red"
+      ]
+    },
+    "stateOfWorldGovernance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "stateFilePath",
+        "owner",
+        "refreshSlaHours",
+        "schemaPath",
+        "artifactPathCi",
+        "lastReviewedDate"
+      ],
+      "properties": {
+        "stateFilePath": {
+          "type": "string",
+          "minLength": 1
+        },
+        "owner": {
+          "type": "string",
+          "minLength": 1
+        },
+        "refreshSlaHours": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "schemaPath": {
+          "type": "string",
+          "minLength": 1
+        },
+        "artifactPathCi": {
+          "type": "string",
+          "minLength": 1
+        },
+        "lastReviewedDate": {
+          "type": "string",
+          "format": "date"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,31 @@
+# Signacare mandatory reviewer boundaries (lane and guard integrity).
+# If GitHub usernames differ, update these handles before relying on enforcement.
+
+* @drprakashkamath @amitzutshi
+
+# CI / release gates (C3)
+/.github/workflows/** @drprakashkamath @amitzutshi
+/.github/scripts/** @drprakashkamath @amitzutshi
+/scripts/guards/** @drprakashkamath @amitzutshi
+/scripts/dr/** @drprakashkamath @amitzutshi
+
+# Core remediation governance docs
+/docs/quality/bugs-remaining.md @drprakashkamath @amitzutshi
+/docs/quality/fix-registry.md @drprakashkamath @amitzutshi
+/docs/quality/remediation/** @drprakashkamath @amitzutshi
+
+# A1 auth / RBAC boundary
+/apps/api/src/shared/auth* @drprakashkamath @amitzutshi
+/apps/api/src/features/roles/** @drprakashkamath @amitzutshi
+/apps/web/src/** @drprakashkamath @amitzutshi
+
+# A2 schema / migration boundary
+/apps/api/migrations/** @drprakashkamath @amitzutshi
+/apps/api/src/db/** @drprakashkamath @amitzutshi
+
+# B4 scheduler boundary
+/apps/api/src/jobs/schedulers/** @drprakashkamath @amitzutshi
+
+# A4b / A4c observability + runtime boundary
+/apps/api/src/observability/** @drprakashkamath @amitzutshi
+/apps/api/src/llm/** @drprakashkamath @amitzutshi

@@ -1,0 +1,24 @@
+// AUTO-GENERATED scaffold by scripts/generate-types-from-migrations.ts
+// DO NOT EDIT MANUALLY. Hand-written DTO must `extends` this scaffold's
+// Zod schema OR carry a `// @scaffold-divergence: <reason>` annotation.
+// The scaffold-extension guard (Phase 0b.1b) enforces this at merge gate.
+
+import { z } from 'zod';
+
+export const AssessmentResponsesDtoScaffoldSchema = z.object({
+  id: z.string().uuid(),
+  patientId: z.string().uuid().nullable().optional(),
+  clinicId: z.string().uuid(),
+  episodeId: z.string().uuid().nullable().optional(),
+  staffId: z.string().uuid().nullable().optional(),
+  templateId: z.string().uuid().nullable().optional(),
+  assessmentType: z.string().max(100).nullable().optional(),
+  responses: z.unknown().nullable().optional(),
+  totalScore: z.string().regex(/^-?\d{1,6}(\.\d{0,2})?$/).nullable().optional(),
+  severity: z.string().max(50).nullable().optional(),
+  collectionOccasion: z.string().max(50).nullable().optional(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime().nullable().optional(),
+});
+
+export type AssessmentResponsesDtoScaffold = z.infer<typeof AssessmentResponsesDtoScaffoldSchema>;

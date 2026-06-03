@@ -1,0 +1,66 @@
+{
+  "version": 1,
+  "finalDeadline": "2026-12-31",
+  "lanes": [
+    {
+      "id": "response-shape-validated",
+      "file": "scripts/guards/check-response-shape-validated.allowlist",
+      "milestones": [
+        { "date": "2026-06-30", "maxOpen": 889 },
+        { "date": "2026-08-31", "maxOpen": 780 },
+        { "date": "2026-10-31", "maxOpen": 390 },
+        { "date": "2026-12-31", "maxOpen": 0 }
+      ]
+    },
+    {
+      "id": "service-auth-context",
+      "file": "scripts/guards/check-service-auth-context.allowlist",
+      "milestones": [
+        { "date": "2026-06-30", "maxOpen": 170 },
+        { "date": "2026-08-31", "maxOpen": 130 },
+        { "date": "2026-10-31", "maxOpen": 70 },
+        { "date": "2026-12-31", "maxOpen": 0 }
+      ]
+    },
+    {
+      "id": "soft-delete-filter",
+      "file": "scripts/guards/check-soft-delete-filter.allowlist",
+      "milestones": [
+        { "date": "2026-06-30", "maxOpen": 139 },
+        { "date": "2026-08-31", "maxOpen": 105 },
+        { "date": "2026-10-31", "maxOpen": 52 },
+        { "date": "2026-12-31", "maxOpen": 0 }
+      ]
+    },
+    {
+      "id": "zod-schema-parity",
+      "file": "scripts/guards/check-zod-schema-parity.allowlist",
+      "milestones": [
+        { "date": "2026-06-30", "maxOpen": 158 },
+        { "date": "2026-08-31", "maxOpen": 120 },
+        { "date": "2026-10-31", "maxOpen": 60 },
+        { "date": "2026-12-31", "maxOpen": 0 }
+      ]
+    },
+    {
+      "id": "jsonb-extraction",
+      "file": "scripts/guards/check-jsonb-extraction.allowlist",
+      "milestones": [
+        { "date": "2026-06-30", "maxOpen": 76 },
+        { "date": "2026-08-31", "maxOpen": 56 },
+        { "date": "2026-10-31", "maxOpen": 28 },
+        { "date": "2026-12-31", "maxOpen": 0 }
+      ]
+    },
+    {
+      "id": "migration-index-discipline",
+      "file": "scripts/guards/check-migration-index-discipline.allowlist",
+      "milestones": [
+        { "date": "2026-06-30", "maxOpen": 43 },
+        { "date": "2026-08-31", "maxOpen": 30 },
+        { "date": "2026-10-31", "maxOpen": 15 },
+        { "date": "2026-12-31", "maxOpen": 0 }
+      ]
+    }
+  ]
+}

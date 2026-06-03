@@ -1,0 +1,72 @@
+{
+  "compilerOptions": {
+    // S2.1 production build target.
+    //
+    // This is a STANDALONE config (not extending tsconfig.base.json) because
+    // the base config is tuned for the web/Vite bundler context (ESNext +
+    // moduleResolution: bundler), which is wrong for a Node 20 runtime.
+    // The api needs CommonJS output and node-style module resolution so that
+    // `node dist/server.js` and `node dist/jobs/bootstrap.js` actually work.
+    //
+    // Path aliases (@signacare/shared) are NOT resolved by tsc itself — tsc-alias
+    // rewrites them after compile. Without that step the emitted JS would
+    // contain literal `require("@signacare/shared")` calls and node's resolver
+    // would only find them via npm workspace symlinks, which work locally
+    // but break inside multi-stage Docker builds.
+    "target": "ES2020",
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    "ignoreDeprecations": "6.0",
+    "lib": ["ES2020"],
+    // rootDir is set to the package root (".") so that BOTH `src/` and
+    // `migrations/` (and `scripts/migrate.ts`) emit under `dist/`. Without
+    // this tsc would refuse to compile migrations because they fall
+    // outside src/. Compiled entry point becomes `dist/src/server.js`,
+    // not `dist/server.js`; package.json `main` and Dockerfile/PM2
+    // CMDs are updated to match.
+    "rootDir": ".",
+    "outDir": "dist",
+
+    // Emit configuration
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": true,
+    "inlineSources": false,
+    "removeComments": false,
+    "noEmitOnError": true,
+
+    // Module/JS interop
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+
+    // Strictness — match the existing dev tsconfig so the same code that
+    // passes `npx tsc --noEmit -p tsconfig.json` also passes the build.
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "noFallthroughCasesInSwitch": true,
+
+    // Path aliases — match the runtime ts-node config so type-checking
+    // and build resolve identically. tsc-alias rewrites these to relative
+    // paths in the emitted JS.
+    "baseUrl": ".",
+    "paths": {
+      "@signacare/shared": ["../../packages/shared/dist"],
+      "@signacare/shared/*": ["../../packages/shared/dist/*"]
+    }
+  },
+  "include": ["src", "migrations/**/*.ts", "scripts/migrate.ts"],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "tests",
+    "src/**/*.test.ts",
+    "src/seed-*.ts",
+    "src/reset-patient-data.ts"
+  ]
+}

@@ -1,0 +1,262 @@
+{
+  "version": 1,
+  "generatedAt": "2026-05-11",
+  "purpose": "C3-2 BUG-451: required clinical-safety route coverage contract",
+  "entries": [
+    {
+      "id": "SR-001-AUTH-BREAK-GLASS-REQUEST",
+      "owner": "security-platform",
+      "harmClass": "S0",
+      "method": "POST",
+      "route": "/api/v1/auth/break-glass/request",
+      "safetySurfacePath": "apps/api/src/features/auth/",
+      "sourceRefs": [
+        ".github/safety-surfaces.txt",
+        "docs/quality/l4-reviewer-checklist.md#f"
+      ],
+      "expectedIntegrationTests": [
+        "apps/api/tests/integration/breakGlassAudit.test.ts"
+      ]
+    },
+    {
+      "id": "SR-002-CLINICAL-NOTES-CREATE",
+      "owner": "clinical-records",
+      "harmClass": "S1",
+      "method": "POST",
+      "route": "/api/v1/clinical-notes/",
+      "safetySurfacePath": "apps/api/src/features/clinical-notes/",
+      "sourceRefs": [
+        ".github/safety-surfaces.txt",
+        "docs/quality/l4-reviewer-checklist.md#f"
+      ],
+      "expectedIntegrationTests": [
+        "apps/api/tests/integration/bug369ClinicalNoteAuditLog.int.test.ts"
+      ]
+    },
+    {
+      "id": "SR-003-CLINICAL-NOTES-SIGN",
+      "owner": "clinical-records",
+      "harmClass": "S1",
+      "method": "POST",
+      "route": "/api/v1/clinical-notes/:id/sign",
+      "safetySurfacePath": "apps/api/src/features/clinical-notes/",
+      "sourceRefs": [
+        ".github/safety-surfaces.txt",
+        "docs/quality/l4-reviewer-checklist.md#f"
+      ],
+      "expectedIntegrationTests": [
+        "apps/api/tests/integration/bug369ClinicalNoteAuditLog.int.test.ts"
+      ]
+    },
+    {
+      "id": "SR-004-CLINICAL-NOTES-AMEND",
+      "owner": "clinical-records",
+      "harmClass": "S1",
+      "method": "POST",
+      "route": "/api/v1/clinical-notes/:id/amend",
+      "safetySurfacePath": "apps/api/src/features/clinical-notes/",
+      "sourceRefs": [
+        ".github/safety-surfaces.txt",
+        "docs/quality/l4-reviewer-checklist.md#f"
+      ],
+      "expectedIntegrationTests": [
+        "apps/api/tests/integration/bug369ClinicalNoteAuditLog.int.test.ts"
+      ]
+    },
+    {
+      "id": "SR-005-MEDICATIONS-CREATE",
+      "owner": "prescribing-safety",
+      "harmClass": "S1",
+      "method": "POST",
+      "route": "/api/v1/medications",
+      "safetySurfacePath": "apps/api/src/features/medications/",
+      "sourceRefs": [
+        ".github/safety-surfaces.txt",
+        "docs/quality/l4-reviewer-checklist.md#f"
+      ],
+      "expectedIntegrationTests": [
+        "apps/api/tests/integration/prescribingSafety.test.ts"
+      ]
+    },
+    {
+      "id": "SR-006-MEDICATIONS-CEASE",
+      "owner": "prescribing-safety",
+      "harmClass": "S1",
+      "method": "POST",
+      "route": "/api/v1/medications/:id/cease",
+      "safetySurfacePath": "apps/api/src/features/medications/",
+      "sourceRefs": [
+        ".github/safety-surfaces.txt",
+        "docs/quality/l4-reviewer-checklist.md#f"
+      ],
+      "expectedIntegrationTests": [
+        "apps/api/tests/integration/medicationConstraints.test.ts"
+      ]
+    },
+    {
+      "id": "SR-007-LLM-CLINICAL-AI",
+      "owner": "ai-clinical-safety",
+      "harmClass": "S1",
+      "method": "POST",
+      "route": "/api/v1/llm/clinical-ai",
+      "safetySurfacePath": "apps/api/src/features/llm/",
+      "sourceRefs": [
+        ".github/safety-surfaces.txt",
+        "docs/quality/l4-reviewer-checklist.md#f"
+      ],
+      "expectedIntegrationTests": [
+        "apps/api/tests/integration/llmRoutesPatientRelationshipGate.int.test.ts"
+      ]
+    },
+    {
+      "id": "SR-008-LLM-AGENT",
+      "owner": "ai-clinical-safety",
+      "harmClass": "S1",
+      "method": "POST",
+      "route": "/api/v1/llm/agent",
+      "safetySurfacePath": "apps/api/src/features/llm/",
+      "sourceRefs": [
+        ".github/safety-surfaces.txt",
+        "docs/quality/l4-reviewer-checklist.md#f"
+      ],
+      "expectedIntegrationTests": [
+        "apps/api/tests/integration/llmRoutesPatientRelationshipGate.int.test.ts"
+      ]
+    },
+    {
+      "id": "SR-009-SCRIBE-PATIENT-SUMMARY",
+      "owner": "ai-clinical-safety",
+      "harmClass": "S1",
+      "method": "POST",
+      "route": "/api/v1/scribe/patient-summary",
+      "safetySurfacePath": "apps/api/src/features/scribe/",
+      "sourceRefs": [
+        ".github/safety-surfaces.txt",
+        "docs/quality/l4-reviewer-checklist.md#f"
+      ],
+      "expectedIntegrationTests": [
+        "apps/api/tests/integration/llmRoutesPatientRelationshipGate.int.test.ts"
+      ]
+    },
+    {
+      "id": "SR-010-SCRIBE-REFERRAL-LETTER",
+      "owner": "ai-clinical-safety",
+      "harmClass": "S1",
+      "method": "POST",
+      "route": "/api/v1/scribe/referral-letter",
+      "safetySurfacePath": "apps/api/src/features/scribe/",
+      "sourceRefs": [
+        ".github/safety-surfaces.txt",
+        "docs/quality/l4-reviewer-checklist.md#f"
+      ],
+      "expectedIntegrationTests": [
+        "apps/api/tests/integration/llmRoutesPatientRelationshipGate.int.test.ts"
+      ]
+    },
+    {
+      "id": "SR-011-SCRIBE-SEARCH",
+      "owner": "ai-clinical-safety",
+      "harmClass": "S1",
+      "method": "POST",
+      "route": "/api/v1/scribe/search",
+      "safetySurfacePath": "apps/api/src/features/scribe/",
+      "sourceRefs": [
+        ".github/safety-surfaces.txt",
+        "docs/quality/l4-reviewer-checklist.md#f"
+      ],
+      "expectedIntegrationTests": [
+        "apps/api/tests/integration/llmRoutesPatientRelationshipGate.int.test.ts"
+      ]
+    },
+    {
+      "id": "SR-012-PATHOLOGY-RESULT-ACKNOWLEDGE",
+      "owner": "pathology-safety",
+      "harmClass": "S1",
+      "method": "POST",
+      "route": "/api/v1/pathology/results/:id/acknowledge",
+      "safetySurfacePath": "apps/api/src/features/pathology/",
+      "sourceRefs": [
+        ".github/safety-surfaces.txt",
+        "docs/quality/l4-reviewer-checklist.md#f"
+      ],
+      "expectedIntegrationTests": [
+        "apps/api/tests/integration/limitCeilings.int.test.ts"
+      ]
+    },
+    {
+      "id": "SR-013-PATIENT-APP-LOGIN",
+      "owner": "patient-app-safety",
+      "harmClass": "S1",
+      "method": "POST",
+      "route": "/api/v1/patient-app/login",
+      "safetySurfacePath": "apps/api/src/features/patient-app/",
+      "sourceRefs": [
+        ".github/safety-surfaces.txt",
+        "docs/quality/l4-reviewer-checklist.md#f"
+      ],
+      "expectedIntegrationTests": [
+        "apps/api/tests/integration/patientAppAuth.test.ts"
+      ]
+    },
+    {
+      "id": "SR-014-PATIENT-APP-ME",
+      "owner": "patient-app-safety",
+      "harmClass": "S1",
+      "method": "GET",
+      "route": "/api/v1/patient-app/me",
+      "safetySurfacePath": "apps/api/src/features/patient-app/",
+      "sourceRefs": [
+        ".github/safety-surfaces.txt",
+        "docs/quality/l4-reviewer-checklist.md#f"
+      ],
+      "expectedIntegrationTests": [
+        "apps/api/tests/integration/patientAppAuth.test.ts"
+      ]
+    },
+    {
+      "id": "SR-015-PATIENT-APP-ACTIVATE",
+      "owner": "patient-app-safety",
+      "harmClass": "S1",
+      "method": "POST",
+      "route": "/api/v1/patient-app/activate",
+      "safetySurfacePath": "apps/api/src/features/patient-app/",
+      "sourceRefs": [
+        ".github/safety-surfaces.txt",
+        "docs/quality/l4-reviewer-checklist.md#f"
+      ],
+      "expectedIntegrationTests": [
+        "apps/api/tests/integration/patientAppAuth.test.ts"
+      ]
+    },
+    {
+      "id": "SR-016-POWER-SETTINGS-ACCESS-ADMINS-GET",
+      "owner": "rbac-governance",
+      "harmClass": "S1",
+      "method": "GET",
+      "route": "/api/v1/power-settings/clinics/:id/access-admins",
+      "safetySurfacePath": "apps/api/src/features/power-settings/",
+      "sourceRefs": [
+        ".github/safety-surfaces.txt",
+        "docs/quality/l4-reviewer-checklist.md#f"
+      ],
+      "expectedIntegrationTests": [
+        "apps/api/tests/integration/clinicAccessAdminsPowerSettings.int.test.ts"
+      ]
+    },
+    {
+      "id": "SR-017-POWER-SETTINGS-ACCESS-ADMINS-PUT",
+      "owner": "rbac-governance",
+      "harmClass": "S1",
+      "method": "PUT",
+      "route": "/api/v1/power-settings/clinics/:id/access-admins",
+      "safetySurfacePath": "apps/api/src/features/power-settings/",
+      "sourceRefs": [
+        ".github/safety-surfaces.txt",
+        "docs/quality/l4-reviewer-checklist.md#f"
+      ],
+      "expectedIntegrationTests": [
+        "apps/api/tests/integration/clinicAccessAdminsPowerSettings.int.test.ts"
+      ]
+    }
+  ]
+}

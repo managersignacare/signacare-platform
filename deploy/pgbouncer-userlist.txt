@@ -1,0 +1,4 @@
+; PgBouncer user list
+; Format: "username" "password_md5_hash"
+; Generate: echo -n "md5$(echo -n 'passwordusername' | md5sum | cut -d' ' -f1)"
+"signacare" "md5PASSWORD_HASH_HERE"

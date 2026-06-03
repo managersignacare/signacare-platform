@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "lane": "A2",
+  "slice": "A2-2",
+  "updatedAt": "2026-05-12",
+  "allowNotNullEnforcement": true,
+  "targets": [
+    {
+      "bugId": "BUG-315",
+      "table": "clinical_notes",
+      "column": "consent_id",
+      "backfillStatus": "complete",
+      "backfillEvidence": "apps/api/scripts/backfill-clinical-notes-consent-id-phase-c.ts (2026-05-12 execution; non-deleted NULL count driven to zero)",
+      "appReadinessStatus": "verified",
+      "appReadinessEvidence": "docs/quality/remediation/evidence/bug-315-a2-2-contract-tightening-2026-05-11.md (all in-scope clinical-note insert paths now require/write non-null consent_id via consent-link helper)"
+    },
+    {
+      "bugId": "BUG-334",
+      "table": "clinics",
+      "column": "hpio",
+      "backfillStatus": "complete",
+      "backfillEvidence": "apps/api/scripts/backfill-clinics-hpio-phase-c.ts (2026-05-12 execution; NULL count driven to zero via deterministic nonprod synthetic assignments)",
+      "appReadinessStatus": "verified",
+      "appReadinessEvidence": "docs/quality/remediation/evidence/bug-334-a2-2-contract-tightening-2026-05-11.md (create/update/provisioning + shared contracts now require/write hpio)"
+    }
+  ],
+  "notes": [
+    "Phase C posture: both backfills complete and app readiness verified; NOT NULL enforcement is now permitted.",
+    "scripts/guards/check-a2-not-null-app-readiness.ts enforces honest app-contract readiness transitions.",
+    "scripts/guards/check-a2-not-null-readiness.ts remains fail-closed for future premature enforcement attempts."
+  ]
+}

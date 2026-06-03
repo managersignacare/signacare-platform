@@ -1,0 +1,50 @@
+HTTP/1.1 200 OK
+Content-Security-Policy: default-src 'self';script-src 'self';style-src 'self' 'unsafe-inline';img-src 'self' data:;font-src 'self' data:;connect-src 'self' http://localhost:*;frame-ancestors 'self';base-uri 'self';form-action 'self';object-src 'none';script-src-attr 'none';upgrade-insecure-requests
+Cross-Origin-Opener-Policy: same-origin
+Cross-Origin-Resource-Policy: same-origin
+Origin-Agent-Cluster: ?1
+Referrer-Policy: strict-origin-when-cross-origin
+Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
+X-Content-Type-Options: nosniff
+X-DNS-Prefetch-Control: off
+X-Download-Options: noopen
+X-Frame-Options: DENY
+X-Permitted-Cross-Domain-Policies: none
+X-XSS-Protection: 0
+X-Request-ID: 32179114-8302-4d8e-98cf-69a8ac6b814b
+Permissions-Policy: camera=(), microphone=(self), geolocation=(), payment=()
+Vary: Origin, Accept-Encoding
+Access-Control-Allow-Credentials: true
+Access-Control-Expose-Headers: X-Request-Id
+Content-Type: application/json; charset=utf-8
+Content-Length: 80
+ETag: W/"50-pD1zuJHF3pT++Sxq3Un1lCu13f0"
+Date: Fri, 24 Apr 2026 01:38:23 GMT
+Connection: keep-alive
+Keep-Alive: timeout=65
+
+---
+HTTP/1.1 404 Not Found
+Content-Security-Policy: default-src 'none'
+Cross-Origin-Opener-Policy: same-origin
+Cross-Origin-Resource-Policy: same-origin
+Origin-Agent-Cluster: ?1
+Referrer-Policy: strict-origin-when-cross-origin
+Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
+X-Content-Type-Options: nosniff
+X-DNS-Prefetch-Control: off
+X-Download-Options: noopen
+X-Frame-Options: DENY
+X-Permitted-Cross-Domain-Policies: none
+X-XSS-Protection: 0
+X-Request-ID: 2ea593d2-bf54-40ec-95de-4ed170e0b538
+Permissions-Policy: camera=(), microphone=(self), geolocation=(), payment=()
+Vary: Origin, Accept-Encoding
+Access-Control-Allow-Credentials: true
+Access-Control-Expose-Headers: X-Request-Id
+Content-Type: text/html; charset=utf-8
+Content-Length: 139
+Date: Fri, 24 Apr 2026 01:38:23 GMT
+Connection: keep-alive
+Keep-Alive: timeout=65
+

@@ -1,0 +1,234 @@
+<% const medRanges = {
+  hr: { low: 60, high: 100, critical: 150 },
+  sysBP: { normal: 120, elevated: 129, high: 180 },
+  diaBP: { normal: 80, high: 120 },
+  tempC: { low: 36.1, high: 37.2, fever: 37.5, highFever: 39 },
+}; %>
+
+<% function vitalColor(type, value) {
+  if (!value) return 'text-gray-400';
+  if (type === 'hr') return value < 60 || value > 100 ? (value > 150 || value < 40 ? 'text-red-600' : 'text-yellow-600') : 'text-green-600';
+  if (type === 'sys') return value > 180 ? 'text-red-600' : value > 130 ? 'text-yellow-600' : value > 120 ? 'text-orange-500' : 'text-green-600';
+  if (type === 'dia') return value > 120 ? 'text-red-600' : value > 80 ? 'text-yellow-600' : 'text-green-600';
+  if (type === 'tempC') return value > 39 ? 'text-red-600' : value > 37.5 ? 'text-yellow-600' : 'text-green-600';
+  return 'text-gray-800';
+} %>
+
+<% function fmtDate(d) { return d ? new Date(d).toLocaleDateString('en-AU', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'; } %>
+<% function fmtDateTime(d) { return d ? new Date(d).toLocaleString('en-AU', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'; } %>
+
+<% const body = ` %>
+
+<!-- Patient Header -->
+<div class="bg-white border border-gray-200 rounded-xl p-5 mb-6">
+  <div class="flex items-start gap-4">
+    <div class="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center text-2xl font-bold text-orange-600">
+      <%= data.patient.firstName?.[0] ?? '' %><%= data.patient.lastName?.[0] ?? '' %>
+    </div>
+    <div class="flex-1">
+      <h2 class="text-xl font-bold"><%= data.patient.firstName %> <%= data.patient.lastName %></h2>
+      <div class="flex flex-wrap gap-4 mt-1 text-sm text-gray-500">
+        <span>DOB: <%= fmtDate(data.patient.dateOfBirth) %></span>
+        <span>Age: <%= data.patient.dateOfBirth ? Math.floor((Date.now() - new Date(data.patient.dateOfBirth).getTime()) / 31557600000) : data.patient.age ?? '—' %></span>
+        <span class="capitalize">Gender: <%= data.patient.gender ?? '—' %></span>
+        <% if (data.patient.urNumber) { %><span>UR: <%= data.patient.urNumber %></span><% } %>
+        <span>Phone: <%= data.patient.phone ? (data.patient.phone.countryCode ?? '') + ' ' + (data.patient.phone.number ?? '') : '—' %></span>
+        <% if (data.patient.email) { %><span>Email: <%= data.patient.email %></span><% } %>
+      </div>
+      <div class="flex gap-3 mt-2 text-sm">
+        <% if (data.patient.assignedDoctorName) { %><span class="badge badge-blue">Dr: <%= data.patient.assignedDoctorName %></span><% } %>
+        <% if (data.patient.teamName) { %><span class="badge badge-purple">Team: <%= data.patient.teamName %></span><% } %>
+        <% if (data.patient.campaignDetails?.status) { %>
+          <% const cs = data.patient.campaignDetails.status; %>
+          <span class="badge <%= cs === 'active' ? 'badge-green' : cs === 'paused' ? 'badge-yellow' : 'badge-red' %>">Campaign: <%= cs %></span>
+        <% } %>
+      </div>
+    </div>
+  </div>
+
+  <% if (data.patient.emergencyContacts?.length) { %>
+    <div class="mt-4 pt-3 border-t">
+      <h3 class="text-xs font-bold text-gray-500 uppercase mb-1">Emergency Contacts</h3>
+      <div class="flex flex-wrap gap-3">
+        <% data.patient.emergencyContacts.forEach(function(ec) { %>
+          <div class="text-sm"><strong><%= ec.name %></strong> (<%= ec.relation %>) — <%= ec.phone ? (ec.phone.countryCode ?? '') + ' ' + (ec.phone.number ?? '') : '—' %></div>
+        <% }); %>
+      </div>
+    </div>
+  <% } %>
+</div>
+
+<!-- Latest Vitals Grid -->
+<h3 class="text-sm font-bold text-gray-600 uppercase mb-3">Latest Vitals</h3>
+<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
+  <% const v = data.latestVitals; %>
+
+  <div class="vital-card border rounded-lg p-3">
+    <div class="text-xs text-gray-400 font-medium mb-1">Weight</div>
+    <% if (v.weight) { %>
+      <div class="text-lg font-bold"><%= v.weight.value %> <span class="text-xs font-normal"><%= v.weight.unit ?? 'kg' %></span></div>
+      <% if (v.weight.bmi) { %><div class="text-xs text-gray-400">BMI: <%= v.weight.bmi.toFixed(1) %></div><% } %>
+      <div class="text-xs text-gray-300 mt-1"><%= fmtDate(v.weight.recordedAt) %></div>
+    <% } else { %><div class="text-sm text-gray-300">No data</div><% } %>
+  </div>
+
+  <div class="vital-card border rounded-lg p-3">
+    <div class="text-xs text-gray-400 font-medium mb-1">Heart Rate</div>
+    <% if (v.heartRate) { %>
+      <div class="text-lg font-bold <%= vitalColor('hr', v.heartRate.value) %>"><%= v.heartRate.value %> <span class="text-xs font-normal">BPM</span></div>
+      <div class="text-xs text-gray-300 mt-1"><%= fmtDate(v.heartRate.recordedAt) %></div>
+    <% } else { %><div class="text-sm text-gray-300">No data</div><% } %>
+  </div>
+
+  <div class="vital-card border rounded-lg p-3">
+    <div class="text-xs text-gray-400 font-medium mb-1">Blood Pressure</div>
+    <% if (v.bloodPressure) { %>
+      <div class="text-lg font-bold">
+        <span class="<%= vitalColor('sys', v.bloodPressure.systolic) %>"><%= v.bloodPressure.systolic %></span>/<span class="<%= vitalColor('dia', v.bloodPressure.diastolic) %>"><%= v.bloodPressure.diastolic %></span>
+        <span class="text-xs font-normal text-gray-400">mmHg</span>
+      </div>
+      <div class="text-xs text-gray-400">Pulse: <%= v.bloodPressure.pulse %> BPM</div>
+      <div class="text-xs text-gray-300 mt-1"><%= fmtDate(v.bloodPressure.recordedAt) %></div>
+    <% } else { %><div class="text-sm text-gray-300">No data</div><% } %>
+  </div>
+
+  <div class="vital-card border rounded-lg p-3">
+    <div class="text-xs text-gray-400 font-medium mb-1">Blood Sugar</div>
+    <% if (v.bloodSugar) { %>
+      <div class="text-lg font-bold"><%= v.bloodSugar.value %> <span class="text-xs font-normal"><%= v.bloodSugar.unit ?? 'mg/dL' %></span></div>
+      <div class="text-xs text-gray-400 capitalize"><%= (v.bloodSugar.mealTime ?? 'random').replace('_', ' ') %></div>
+      <div class="text-xs text-gray-300 mt-1"><%= fmtDate(v.bloodSugar.recordedAt) %></div>
+    <% } else { %><div class="text-sm text-gray-300">No data</div><% } %>
+  </div>
+
+  <div class="vital-card border rounded-lg p-3">
+    <div class="text-xs text-gray-400 font-medium mb-1">Temperature</div>
+    <% if (v.temperature) { %>
+      <div class="text-lg font-bold <%= vitalColor('tempC', v.temperature.value) %>"><%= v.temperature.value %>&deg;<%= v.temperature.unit ?? 'C' %></div>
+      <div class="text-xs text-gray-300 mt-1"><%= fmtDate(v.temperature.recordedAt) %></div>
+    <% } else { %><div class="text-sm text-gray-300">No data</div><% } %>
+  </div>
+
+  <div class="vital-card border rounded-lg p-3">
+    <div class="text-xs text-gray-400 font-medium mb-1">Abdominal Circ.</div>
+    <% if (v.abdominalCircumference) { %>
+      <div class="text-lg font-bold"><%= v.abdominalCircumference.value %> <span class="text-xs font-normal"><%= v.abdominalCircumference.unit ?? 'cm' %></span></div>
+      <div class="text-xs text-gray-300 mt-1"><%= fmtDate(v.abdominalCircumference.recordedAt) %></div>
+    <% } else { %><div class="text-sm text-gray-300">No data</div><% } %>
+  </div>
+</div>
+
+<!-- Sections Grid -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+  <!-- Medications -->
+  <div class="border rounded-lg p-4">
+    <h3 class="text-sm font-bold text-gray-600 uppercase mb-2">Active Medications (<%= data.activeMedications.length %>)</h3>
+    <% if (data.activeMedications.length === 0) { %><p class="text-sm text-gray-400">None recorded</p><% } %>
+    <% data.activeMedications.forEach(function(m) { %>
+      <div class="flex items-center gap-2 py-1 border-b border-gray-50 text-sm">
+        <div class="w-2 h-2 bg-green-500 rounded-full"></div>
+        <strong><%= m.medicationName %></strong>
+        <span class="text-gray-400"><%= m.dosage %> — <%= m.frequency %> (<%= m.route %>)</span>
+      </div>
+    <% }); %>
+  </div>
+
+  <!-- Allergies -->
+  <div class="border rounded-lg p-4">
+    <h3 class="text-sm font-bold text-gray-600 uppercase mb-2">Allergies (<%= data.activeAllergies.length %>)</h3>
+    <% if (data.activeAllergies.length === 0) { %><p class="text-sm text-gray-400">None recorded</p><% } %>
+    <% data.activeAllergies.forEach(function(a) { %>
+      <div class="py-1 border-b border-gray-50 text-sm bg-red-50 px-2 rounded mb-1">
+        <strong>Anaphylaxis:</strong> <%= a.Anaphylaxis ?? '—' %> |
+        <strong>ADR:</strong> <%= a.AllergicReactionADR ?? '—' %>
+      </div>
+    <% }); %>
+  </div>
+
+  <!-- Health Conditions -->
+  <div class="border rounded-lg p-4">
+    <h3 class="text-sm font-bold text-gray-600 uppercase mb-2">Active Conditions (<%= data.activeHealthConditions.length %>)</h3>
+    <% if (data.activeHealthConditions.length === 0) { %><p class="text-sm text-gray-400">None recorded</p><% } %>
+    <% data.activeHealthConditions.forEach(function(c) { %>
+      <div class="py-1 border-b border-gray-50 text-sm">
+        <strong><%= c.healthConditionDiagnosis %></strong>
+        <% if (c.healthConditionDescription) { %><span class="text-gray-400"> — <%= c.healthConditionDescription %></span><% } %>
+      </div>
+    <% }); %>
+  </div>
+
+  <!-- Recent Alerts -->
+  <div class="border rounded-lg p-4">
+    <h3 class="text-sm font-bold text-gray-600 uppercase mb-2">Recent Alerts (<%= data.recentAlerts.length %>)</h3>
+    <% if (data.recentAlerts.length === 0) { %><p class="text-sm text-gray-400">No recent alerts</p><% } %>
+    <% data.recentAlerts.forEach(function(a) { %>
+      <% const alertClass = a.msgType === 'critical' ? 'bg-red-50 border-red-200' : a.msgType === 'warning' ? 'bg-yellow-50 border-yellow-200' : 'bg-blue-50 border-blue-200'; %>
+      <div class="py-1.5 px-2 border rounded mb-1 text-sm <%= alertClass %>">
+        <span class="badge <%= a.msgType === 'critical' ? 'badge-red' : a.msgType === 'warning' ? 'badge-yellow' : 'badge-blue' %> mr-1"><%= a.msgType %></span>
+        <%= a.message %> <span class="text-xs text-gray-400"><%= fmtDateTime(a.dateTime) %></span>
+      </div>
+    <% }); %>
+  </div>
+
+  <!-- Mood -->
+  <div class="border rounded-lg p-4">
+    <h3 class="text-sm font-bold text-gray-600 uppercase mb-2">Recent Mood</h3>
+    <% if (data.recentMoodEntries.length === 0) { %><p class="text-sm text-gray-400">No mood entries</p><% } %>
+    <% data.recentMoodEntries.forEach(function(m) { %>
+      <div class="flex items-center gap-2 py-1 text-sm">
+        <div class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold" style="background: hsl(<%= m.mood * 12 %>, 70%, 90%); color: hsl(<%= m.mood * 12 %>, 70%, 35%)"><%= m.mood %></div>
+        <span><%= m.moodLabel %></span>
+        <span class="text-xs text-gray-400 ml-auto"><%= fmtDate(m.recordedAt) %></span>
+      </div>
+    <% }); %>
+  </div>
+
+  <!-- Support Persons -->
+  <div class="border rounded-lg p-4">
+    <h3 class="text-sm font-bold text-gray-600 uppercase mb-2">Support Persons (<%= data.supportPersons.length %>)</h3>
+    <% if (data.supportPersons.length === 0) { %><p class="text-sm text-gray-400">None recorded</p><% } %>
+    <% data.supportPersons.forEach(function(sp) { %>
+      <div class="py-1 border-b border-gray-50 text-sm">
+        <strong><%= sp.name %></strong> (<%= sp.relationship %>)
+        <% const consent = sp.shareConsent ?? 'No Consent'; %>
+        <span class="badge <%= consent === 'Full Consent' ? 'badge-green' : consent === 'Partial Consent' ? 'badge-yellow' : 'badge-red' %> ml-1"><%= consent %></span>
+        <% if (sp.phone?.number) { %><span class="text-gray-400 ml-1">Ph: <%= sp.phone.countryCode ?? '' %> <%= sp.phone.number %></span><% } %>
+      </div>
+    <% }); %>
+  </div>
+
+  <!-- Health Record -->
+  <% if (data.healthRecord) { const hr = data.healthRecord; %>
+  <div class="border rounded-lg p-4">
+    <h3 class="text-sm font-bold text-gray-600 uppercase mb-2">Health Record</h3>
+    <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+      <div><span class="text-gray-400">Medicare:</span> <%= hr.medicareNumber ?? '—' %></div>
+      <div><span class="text-gray-400">IRN:</span> <%= hr.medicareIndividualReference ?? '—' %></div>
+      <div><span class="text-gray-400">DVA:</span> <%= hr.dvaNumber ?? '—' %> <%= hr.dvaCardType ?? '' %></div>
+      <div><span class="text-gray-400">IHI:</span> <%= hr.ihiNumber ?? '—' %></div>
+      <div><span class="text-gray-400">Health Fund:</span> <%= hr.healthFundName ?? '—' %></div>
+      <div><span class="text-gray-400">Fund #:</span> <%= hr.healthFundNumber ?? '—' %></div>
+      <div><span class="text-gray-400">EMR #:</span> <%= hr.signacareEMRNumber ?? '—' %></div>
+      <div><span class="text-gray-400">Pronouns:</span> <%= hr.pronouns ?? '—' %></div>
+    </div>
+  </div>
+  <% } %>
+
+  <!-- Upcoming Reminders -->
+  <div class="border rounded-lg p-4">
+    <h3 class="text-sm font-bold text-gray-600 uppercase mb-2">Upcoming Reminders (<%= data.upcomingReminders.length %>)</h3>
+    <% if (data.upcomingReminders.length === 0) { %><p class="text-sm text-gray-400">No upcoming reminders</p><% } %>
+    <% data.upcomingReminders.forEach(function(r) { %>
+      <% const typeClass = r.type === 'medication' ? 'badge-purple' : r.type === 'appointment' ? 'badge-green' : r.type === 'test' ? 'badge-yellow' : 'badge-blue'; %>
+      <div class="flex items-center gap-2 py-1 text-sm border-b border-gray-50">
+        <span class="badge <%= typeClass %>"><%= r.type %></span>
+        <strong><%= r.title %></strong>
+        <span class="text-xs text-gray-400 ml-auto"><%= fmtDateTime(r.reminderTime) %></span>
+      </div>
+    <% }); %>
+  </div>
+</div>
+
+<% `; %>
+<%- include('../layout', { title: data.patient.firstName + ' ' + data.patient.lastName + ' — Zitavi', body, apiKey }) %>

@@ -1,0 +1,73 @@
+name: Weekly Integrity Cold Start
+
+on:
+  schedule:
+    - cron: '0 1 * * 1'
+  workflow_dispatch: {}
+
+jobs:
+  weekly-cold-start:
+    name: Weekly cold-start integrity run
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: signacaredb_test
+          POSTGRES_USER: signacare_owner
+          POSTGRES_PASSWORD: signacare_ci_test_pw
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U signacare_owner -d signacaredb_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      NODE_ENV: test
+      DB_HOST: localhost
+      DB_PORT: '5432'
+      DB_USER: signacare_owner
+      DB_PASSWORD: signacare_ci_test_pw
+      DB_NAME: signacaredb_test
+      DB_SSL: 'false'
+      DB_APP_USER: signacare_owner
+      DB_APP_PASSWORD: signacare_ci_test_pw
+      JWT_ACCESS_SECRET: ci-test-access-secret-64-char-hex-0123456789abcdef0123456789abcdef
+      JWT_REFRESH_SECRET: ci-test-refresh-secret-64-char-hex-0123456789abcdef0123456789abcdef
+      JWT_ACCESS_TTL_MINUTES: '60'
+      JWT_REFRESH_TTL_DAYS: '7'
+      PHI_ENCRYPTION_KEY: ci-test-phi-encryption-key-64-char-hex-0123456789abcdef0123456789
+      BLIND_INDEX_KEY: ci-test-blind-index-key-64-char-hex-0123456789abcdef0123456789abcd
+      SESSION_SECRET: ci-test-session-secret-64-char-hex-0123456789abcdef0123456789abcdef
+      REDIS_URL: redis://localhost:6379
+      CORS_ORIGIN: http://localhost:5173
+      PORT: '4000'
+      CALENDAR_ICAL_SECRET: ci-test-ical-secret-64-char-hex-0123456789abcdef0123456789abcdef
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - name: Install dependencies (cold start)
+        run: npm ci --workspaces --include-workspace-root
+      - name: Global guard pack
+        run: npm run guard:all
+      - name: Type-check
+        run: npm run typecheck
+      - name: Full tests
+        run: npm run test:all
+      - name: Lint
+        run: npm run lint

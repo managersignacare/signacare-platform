@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "tables": [
+    "appointments",
+    "outcome_measures",
+    "pathology_results",
+    "staff_sessions",
+    "tasks",
+    "prescriptions",
+    "patient_medications",
+    "episodes",
+    "clinical_notes",
+    "legal_orders",
+    "risk_assessments"
+  ],
+  "writePaths": [
+    {
+      "id": "staff-sessions-revoke-patch",
+      "file": "apps/api/src/features/auth/authRepository.ts",
+      "requiredPatterns": [
+        "buildSessionRevokePatch",
+        "lock_version",
+        "db\\.raw\\('lock_version \\+ 1'\\)"
+      ]
+    },
+    {
+      "id": "staff-sessions-create-default",
+      "file": "apps/api/src/features/auth/authService.ts",
+      "requiredPatterns": [
+        "lock_version:\\s*1"
+      ]
+    }
+  ]
+}

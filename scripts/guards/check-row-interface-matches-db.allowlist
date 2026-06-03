@@ -1,0 +1,30 @@
+# scripts/guards/check-row-interface-matches-db.allowlist
+#
+# BUG-529 — per-column reverse-direction exemptions.
+#
+# Format: <table>.<column>  # BUG-NNN — reason
+#
+# Each entry exempts ONE DB column on ONE table from the reverse-direction
+# §15 invariant ("interface must declare every DB column"). Use this only
+# for surgical cases where most columns SHOULD be declared but specific
+# ones are deliberately excluded (e.g. write-only audit columns the
+# interface intentionally hides from read paths).
+#
+# When the interface as a whole is a sub-projection (most columns missing
+# is the design intent), prefer the JSDoc annotation:
+#
+#     /** @schema-drift-exempt partial-shape — sub-projection: BUG-NNN */
+#
+# instead of pasting many entries here.
+#
+# Self-cleaning: if a listed column is deleted from the DB or the table is
+# renamed, the guard exits 2 ("stale entry") on the next run. Remove the
+# entry — do not silence the guard.
+#
+# Lines starting with "#" or empty lines are ignored.
+# Expiry-policy: per-entry (added 2026-05-03 cycle Phase 0a.7)
+# Each non-comment line carries an `| expires: <YYYY-MM-DD> (cascade: <BUG>)`
+# OR `| permanent: <reason>` annotation. Entries past their expiry date
+# fail the merge gate via `scripts/guards/check-allowlist-expiry.ts`.
+# Renewal: when a target close-by date passes, EITHER drain the entry
+# (preferred) OR explicitly extend the date with operator authorization.

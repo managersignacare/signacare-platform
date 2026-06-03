@@ -1,0 +1,36 @@
+# fire-and-forget.allowlist — intentional `void asyncCall(...)`
+# patterns that are deliberately fire-and-forget and either chain
+# their own .catch OR are in a path where failure is definitively
+# non-critical (e.g. observability hooks that can't themselves
+# block shutdown).
+#
+# Every entry MUST carry a `# reason` comment on the line above
+# OR inline. Adding entries without a reason fails review.
+#
+# Entry form:
+#   path/to/file.ts:LINE:calleeName     (exact match)
+#   path/to/file.ts:calleeName          (any-line match — use when
+#                                        line numbers shift often)
+#
+# The guard is scripts/guards/check-no-fire-and-forget.ts
+# and runs in CI. See CLAUDE.md §9.6 for the rationale.
+
+# ── Observability / shutdown hooks ───────────────────────────────
+
+# OpenTelemetry SIGTERM shutdown — calling shutdownOtel from a
+# signal handler genuinely can't `await` (the process is about to
+# exit) and any error is unrecoverable. Intentional fire-and-forget.
+apps/api/src/observability/otel.ts:shutdownOtel
+
+# ── Cron scheduler ticks (cron.schedule requires a sync callback) ──
+
+# BullMQ / node-cron schedulers take a sync callback; wrapping an
+# async tick() in `() => { void tick(); }` is the standard pattern.
+# Each tick() has its own try/catch internally so unhandled
+# rejections are impossible. Audit 2026-04-16 verified.
+apps/api/src/jobs/schedulers/audioRetentionScheduler.ts:tick
+apps/api/src/jobs/schedulers/matviewRefreshScheduler.ts:tick
+apps/api/src/jobs/schedulers/backupScheduler.ts:tick
+# HL7 ORM-O01 builder is fire-and-forget inside a BullMQ job
+# handler — the outer worker catches everything and retries.
+apps/api/src/jobs/workers/hl7Worker.ts:buildOrmO01

@@ -1,0 +1,21 @@
+{
+  "name": "Signacare Mobile Scribe",
+  "short_name": "Scribe",
+  "description": "Mobile medical scribe for Signacare EMR — records consultations and streams audio to your on-prem Whisper instance.",
+  "start_url": "/m/scribe",
+  "scope": "/m/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#FBF8F5",
+  "theme_color": "#3D484B",
+  "icons": [
+    {
+      "src": "/signacare-logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["medical", "productivity"],
+  "prefer_related_applications": false
+}

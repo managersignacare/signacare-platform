@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "migrationFile": "20260701000056_bug_706_patient_identifier_ciphertext_width.ts",
+      "bugId": "BUG-706",
+      "status": "approved",
+      "expectedErrorPattern": "Cannot rollback patients ciphertext columns to VARCHAR\\(30\\): [0-9]+ rows exceed width\\.",
+      "rationale": "Ciphertext-width widening from VARCHAR(30) to TEXT is data-preserving forward path; shrink rollback is unsafe without truncation or destructive rewrite.",
+      "approval": {
+        "approvedBy": "Dr Prakash Kamath",
+        "approvedAt": "2026-05-09T19:16:16+05:30",
+        "ticket": "BUG-706-FWD-FIX-APPROVAL-2026-05-09"
+      }
+    },
+    {
+      "migrationFile": "20260423000008_reconcile_stale_admin_slots.ts",
+      "bugId": "BUG-362",
+      "status": "approved",
+      "expectedErrorPattern": "BUG-362 reconciliation is irreversible\\.",
+      "rationale": "The migration deterministically nulls ineligible nominated/delegated admin links; rollback would re-create dangling FK references to operational-only, deactivated, or soft-deleted staff. Recovery posture is pre-migration snapshot restore plus forward-fix.",
+      "approval": {
+        "approvedBy": "Dr Prakash Kamath",
+        "approvedAt": "2026-05-28T05:36:00+05:30",
+        "ticket": "BUG-362-FWD-FIX-APPROVAL-2026-05-28"
+      }
+    }
+  ]
+}

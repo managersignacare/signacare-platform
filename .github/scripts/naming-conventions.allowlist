@@ -1,0 +1,50 @@
+# naming-conventions.allowlist
+#
+# Pre-existing violations of the naming-convention rules that the guard
+# would otherwise flag. Each entry is one line in the form:
+#
+#     <file>:<line>:<rule>
+#
+# Where rule is one of:
+#   parseint     — parseInt() without explicit radix
+#   sql-alias    — camelCase SQL alias inside db.raw()
+#
+# Adding to this file is allowed only when:
+#   1. The violation is pre-existing (not introduced by your PR), AND
+#   2. There is a tracked work item to clean it up.
+#
+# Removing entries (i.e. fixing the violation) is always welcome.
+#
+# Lines starting with # and blank lines are ignored.
+#
+# ─── parseInt without radix (frontend, mostly UI input handlers) ─────────────
+# These follow the pattern `parseInt(x) || N`. They will be cleaned up
+# opportunistically as the affected components are touched. New code MUST
+# use parseInt(x, 10).
+
+
+# Note: SQL string-form aliases like `as patientId` are widespread and
+# runtime-safe (the camelCaseResponse middleware is a no-op for already-
+# camelCase keys). The naming guard does NOT flag them. See the comment
+# in check-naming-conventions.sh next to Rule 3 for the reasoning.
+apps/web/src/features/beds/pages/BedBoardPage.tsx:433:parseint
+apps/web/src/features/dashboard/pages/DashboardPage.tsx:1031:parseint
+apps/web/src/features/nursing/pages/NursingPage.tsx:309:parseint
+apps/web/src/features/nursing/pages/NursingPage.tsx:311:parseint
+apps/web/src/features/nursing/pages/NursingPage.tsx:314:parseint
+apps/web/src/features/nursing/pages/NursingPage.tsx:316:parseint
+apps/web/src/features/nursing/pages/NursingPage.tsx:369:parseint
+apps/web/src/features/nursing/pages/NursingPage.tsx:430:parseint
+apps/web/src/features/nursing/pages/NursingPage.tsx:431:parseint
+apps/web/src/features/patients/components/detail/tabs/AlertsPlansTab.tsx:812:parseint
+apps/web/src/features/patients/components/detail/tabs/AppointmentsTab.tsx:205:parseint
+apps/web/src/features/patients/components/detail/tabs/AppointmentsTab.tsx:228:parseint
+apps/web/src/features/patients/components/detail/tabs/AssessmentsTab.tsx:306:parseint
+apps/web/src/features/patients/components/detail/tabs/EctTab.tsx:368:parseint
+apps/web/src/features/patients/components/detail/tabs/PathwaysTab.tsx:230:parseint
+apps/web/src/features/patients/components/detail/tabs/TmsTab.tsx:264:parseint
+apps/web/src/features/patients/components/notes/ContactFormDialog.tsx:183:parseint
+apps/web/src/features/patients/components/notes/ContactFormDialog.tsx:372:parseint
+apps/web/src/features/patients/components/notes/ContactFormDialog.tsx:377:parseint
+apps/web/src/features/reports/pages/ReportsPage.tsx:1190:parseint
+apps/web/src/shared/components/ui/AiQuickTasks.tsx:148:parseint

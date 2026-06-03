@@ -1,0 +1,40 @@
+# duplicate-api-types.allowlist
+#
+# Phase 0.7 PR2 Class D (TYPEDUP) — pre-existing type duplicates between
+# @signacare/shared and apps/web/src/features/*/types/*.ts that the guard
+# would otherwise flag. Each entry is one type name per line.
+#
+# The rule: frontend `types/*.ts` files may only declare types that are
+# strictly frontend-only (UI state, form field types, component prop
+# types). Any type that represents an API request or response shape must
+# live in @signacare/shared and be imported.
+#
+# Every entry below is a type that is declared in BOTH shared and a
+# frontend types/*.ts, with materially different field shapes (i.e. the
+# frontend version has drifted from the shared version over time). Each
+# one requires per-case investigation:
+#
+#   1. Which side is correct? Trace the backend service that populates
+#      the response to see what field names it really emits.
+#   2. Fix the side that's wrong. If the backend is the offender, rename
+#      its response fields. If the frontend is the offender, align its
+#      schema to the backend reality. Document the real shipped bug in
+#      a fix-registry row (`TYPEDUP:<TypeName>`).
+#   3. Delete the frontend duplicate and import from `@signacare/shared`.
+#   4. Remove the type name from this allowlist.
+#
+# Adding NEW entries to this file is NOT allowed. The CI guard
+# `check-no-duplicate-api-types.sh` uses this file as a grandfather list;
+# any new frontend declaration of a shared type name fails CI.
+#
+# Fixed so far (removed from this list):
+#   - TaskResponse (Phase 0.7 PR2 Class D, 2026-04-16) —
+#     backend mapTask emitted `createdByStaffName`/`assignedToStaffName`
+#     but frontend consumers read `createdByName`/`assignedToName` →
+#     task cards silently rendered undefined for months. Fixed by
+#     aligning backend response field names to what frontend reads.
+#     See taskService.ts mapTask() + docs/fix-registry.md TYPEDUP:TaskResponse.
+#
+# Remaining 46 duplicates — each one needs the same investigation.
+# Tracked as Phase 0.7 PR3 (follow-up from PR2).
+

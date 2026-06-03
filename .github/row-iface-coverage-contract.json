@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "finalDeadline": "2026-12-31",
+  "milestones": [
+    { "date": "2026-05-28", "maxUnbound": 289, "minVerified": 77, "minEffectiveCoveragePct": 21.04 },
+    { "date": "2026-07-31", "maxUnbound": 220, "minVerified": 100, "minEffectiveCoveragePct": 30 },
+    { "date": "2026-09-30", "maxUnbound": 140, "minVerified": 130, "minEffectiveCoveragePct": 50 },
+    { "date": "2026-11-30", "maxUnbound": 60, "minVerified": 165, "minEffectiveCoveragePct": 75 },
+    { "date": "2026-12-31", "maxUnbound": 0, "minVerified": 190, "minEffectiveCoveragePct": 90 }
+  ]
+}

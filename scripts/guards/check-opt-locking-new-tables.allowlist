@@ -1,0 +1,40 @@
+# scripts/guards/check-opt-locking-new-tables.allowlist
+#
+# Phase R1 PR-R1-12 cycle-2 — pre-existing multi-writer tables that
+# lack `lock_version`. Each entry is a single table name with a
+# per-table severity grading + cascade BUG citation.
+#
+# Format: <table_name>  # severity / reason / cascade BUG
+#
+# IMPORTANT: NEW migrations adding multi-writer tables CANNOT be
+# allowlisted as a workaround. They must declare `lock_version` OR
+# the table must have a documented race-precluding pattern (UNIQUE
+# constraint making the UPDATE a CAS, append-only insert-only, etc.).
+#
+# Per L3 PR-R1-12 cycle-1 finding #2: the cycle-1 entries for
+# `feature_flag_disable_requests` and `training_export_requests`
+# were unsubstantiated ("state-machine; not concurrent-edit"). The
+# llmRoutes.ts:482-507 read-then-write IS racey — confirmed by L3
+# audit. Cycle-2 retains them in the allowlist with the HONEST
+# reason: race confirmed, fix tracked under explicit per-table BUG.
+# Expiry-policy: per-entry (added 2026-05-03 cycle Phase 0a.7)
+# Each non-comment line carries an `| expires: <YYYY-MM-DD> (cascade: <BUG>)`
+# OR `| permanent: <reason>` annotation. Entries past their expiry date
+# fail the merge gate via `scripts/guards/check-allowlist-expiry.ts`.
+# Renewal: when a target close-by date passes, EITHER drain the entry
+# (preferred) OR explicitly extend the date with operator authorization.
+
+# ── S2 (deploy-blocker; should-ship-before-GA) ────────────────────
+admission_waitlist  # S2 — flagged_by + removed_by; bed-allocation race; BUG-PR-R1-12-FIX-S2-WAITLIST | expires: 2026-12-31 (cascade: BUG-PR-R1-12-FIX-S2-WAITLIST)
+checklist_instances  # S2 — completed_by + state-transition; clinical checklist-completion race; BUG-PR-R1-12-FIX-S2-CHECKLISTS | expires: 2026-12-31 (cascade: BUG-PR-R1-12-FIX-S2-CHECKLISTS)
+clinics  # S2 — retention_purge_enabled_by + retention_purge_manager_approved_by; segregation-of-duties race per CLAUDE.md §17.2; BUG-PR-R1-12-FIX-S2-CLINIC-RETENTION | expires: 2026-12-31 (cascade: BUG-PR-R1-12-FIX-S2-CLINIC-RETENTION)
+correspondence_letters  # S2 — generated_by + signed_by; letter approval race; BUG-PR-R1-12-FIX-S2-LETTERS | expires: 2026-12-31 (cascade: BUG-PR-R1-12-FIX-S2-LETTERS)
+feature_flag_disable_requests  # S2 — requested_by + approved_by; admin-flag toggle race (CYCLE-1 ALLOWLIST WAS WRONG; race confirmed); BUG-PR-R1-12-FIX-S2-FLAG-DISABLE | expires: 2026-12-31 (cascade: BUG-PR-R1-12-FIX-S2-FLAG-DISABLE)
+invoices  # S2 — approved_by + state-transition; billing approval race; BUG-PR-R1-12-FIX-S2-INVOICES | expires: 2026-12-31 (cascade: BUG-PR-R1-12-FIX-S2-INVOICES)
+patient_flags  # S2 — raised_by + resolved_by; alert-resolution race; BUG-PR-R1-12-FIX-S2-PATIENT-FLAGS | expires: 2026-12-31 (cascade: BUG-PR-R1-12-FIX-S2-PATIENT-FLAGS)
+planned_transitions  # S2 — created_by + approved_by; transition approval race; BUG-PR-R1-12-FIX-S2-TRANSITIONS | expires: 2026-12-31 (cascade: BUG-PR-R1-12-FIX-S2-TRANSITIONS)
+referrals  # S2 — accepted_by + created_by; referral acceptance race; BUG-PR-R1-12-FIX-S2-REFERRALS | expires: 2026-12-31 (cascade: BUG-PR-R1-12-FIX-S2-REFERRALS)
+patient_team_assignments  # S2 — referred_by + reviewed_by; team-assignment race; BUG-PR-R1-12-FIX-S2-TEAM-ASSIGNMENTS | expires: 2026-12-31 (cascade: BUG-PR-R1-12-FIX-S2-TEAM-ASSIGNMENTS)
+patient_team_reallocations  # S2 — referred_by + reviewed_by; team-reallocation race; BUG-PR-R1-12-FIX-S2-TEAM-REALLOC | expires: 2026-12-31 (cascade: BUG-PR-R1-12-FIX-S2-TEAM-REALLOC)
+staff_leave  # S2 — approved_by + state-transition; leave approval race; BUG-PR-R1-12-FIX-S2-STAFF-LEAVE | expires: 2026-12-31 (cascade: BUG-PR-R1-12-FIX-S2-STAFF-LEAVE)
+training_export_requests  # S2 — requested_by + approved_by + downloaded_at + status; CONFIRMED race at llmRoutes.ts:482-507 (read-then-write, no CAS); CYCLE-1 ALLOWLIST WAS WRONG; BUG-PR-R1-12-FIX-S2-TRAINING-EXPORT | expires: 2026-12-31 (cascade: BUG-PR-R1-12-FIX-S2-TRAINING-EXPORT)

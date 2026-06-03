@@ -1,0 +1,7271 @@
+{
+  "generatedAt": "2026-05-31",
+  "generatedAtIso": "2026-05-31T01:52:21.453Z",
+  "database": "signacaredb",
+  "tables": {
+    "active_sessions": [
+      "id",
+      "staff_id",
+      "clinic_id",
+      "refresh_token_jti",
+      "ip_address",
+      "user_agent",
+      "created_at",
+      "expires_at",
+      "revoked_at"
+    ],
+    "admin_impersonation_sessions": [
+      "id",
+      "clinic_id",
+      "admin_id",
+      "impersonated_staff_id",
+      "reason",
+      "started_at",
+      "expires_at",
+      "ended_at",
+      "created_at"
+    ],
+    "admission_waitlist": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "episode_id",
+      "hotspot_id",
+      "source",
+      "priority",
+      "status",
+      "reason",
+      "clinical_notes",
+      "preferred_ward",
+      "target_admission_date",
+      "flagged_by_staff_id",
+      "removed_by_staff_id",
+      "removed_at",
+      "removal_reason",
+      "created_at",
+      "updated_at"
+    ],
+    "advance_directives": [
+      "id",
+      "patient_id",
+      "clinic_id",
+      "type",
+      "content",
+      "status",
+      "valid_from",
+      "valid_until",
+      "created_at",
+      "updated_at",
+      "lock_version"
+    ],
+    "ai_context_files": [
+      "id",
+      "clinic_id",
+      "title",
+      "description",
+      "category",
+      "content",
+      "content_format",
+      "is_active",
+      "include_in_rag",
+      "priority",
+      "token_estimate",
+      "uploaded_by_staff_id",
+      "created_at",
+      "updated_at"
+    ],
+    "ai_model_approvals": [
+      "id",
+      "clinic_id",
+      "model_name",
+      "model_digest",
+      "approved_by_staff_id",
+      "approved_at",
+      "notes",
+      "created_at"
+    ],
+    "ai_modelfiles": [
+      "id",
+      "clinic_id",
+      "action_type",
+      "model_name",
+      "modelfile_content",
+      "system_prompt",
+      "temperature",
+      "max_tokens",
+      "few_shot_examples",
+      "rag_instructions",
+      "is_active",
+      "updated_by_staff_id",
+      "created_at",
+      "updated_at"
+    ],
+    "ai_training_feedback": [
+      "id",
+      "clinic_id",
+      "staff_id",
+      "interaction_id",
+      "feedback_type",
+      "rating",
+      "comments",
+      "original_output",
+      "corrected_output",
+      "created_at",
+      "updated_at"
+    ],
+    "aims_assessments": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "lai_schedule_id",
+      "assessed_by_staff_id",
+      "assessment_date",
+      "item_scores",
+      "total_score",
+      "interpretation",
+      "global_severity",
+      "incapacitation",
+      "patient_awareness",
+      "current_dental_problems",
+      "dentures",
+      "clinical_notes",
+      "is_baseline",
+      "created_at",
+      "updated_at",
+      "deleted_at"
+    ],
+    "alert_types": [
+      "id",
+      "clinic_id",
+      "name",
+      "severity",
+      "color",
+      "plan_template",
+      "is_active",
+      "sort_order",
+      "created_at",
+      "updated_at"
+    ],
+    "antenatal_visits": [
+      "id",
+      "clinic_id",
+      "pregnancy_id",
+      "patient_id",
+      "visit_number",
+      "visit_date",
+      "ga_weeks",
+      "ga_days",
+      "fundal_height_cm",
+      "fetal_heart_rate_bpm",
+      "bp_systolic",
+      "bp_diastolic",
+      "urine_protein",
+      "urine_glucose",
+      "oedema",
+      "note",
+      "seen_by",
+      "created_at",
+      "updated_at",
+      "deleted_at"
+    ],
+    "appointment_attendees": [
+      "id",
+      "clinic_id",
+      "appointment_id",
+      "staff_id",
+      "role",
+      "attendance_status",
+      "invited_at",
+      "responded_at",
+      "created_at",
+      "updated_at"
+    ],
+    "appointment_checklists": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "appointment_id",
+      "item",
+      "is_completed",
+      "sort_order",
+      "created_by",
+      "created_at"
+    ],
+    "appointment_modes": [
+      "id",
+      "clinic_id",
+      "name",
+      "is_active",
+      "sort_order",
+      "created_at",
+      "updated_at"
+    ],
+    "appointments": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "clinician_id",
+      "staff_id",
+      "episode_id",
+      "start_time",
+      "end_time",
+      "appointment_start",
+      "appointment_end",
+      "duration_minutes",
+      "status",
+      "type",
+      "appointment_type",
+      "mode",
+      "mbs_item",
+      "patient_response",
+      "location",
+      "notes",
+      "telehealth",
+      "telehealth_url",
+      "telehealth_link",
+      "telehealth_provider",
+      "telehealth_passcode",
+      "cancellation_reason",
+      "cancelled_by_id",
+      "rescheduled_from_id",
+      "reminder_scheduled",
+      "reminder_sent",
+      "reminder_sent_at",
+      "outlook_event_id",
+      "created_at",
+      "updated_at",
+      "deleted_at",
+      "recurrence_rule",
+      "recurrence_end_date",
+      "recurrence_parent_id",
+      "specialty_code",
+      "check_in_at",
+      "checked_in_by_id",
+      "lock_version"
+    ],
+    "assessment_responses": [
+      "id",
+      "patient_id",
+      "clinic_id",
+      "episode_id",
+      "staff_id",
+      "template_id",
+      "assessment_type",
+      "responses",
+      "total_score",
+      "severity",
+      "collection_occasion",
+      "created_at",
+      "updated_at"
+    ],
+    "audit_events_canonical": [
+      "id",
+      "clinic_id",
+      "staff_id",
+      "user_id",
+      "username",
+      "action",
+      "operation",
+      "module",
+      "entity_type",
+      "entity_id",
+      "table_name",
+      "record_id",
+      "details",
+      "old_data",
+      "new_data",
+      "ip_address",
+      "user_agent",
+      "created_at",
+      "dedupe_key"
+    ],
+    "audit_log": [
+      "id",
+      "clinic_id",
+      "staff_id",
+      "user_id",
+      "username",
+      "action",
+      "operation",
+      "module",
+      "entity_type",
+      "entity_id",
+      "table_name",
+      "record_id",
+      "details",
+      "old_data",
+      "new_data",
+      "ip_address",
+      "user_agent",
+      "created_at",
+      "dedupe_key",
+      "prev_hash",
+      "row_hash",
+      "chain_ordinal"
+    ],
+    "audit_log_chain_baselines": [
+      "scope_key",
+      "baseline_marker",
+      "marker_signature",
+      "source_row_count",
+      "min_created_at",
+      "max_created_at",
+      "computed_at"
+    ],
+    "audit_log_chain_scope_state": [
+      "scope_key",
+      "last_chain_ordinal",
+      "last_row_hash",
+      "updated_at"
+    ],
+    "audit_runs": [
+      "id",
+      "clinic_id",
+      "template_id",
+      "team_id",
+      "clinician_id",
+      "sample_size",
+      "status",
+      "selected_note_ids",
+      "results",
+      "created_by_id",
+      "created_at",
+      "updated_at"
+    ],
+    "audit_templates": [
+      "id",
+      "clinic_id",
+      "name",
+      "description",
+      "questions",
+      "created_by_id",
+      "created_at",
+      "updated_at",
+      "deleted_at"
+    ],
+    "backup_config": [
+      "id",
+      "schedule_enabled",
+      "frequency",
+      "time_of_day",
+      "retention_days",
+      "local_dir",
+      "offsite_target",
+      "last_run_at",
+      "last_run_status",
+      "created_at",
+      "updated_at"
+    ],
+    "backup_history": [
+      "id",
+      "started_at",
+      "finished_at",
+      "status",
+      "size_bytes",
+      "location",
+      "error_text",
+      "trigger_kind",
+      "triggered_by_staff_id"
+    ],
+    "bed_movements": [
+      "id",
+      "bed_id",
+      "patient_id",
+      "episode_id",
+      "clinic_id",
+      "movement_type",
+      "movement_at",
+      "authorised_by_id",
+      "notes",
+      "created_at",
+      "updated_at"
+    ],
+    "beds": [
+      "id",
+      "clinic_id",
+      "org_unit_id",
+      "ward",
+      "room",
+      "bed_label",
+      "bed_type",
+      "status",
+      "is_active",
+      "created_at",
+      "updated_at"
+    ],
+    "billing_accounts": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "account_type",
+      "medicare_number",
+      "dva_number",
+      "private_health_fund",
+      "member_number",
+      "is_active",
+      "created_at",
+      "billing_type",
+      "health_fund_name",
+      "health_fund_member_number",
+      "ndis_number",
+      "ndis_package_manager",
+      "dva_card_type",
+      "notes",
+      "updated_at"
+    ],
+    "billing_queue": [
+      "id",
+      "clinic_id",
+      "invoice_id",
+      "claim_type",
+      "status",
+      "submitted_at",
+      "response_code",
+      "response_message",
+      "created_at"
+    ],
+    "break_glass_sessions": [
+      "id",
+      "clinic_id",
+      "staff_id",
+      "reason",
+      "status",
+      "approver_id",
+      "approved_at",
+      "denied_reason",
+      "token_hash",
+      "issued_at",
+      "expires_at",
+      "revoked_at",
+      "revoked_by",
+      "ip_address",
+      "user_agent",
+      "actions_performed",
+      "alerted_at",
+      "created_at"
+    ],
+    "cancer_treatment_plans": [
+      "id",
+      "clinic_id",
+      "condition_id",
+      "regimen_name",
+      "intent",
+      "protocol_ref",
+      "start_date",
+      "end_date",
+      "status",
+      "notes",
+      "created_by_staff_id",
+      "created_at",
+      "updated_at",
+      "deleted_at"
+    ],
+    "capacity_assessments": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "episode_id",
+      "assessor_id",
+      "letter_id",
+      "decision_context",
+      "understand_notes",
+      "retain_notes",
+      "weigh_notes",
+      "communicate_notes",
+      "conclusion",
+      "conclusion_reasoning",
+      "assessed_at",
+      "created_at",
+      "updated_at"
+    ],
+    "care_plan_goals": [
+      "id",
+      "clinic_id",
+      "treatment_plan_id",
+      "goal_text",
+      "description",
+      "goal_type",
+      "target_date",
+      "status",
+      "sort_order",
+      "measurable",
+      "patient_self_rated",
+      "created_by_id",
+      "created_at",
+      "updated_at"
+    ],
+    "care_plan_interventions": [
+      "id",
+      "clinic_id",
+      "care_plan_goal_id",
+      "intervention_text",
+      "description",
+      "frequency",
+      "responsible_staff_id",
+      "status",
+      "start_date",
+      "end_date",
+      "sort_order",
+      "created_by_id",
+      "created_at",
+      "updated_at"
+    ],
+    "care_plans": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "episode_id",
+      "title",
+      "description",
+      "status",
+      "transition_checklist",
+      "transition_status",
+      "transition_target_date",
+      "recovery_star_scores",
+      "recovery_star_updated_at",
+      "recovery_star_updated_by",
+      "created_by_id",
+      "created_at",
+      "updated_at",
+      "deleted_at"
+    ],
+    "carers": [
+      "id",
+      "patient_id",
+      "clinic_id",
+      "given_name",
+      "family_name",
+      "relationship",
+      "phone",
+      "email",
+      "is_primary",
+      "created_at",
+      "updated_at"
+    ],
+    "checklist_instances": [
+      "id",
+      "clinic_id",
+      "template_id",
+      "patient_id",
+      "episode_id",
+      "completed_by_staff_id",
+      "status",
+      "checked_items",
+      "total_items",
+      "completed_items",
+      "notes",
+      "completed_at",
+      "created_at",
+      "updated_at"
+    ],
+    "checklist_templates": [
+      "id",
+      "clinic_id",
+      "name",
+      "description",
+      "trigger_point",
+      "enforcement",
+      "items",
+      "is_active",
+      "sort_order",
+      "created_by_staff_id",
+      "created_at",
+      "updated_at"
+    ],
+    "chemo_cycles": [
+      "id",
+      "clinic_id",
+      "plan_id",
+      "cycle_number",
+      "planned_date",
+      "actual_date",
+      "status",
+      "dose_modifications",
+      "toxicity_ctcae",
+      "notes",
+      "administered_by_staff_id",
+      "created_at",
+      "updated_at"
+    ],
+    "clinic_choice_architecture_defaults": [
+      "id",
+      "clinic_id",
+      "next_review_due_days_default",
+      "safety_plan_refresh_days_default",
+      "medication_reminder_window_minutes",
+      "created_at",
+      "updated_at"
+    ],
+    "clinic_contact_options": [
+      "id",
+      "clinic_id",
+      "locations",
+      "programs",
+      "service_recipient_types",
+      "contact_media_types",
+      "created_at",
+      "updated_at"
+    ],
+    "clinic_enabled_specialties": [
+      "id",
+      "clinic_id",
+      "specialty_code",
+      "enabled_at",
+      "enabled_by"
+    ],
+    "clinic_micro_learning_rules": [
+      "id",
+      "clinic_id",
+      "name",
+      "tracking_type",
+      "delta_threshold",
+      "window_days",
+      "card_id",
+      "cooldown_days",
+      "is_active",
+      "lock_version",
+      "created_at",
+      "updated_at"
+    ],
+    "clinic_modules": [
+      "id",
+      "clinic_id",
+      "module_key",
+      "is_enabled",
+      "updated_at"
+    ],
+    "clinic_scribe_vocabulary": [
+      "id",
+      "clinic_id",
+      "category",
+      "term",
+      "pronunciation_hint",
+      "is_active",
+      "created_at",
+      "updated_at"
+    ],
+    "clinic_sequences": [
+      "id",
+      "clinic_id",
+      "scope_key",
+      "next_value",
+      "created_at",
+      "updated_at"
+    ],
+    "clinic_settings": [
+      "clinic_id",
+      "scribe_consent_mode",
+      "created_at",
+      "updated_at",
+      "ai_chat_classifier_mode",
+      "scribe_audio_retention",
+      "sharepoint_site_id",
+      "letterhead_html",
+      "letterhead_logo_url",
+      "default_letter_language",
+      "default_guidelines",
+      "training_opt_in",
+      "training_opt_in_changed_by",
+      "training_opt_in_changed_at"
+    ],
+    "clinic_step_care_rules": [
+      "id",
+      "clinic_id",
+      "name",
+      "description",
+      "pathway_type",
+      "intervention_template_key",
+      "auto_assign_enabled",
+      "auto_escalate_enabled",
+      "escalation_priority",
+      "assignment_scope",
+      "is_active",
+      "expected_outcome_text",
+      "conditions",
+      "created_by_staff_id",
+      "lock_version",
+      "created_at",
+      "updated_at"
+    ],
+    "clinic_thresholds": [
+      "id",
+      "clinic_id",
+      "threshold_key",
+      "threshold_value",
+      "unit",
+      "created_at",
+      "updated_at"
+    ],
+    "clinical_formulations": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "episode_id",
+      "author_id",
+      "formulation_type",
+      "presenting_problem",
+      "predisposing_factors",
+      "precipitating_factors",
+      "perpetuating_factors",
+      "protective_factors",
+      "summary",
+      "diagnostic_formulation",
+      "treatment_implications",
+      "shared_with_patient",
+      "status",
+      "created_at",
+      "updated_at",
+      "deleted_at",
+      "shared_with_clinicians",
+      "confidentiality_level"
+    ],
+    "clinical_note_codes": [
+      "id",
+      "note_id",
+      "clinic_id",
+      "system",
+      "code",
+      "display",
+      "confidence",
+      "status",
+      "source",
+      "source_excerpt",
+      "accepted_by_staff_id",
+      "accepted_at",
+      "rejected_by_staff_id",
+      "rejected_at",
+      "reject_reason",
+      "created_at",
+      "updated_at",
+      "lock_version"
+    ],
+    "clinical_note_evidence": [
+      "id",
+      "note_id",
+      "chunk_id",
+      "clinic_id",
+      "quoted_excerpt",
+      "section",
+      "status",
+      "source",
+      "accepted_by_staff_id",
+      "accepted_at",
+      "created_at",
+      "lock_version"
+    ],
+    "clinical_note_versions": [
+      "id",
+      "note_id",
+      "clinic_id",
+      "version_number",
+      "snapshot",
+      "edited_by_staff_id",
+      "edited_at",
+      "edit_reason",
+      "status_at_snapshot"
+    ],
+    "clinical_notes": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "episode_id",
+      "author_id",
+      "appointment_id",
+      "title",
+      "note_type",
+      "note_category",
+      "source_type",
+      "note_date_time",
+      "note_date",
+      "content",
+      "content_html",
+      "structured_fields",
+      "status",
+      "is_draft",
+      "is_signed",
+      "template_id",
+      "is_reportable_contact",
+      "contact_meta",
+      "foi_content",
+      "foi_exempt",
+      "did_not_attend",
+      "is_ai_draft",
+      "soap_subjective",
+      "soap_objective",
+      "soap_assessment",
+      "soap_plan",
+      "amended_from_id",
+      "signed_at",
+      "signed_by",
+      "signed_by_id",
+      "created_at",
+      "updated_at",
+      "deleted_at",
+      "lock_version",
+      "search_tsv",
+      "reviewed_and_adopted_by_id",
+      "reviewed_and_adopted_at",
+      "consent_id",
+      "signed_content_hash",
+      "signed_content_hash_alg"
+    ],
+    "clinical_policies": [
+      "id",
+      "clinic_id",
+      "name",
+      "description",
+      "rule_type",
+      "parameters",
+      "llm_context",
+      "is_active",
+      "generates_alert",
+      "available_to_llm",
+      "category",
+      "sort_order",
+      "created_at",
+      "updated_at"
+    ],
+    "clinical_reviews": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "episode_id",
+      "reviewed_by_id",
+      "review_type",
+      "review_date",
+      "summary",
+      "recommendations",
+      "status",
+      "created_at",
+      "updated_at"
+    ],
+    "clinical_roles": [
+      "id",
+      "clinic_id",
+      "name",
+      "is_active",
+      "sort_order",
+      "created_at",
+      "updated_at"
+    ],
+    "clinical_templates": [
+      "id",
+      "clinic_id",
+      "category_id",
+      "name",
+      "type",
+      "description",
+      "content",
+      "is_active",
+      "is_system",
+      "sort_order",
+      "created_by_id",
+      "created_at",
+      "updated_at"
+    ],
+    "clinician_availability_blocks": [
+      "id",
+      "clinic_id",
+      "clinician_id",
+      "colour",
+      "recurrence",
+      "day_of_week",
+      "specific_date",
+      "start_time",
+      "end_time",
+      "effective_from",
+      "effective_until",
+      "label",
+      "notes",
+      "created_by_staff_id",
+      "created_at",
+      "updated_at",
+      "deleted_at"
+    ],
+    "clinician_fee_overrides": [
+      "id",
+      "clinic_id",
+      "staff_id",
+      "item_number",
+      "provider_fee_cents",
+      "gap_cents",
+      "bulk_bill_eligible",
+      "notes",
+      "is_active",
+      "created_at",
+      "updated_at"
+    ],
+    "clinics": [
+      "id",
+      "name",
+      "legal_name",
+      "abn",
+      "phone",
+      "email",
+      "address_line1",
+      "address_line2",
+      "suburb",
+      "state",
+      "postcode",
+      "country",
+      "timezone",
+      "time_zone",
+      "is_active",
+      "created_at",
+      "updated_at",
+      "deleted_at",
+      "hpio",
+      "npds_conformance_id",
+      "erx_etp1_site_id",
+      "nominated_admin_staff_id",
+      "delegated_admin_staff_id",
+      "data_retention_years",
+      "retention_purge_enabled",
+      "retention_purge_enabled_at",
+      "retention_purge_enabled_by_staff_id",
+      "retention_purge_manager_approved_by_staff_id",
+      "retention_purge_manager_approved_at",
+      "session_idle_minutes"
+    ],
+    "clozapine_administrations": [
+      "id",
+      "clinic_id",
+      "registration_id",
+      "titration_day_id",
+      "administration_date",
+      "time_slot",
+      "actual_time",
+      "dose_mg",
+      "administered",
+      "non_admin_code",
+      "administered_by_staff_id",
+      "administrator_initials",
+      "notes",
+      "created_at"
+    ],
+    "clozapine_blood_results": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "registration_id",
+      "recorded_by_staff_id",
+      "collection_date",
+      "resulted_date",
+      "anc_value",
+      "wbc_value",
+      "neutrophils_pct",
+      "anc_status",
+      "flag_raised",
+      "flag_type",
+      "lab_name",
+      "lab_reference",
+      "clinical_notes",
+      "created_at",
+      "updated_at",
+      "deleted_at"
+    ],
+    "clozapine_monitoring_checks": [
+      "id",
+      "clinic_id",
+      "registration_id",
+      "investigation",
+      "check_point",
+      "check_date",
+      "result_status",
+      "result_value",
+      "notes",
+      "recorded_by_staff_id",
+      "created_at"
+    ],
+    "clozapine_observations": [
+      "id",
+      "clinic_id",
+      "registration_id",
+      "observation_date",
+      "observation_time",
+      "temperature",
+      "pulse",
+      "bp_systolic_lying",
+      "bp_diastolic_lying",
+      "bp_systolic_standing",
+      "bp_diastolic_standing",
+      "respiration_rate",
+      "smoking_status",
+      "cigarettes_per_day",
+      "outside_normal",
+      "notes",
+      "recorded_by_staff_id",
+      "created_at"
+    ],
+    "clozapine_registrations": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "episode_id",
+      "drug_product_id",
+      "prescriber_staff_id",
+      "registration_date",
+      "dispenser_pharmacy",
+      "current_dose_mg",
+      "titration_phase",
+      "monitoring_week",
+      "monitoring_frequency",
+      "last_anc_date",
+      "last_anc_value",
+      "anc_status",
+      "last_wbc_date",
+      "last_wbc_value",
+      "next_blood_due_date",
+      "physical_health_check_due",
+      "ceased_date",
+      "ceased_reason",
+      "notes",
+      "created_at",
+      "updated_at",
+      "deleted_at"
+    ],
+    "clozapine_titration_days": [
+      "id",
+      "clinic_id",
+      "registration_id",
+      "day_number",
+      "titration_date",
+      "morning_dose_mg",
+      "evening_dose_mg",
+      "prescriber_initials",
+      "prescribed_by_staff_id",
+      "comments",
+      "created_at",
+      "updated_at"
+    ],
+    "community_resources": [
+      "id",
+      "clinic_id",
+      "name",
+      "category",
+      "description",
+      "services",
+      "phone",
+      "email",
+      "website",
+      "address",
+      "operating_hours",
+      "referral_process",
+      "eligibility",
+      "contact_person",
+      "notes",
+      "is_active",
+      "created_at",
+      "updated_at"
+    ],
+    "consent_records": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "consent_type",
+      "status",
+      "granted_at",
+      "withdrawn_at",
+      "expires_at",
+      "witness_name",
+      "witness_role",
+      "notes",
+      "recorded_by_id",
+      "created_at",
+      "updated_at"
+    ],
+    "consultations": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "episode_id",
+      "clinician_id",
+      "encounter_date",
+      "encounter_type",
+      "duration_minutes",
+      "presenting_complaints",
+      "mse",
+      "plan_text",
+      "note_id",
+      "status",
+      "created_at",
+      "updated_at",
+      "deleted_at"
+    ],
+    "contact_records": [
+      "id",
+      "patient_id",
+      "clinic_id",
+      "episode_id",
+      "staff_id",
+      "contact_type",
+      "contact_date",
+      "contact_time",
+      "duration_min",
+      "location",
+      "contact_medium",
+      "program",
+      "service_recipients",
+      "is_reportable",
+      "team",
+      "num_providing",
+      "num_receiving",
+      "content",
+      "template_id",
+      "status",
+      "created_at",
+      "updated_at"
+    ],
+    "correspondence_letters": [
+      "id",
+      "patient_id",
+      "clinic_id",
+      "episode_id",
+      "author_id",
+      "recipient_name",
+      "recipient_address",
+      "recipient_email",
+      "recipient_fax",
+      "recipient_provider_id",
+      "letter_type",
+      "subject",
+      "content",
+      "body",
+      "status",
+      "clinical_note_id",
+      "template_id",
+      "generated_by_id",
+      "notes",
+      "sent_via",
+      "created_at",
+      "sent_at",
+      "deleted_at",
+      "signature_data",
+      "signed_by_id",
+      "signed_at",
+      "search_tsv"
+    ],
+    "data_breach_log": [
+      "id",
+      "clinic_id",
+      "breach_type",
+      "severity",
+      "description",
+      "affected_records",
+      "affected_patients",
+      "containment_actions",
+      "reported_by_id",
+      "detected_at",
+      "reported_at",
+      "status",
+      "resolution_notes",
+      "is_notifiable",
+      "notification_deadline",
+      "oaic_form_data",
+      "created_at",
+      "updated_at"
+    ],
+    "data_retention_policies": [
+      "id",
+      "clinic_id",
+      "data_category",
+      "retention_years",
+      "legal_basis",
+      "disposal_method",
+      "is_active",
+      "created_at",
+      "updated_at"
+    ],
+    "data_sharing_agreements": [
+      "id",
+      "clinic_id",
+      "partner_name",
+      "partner_type",
+      "purpose",
+      "data_categories",
+      "start_date",
+      "end_date",
+      "conditions",
+      "status",
+      "approved_by_id",
+      "created_at",
+      "updated_at"
+    ],
+    "developmental_milestones": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "episode_id",
+      "domain",
+      "milestone",
+      "expected_age_months",
+      "achieved_at_months",
+      "status",
+      "note",
+      "assessed_at",
+      "assessed_by",
+      "created_at",
+      "updated_at",
+      "deleted_at"
+    ],
+    "diagnoses": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "episode_id",
+      "created_by_id",
+      "icd_code",
+      "description",
+      "diagnosed_date",
+      "status",
+      "is_primary",
+      "notes",
+      "created_at",
+      "updated_at",
+      "deleted_at"
+    ],
+    "drug_products": [
+      "id",
+      "clinic_id",
+      "generic_name",
+      "brand_name",
+      "form",
+      "strength",
+      "unit",
+      "route",
+      "schedule",
+      "pbs_code",
+      "pbs_listed",
+      "is_authority_required",
+      "is_controlled",
+      "atc_code",
+      "drug_class",
+      "is_lai",
+      "is_clozapine",
+      "contraindications",
+      "common_interactions",
+      "monitoring_requirements",
+      "dose_range",
+      "data_source",
+      "is_active",
+      "created_at",
+      "updated_at"
+    ],
+    "ecog_performance_status": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "score",
+      "assessed_at",
+      "assessed_by_staff_id",
+      "notes",
+      "created_at"
+    ],
+    "ect_courses": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "episode_id",
+      "treating_psychiatrist_id",
+      "anaesthetist_id",
+      "consent_obtained",
+      "consent_date",
+      "consent_recorded_by",
+      "total_planned_sessions",
+      "indication",
+      "status",
+      "notes",
+      "created_at",
+      "updated_at",
+      "deleted_at"
+    ],
+    "ect_sessions": [
+      "id",
+      "course_id",
+      "clinic_id",
+      "session_number",
+      "session_date",
+      "stimulus_dose_mc",
+      "seizure_duration_sec",
+      "electrode_placement",
+      "anaesthetic_agent",
+      "muscle_relaxant",
+      "pre_treatment_bp",
+      "post_treatment_bp",
+      "mmse_score",
+      "adverse_events",
+      "clinician_notes",
+      "administered_by",
+      "created_at",
+      "updated_at"
+    ],
+    "engagement_scores": [
+      "id",
+      "clinic_id",
+      "encounter_id",
+      "patient_id",
+      "rapport",
+      "engagement",
+      "compliance",
+      "insight",
+      "affect",
+      "notes",
+      "recorded_at",
+      "created_at",
+      "updated_at"
+    ],
+    "episode_types": [
+      "id",
+      "clinic_id",
+      "name",
+      "is_active",
+      "sort_order",
+      "created_at",
+      "updated_at"
+    ],
+    "episodes": [
+      "id",
+      "patient_id",
+      "clinic_id",
+      "title",
+      "episode_number",
+      "episode_type",
+      "status",
+      "presenting_problem",
+      "primary_diagnosis",
+      "start_date",
+      "end_date",
+      "closure_reason",
+      "closure_summary",
+      "team_id",
+      "primary_clinician_id",
+      "created_at",
+      "updated_at",
+      "deleted_at",
+      "discharge_signature_data",
+      "discharge_signed_by_id",
+      "discharge_signed_at",
+      "key_worker_id",
+      "specialty_code",
+      "discharge_summary_content",
+      "discharge_vetting_status",
+      "discharge_vetted_by_id",
+      "discharge_vetted_at",
+      "discharge_signature",
+      "closure_vetting_status",
+      "closure_vetted_by_id",
+      "closure_vetted_at",
+      "closure_signature",
+      "lock_version"
+    ],
+    "ereferrals": [
+      "id",
+      "patient_id",
+      "clinic_id",
+      "referrer_name",
+      "referrer_org",
+      "referrer_phone",
+      "referrer_email",
+      "priority",
+      "status",
+      "content",
+      "reason",
+      "clinical_summary",
+      "created_at",
+      "updated_at"
+    ],
+    "erx_tokens": [
+      "id",
+      "clinic_id",
+      "prescription_id",
+      "token_value",
+      "dsp_id",
+      "npds_reference",
+      "status",
+      "issued_at",
+      "expires_at",
+      "dispensed_at",
+      "dispensing_pharmacy",
+      "raw_response",
+      "created_at",
+      "updated_at"
+    ],
+    "escalation_events": [
+      "id",
+      "escalation_id",
+      "actor_id",
+      "event_type",
+      "notes",
+      "created_at",
+      "updated_at"
+    ],
+    "escalations": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "episode_id",
+      "raised_by_id",
+      "assigned_to_id",
+      "acknowledged_by_id",
+      "resolved_by_id",
+      "type",
+      "severity",
+      "title",
+      "description",
+      "status",
+      "resolution",
+      "acknowledged_at",
+      "resolved_at",
+      "created_at",
+      "updated_at",
+      "deleted_at",
+      "lock_version"
+    ],
+    "evidence_chunks": [
+      "id",
+      "document_id",
+      "section_path",
+      "chunk_index",
+      "body",
+      "token_estimate",
+      "created_at"
+    ],
+    "evidence_documents": [
+      "id",
+      "source_id",
+      "title",
+      "publisher",
+      "jurisdiction",
+      "published_on",
+      "url",
+      "document_type",
+      "license",
+      "ingested_at"
+    ],
+    "feature_flag_disable_requests": [
+      "id",
+      "clinic_id",
+      "flag_name",
+      "action",
+      "requested_by_id",
+      "requested_at",
+      "approved_by_id",
+      "approved_at",
+      "status",
+      "reason",
+      "rejection_reason",
+      "created_at"
+    ],
+    "feature_flags": [
+      "id",
+      "clinic_id",
+      "name",
+      "description",
+      "enabled",
+      "rollout_percentage",
+      "created_at",
+      "updated_at"
+    ],
+    "fee_schedules": [
+      "id",
+      "clinic_id",
+      "item_number",
+      "description",
+      "schedule_fee_cents",
+      "category",
+      "modality",
+      "min_duration_mins",
+      "max_duration_mins",
+      "is_initial",
+      "is_active",
+      "source",
+      "effective_from",
+      "effective_to",
+      "sort_order",
+      "created_at",
+      "updated_at"
+    ],
+    "fhir_bulk_export_jobs": [
+      "id",
+      "clinic_id",
+      "requested_by_staff_id",
+      "types",
+      "since",
+      "request_url",
+      "group_id",
+      "status",
+      "error_text",
+      "output_files",
+      "total_resources",
+      "exported_resources",
+      "started_at",
+      "finished_at",
+      "created_at"
+    ],
+    "fhir_subscriptions": [
+      "id",
+      "clinic_id",
+      "status",
+      "criteria",
+      "channel_type",
+      "channel_endpoint",
+      "channel_header",
+      "channel_payload",
+      "reason",
+      "end_time",
+      "created_by_id",
+      "created_at",
+      "updated_at"
+    ],
+    "forensic_risk_formulations": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "assessor_id",
+      "letter_id",
+      "instrument",
+      "scores",
+      "historical_summary",
+      "clinical_summary",
+      "risk_management_summary",
+      "overall_risk",
+      "overall_reasoning",
+      "assessed_at",
+      "created_at",
+      "updated_at"
+    ],
+    "glucose_readings": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "episode_id",
+      "value",
+      "unit",
+      "source",
+      "meal_context",
+      "measured_at",
+      "recorded_by",
+      "note",
+      "created_at",
+      "updated_at",
+      "deleted_at"
+    ],
+    "group_session_attendees": [
+      "id",
+      "group_session_id",
+      "patient_id",
+      "attendance_status",
+      "notes",
+      "created_at",
+      "updated_at"
+    ],
+    "group_sessions": [
+      "id",
+      "clinic_id",
+      "facilitator_id",
+      "name",
+      "group_type",
+      "program",
+      "session_date",
+      "start_time",
+      "end_time",
+      "duration_min",
+      "location",
+      "notes",
+      "status",
+      "created_at",
+      "updated_at"
+    ],
+    "growth_measurements": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "episode_id",
+      "measurement_type",
+      "value",
+      "unit",
+      "age_at_measurement_days",
+      "percentile",
+      "z_score",
+      "reference_source",
+      "measured_at",
+      "recorded_by",
+      "note",
+      "created_at",
+      "updated_at",
+      "deleted_at"
+    ],
+    "hi_error_log": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "operation",
+      "status_code",
+      "error_code",
+      "error_message",
+      "request_ref",
+      "context",
+      "created_by_staff_id",
+      "created_at"
+    ],
+    "hotspots": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "hotspot_type",
+      "reason",
+      "severity",
+      "is_active",
+      "created_at",
+      "updated_at"
+    ],
+    "immunizations": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "episode_id",
+      "cvx_code",
+      "vaccine_name",
+      "manufacturer",
+      "series_name",
+      "dose_number",
+      "series_doses",
+      "administered_date",
+      "lot_number",
+      "expiration_date",
+      "site",
+      "route",
+      "dose_quantity_ml",
+      "status",
+      "not_done_reason",
+      "note",
+      "administered_by",
+      "created_at",
+      "updated_at",
+      "deleted_at"
+    ],
+    "import_jobs": [
+      "id",
+      "clinic_id",
+      "uploaded_by_id",
+      "kind",
+      "status",
+      "filename",
+      "row_count",
+      "error_count",
+      "committed_count",
+      "report",
+      "uploaded_at",
+      "committed_at",
+      "deleted_at"
+    ],
+    "insulin_regimens": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "episode_id",
+      "basal_drug",
+      "basal_dose_units",
+      "basal_frequency",
+      "bolus_drug",
+      "bolus_doses",
+      "correction_factor",
+      "carb_ratio",
+      "target_low",
+      "target_high",
+      "valid_from",
+      "valid_to",
+      "note",
+      "prescribed_by",
+      "created_at",
+      "updated_at",
+      "deleted_at"
+    ],
+    "investigation_types": [
+      "id",
+      "clinic_id",
+      "name",
+      "is_active",
+      "sort_order",
+      "created_at",
+      "updated_at"
+    ],
+    "invoice_line_items": [
+      "id",
+      "invoice_id",
+      "mbs_item_code",
+      "description",
+      "fee_cents",
+      "quantity",
+      "created_at",
+      "unit_price_cents",
+      "discount_cents",
+      "line_total_cents",
+      "schedule_fee_cents",
+      "updated_at"
+    ],
+    "invoices": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "clinician_id",
+      "invoice_number",
+      "service_date",
+      "mbs_item_code",
+      "mbs_item_description",
+      "fee_cents",
+      "status",
+      "payment_method",
+      "notes",
+      "created_at",
+      "updated_at",
+      "appointment_id",
+      "billing_type",
+      "subtotal_cents",
+      "gst_cents",
+      "total_cents",
+      "paid_cents",
+      "gap_cents",
+      "schedule_fee_cents",
+      "rebate_cents",
+      "provider_fee_cents",
+      "due_date",
+      "approved_at",
+      "approved_by_staff_id",
+      "sent_at",
+      "auto_generated",
+      "override_notes",
+      "referral_valid"
+    ],
+    "key_issues": [
+      "id",
+      "clinic_id",
+      "encounter_id",
+      "patient_id",
+      "issue_text",
+      "category",
+      "priority",
+      "resolution",
+      "resolved_at",
+      "created_at",
+      "updated_at",
+      "deleted_at"
+    ],
+    "knex_migrations": [
+      "id",
+      "name",
+      "batch",
+      "migration_time"
+    ],
+    "knex_migrations_lock": [
+      "index",
+      "is_locked"
+    ],
+    "lai_given": [
+      "id",
+      "clinic_id",
+      "lai_schedule_id",
+      "patient_id",
+      "administered_by_staff_id",
+      "schedule_id",
+      "administered_by_id",
+      "outcome",
+      "given_date",
+      "dose_given_mg",
+      "dose_given",
+      "injection_site",
+      "batch_number",
+      "expires_at",
+      "refusal_reason",
+      "deferred_to_date",
+      "next_due_date",
+      "aims_due",
+      "aims_completed",
+      "aims_response_id",
+      "notes",
+      "created_at",
+      "updated_at",
+      "deleted_at",
+      "lock_version"
+    ],
+    "lai_schedules": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "episode_id",
+      "drug_product_id",
+      "prescriber_staff_id",
+      "drug_name",
+      "dose_mg",
+      "frequency_days",
+      "injection_site",
+      "injection_technique",
+      "needle_gauge",
+      "indication",
+      "loading_dose_required",
+      "loading_doses_required",
+      "loading_doses_given",
+      "oral_overlap_required",
+      "oral_overlap_end_date",
+      "start_date",
+      "first_due_date",
+      "next_due_date",
+      "last_given_date",
+      "end_date",
+      "baseline_aims_score",
+      "last_aims_date",
+      "next_aims_due_date",
+      "status",
+      "notes",
+      "created_at",
+      "updated_at",
+      "deleted_at"
+    ],
+    "lai_validations": [
+      "id",
+      "clinic_id",
+      "lai_schedule_id",
+      "patient_id",
+      "validated_by_staff_id",
+      "validation_date",
+      "valid_until",
+      "validation_type",
+      "outcome",
+      "clinical_rationale",
+      "side_effects_reviewed",
+      "consent_confirmed",
+      "blood_tests_reviewed",
+      "aims_reviewed",
+      "notes",
+      "created_at"
+    ],
+    "legal_order_type_configs": [
+      "id",
+      "clinic_id",
+      "name",
+      "category",
+      "is_active",
+      "sort_order",
+      "created_at",
+      "updated_at"
+    ],
+    "legal_order_types": [
+      "id",
+      "code",
+      "name",
+      "jurisdiction",
+      "max_duration_days",
+      "requires_tribunal",
+      "is_active",
+      "created_at",
+      "updated_at"
+    ],
+    "legal_orders": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "episode_id",
+      "order_type_id",
+      "order_number",
+      "start_date",
+      "expires_at",
+      "review_date",
+      "status",
+      "issuing_authority",
+      "conditions",
+      "notes",
+      "auto_flagged",
+      "created_by_staff_id",
+      "created_at",
+      "updated_at",
+      "deleted_at",
+      "lock_version"
+    ],
+    "letter_audit_log": [
+      "id",
+      "clinic_id",
+      "letter_id",
+      "event",
+      "actor_id",
+      "actor_role",
+      "section_key",
+      "diff_summary",
+      "ip_address",
+      "created_at"
+    ],
+    "letter_citations": [
+      "id",
+      "clinic_id",
+      "letter_id",
+      "section_id",
+      "source_kind",
+      "source_ref",
+      "source_offset",
+      "snippet",
+      "claim",
+      "confidence",
+      "created_at"
+    ],
+    "letter_deliveries": [
+      "id",
+      "clinic_id",
+      "letter_id",
+      "channel",
+      "recipient_name",
+      "recipient_address",
+      "recipient_email",
+      "recipient_fax",
+      "recipient_mhr_ihi",
+      "status",
+      "receipt_id",
+      "sent_by",
+      "attempted_at",
+      "delivered_at",
+      "error",
+      "attempt_count",
+      "created_at",
+      "updated_at"
+    ],
+    "letter_exports": [
+      "id",
+      "clinic_id",
+      "letter_id",
+      "format",
+      "content_ref",
+      "content_size_bytes",
+      "generated_by",
+      "generated_at"
+    ],
+    "letter_revisions": [
+      "id",
+      "clinic_id",
+      "letter_id",
+      "revision_number",
+      "previous_rendered_text",
+      "reason_category",
+      "reason_detail",
+      "requested_by",
+      "created_at"
+    ],
+    "letter_sections": [
+      "id",
+      "clinic_id",
+      "letter_id",
+      "section_key",
+      "section_order",
+      "label",
+      "content",
+      "regen_count",
+      "last_regen_at",
+      "last_regen_by",
+      "created_at",
+      "updated_at"
+    ],
+    "letter_templates": [
+      "id",
+      "clinic_id",
+      "code",
+      "name",
+      "category",
+      "description",
+      "sections",
+      "system_prompt",
+      "default_recipients",
+      "is_active",
+      "requires_second_review",
+      "created_at",
+      "updated_at"
+    ],
+    "letter_tone_presets": [
+      "id",
+      "clinic_id",
+      "tone_key",
+      "name",
+      "description",
+      "system_prompt_addendum",
+      "is_active",
+      "created_at",
+      "updated_at"
+    ],
+    "letter_translations": [
+      "id",
+      "clinic_id",
+      "letter_id",
+      "language_code",
+      "translated_text",
+      "translator_model",
+      "translated_by",
+      "translated_at",
+      "created_at"
+    ],
+    "letters": [
+      "id",
+      "clinic_id",
+      "template_id",
+      "patient_id",
+      "episode_id",
+      "author_id",
+      "session_id",
+      "status",
+      "subject",
+      "recipients",
+      "rendered_text",
+      "approved_by",
+      "approved_at",
+      "sent_by",
+      "sent_at",
+      "revision",
+      "created_at",
+      "updated_at"
+    ],
+    "llm_interactions": [
+      "id",
+      "clinic_id",
+      "user_id",
+      "patient_id",
+      "episode_id",
+      "feature",
+      "model_name",
+      "model_provider",
+      "prompt_tokens",
+      "completion_tokens",
+      "total_tokens",
+      "latency_ms",
+      "success",
+      "error_code",
+      "input_ref",
+      "output_ref",
+      "metadata",
+      "created_at",
+      "updated_at",
+      "embedding",
+      "model_version",
+      "temperature",
+      "pipeline"
+    ],
+    "llm_prompts_outputs": [
+      "id",
+      "llm_interaction_id",
+      "prompt_encrypted",
+      "output_encrypted",
+      "encryption_status",
+      "consent_id",
+      "created_at"
+    ],
+    "medication_administrations": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "patient_medication_id",
+      "scheduled_time",
+      "status",
+      "administered_time",
+      "administered_by_staff_id",
+      "dose_given",
+      "route",
+      "site",
+      "notes",
+      "reason_not_given",
+      "witnessed_by_staff_id",
+      "batch_number",
+      "created_at",
+      "administration_context",
+      "prn_reason",
+      "lock_version"
+    ],
+    "medication_reconciliations": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "episode_id",
+      "context",
+      "performed_at",
+      "performed_by",
+      "snapshot",
+      "continued_count",
+      "ceased_count",
+      "modified_count",
+      "new_count",
+      "on_hold_count",
+      "summary_notes",
+      "created_at",
+      "updated_at",
+      "deleted_at"
+    ],
+    "message_thread_participants": [
+      "id",
+      "thread_id",
+      "user_id",
+      "last_read_at",
+      "created_at",
+      "updated_at"
+    ],
+    "message_threads": [
+      "id",
+      "clinic_id",
+      "created_by_id",
+      "patient_id",
+      "subject",
+      "last_message_at",
+      "created_at",
+      "updated_at",
+      "deleted_at"
+    ],
+    "messages": [
+      "id",
+      "thread_id",
+      "sender_id",
+      "clinic_id",
+      "content",
+      "is_read",
+      "created_at",
+      "updated_at"
+    ],
+    "mfa_secrets": [
+      "id",
+      "staff_id",
+      "secret",
+      "is_active",
+      "created_at",
+      "updated_at"
+    ],
+    "mha_reviews": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "legal_order_id",
+      "order_id",
+      "review_type",
+      "review_date",
+      "outcome",
+      "notes",
+      "clinical_notes",
+      "next_review_date",
+      "reviewed_by_staff_id",
+      "reviewed_by_id",
+      "created_at",
+      "updated_at",
+      "deleted_at",
+      "lock_version"
+    ],
+    "micro_learning_cards": [
+      "id",
+      "card_key",
+      "title",
+      "body",
+      "estimated_minutes",
+      "tags",
+      "is_active",
+      "created_at",
+      "updated_at"
+    ],
+    "model_deployments": [
+      "id",
+      "clinic_id",
+      "model_id",
+      "status",
+      "traffic_percentage",
+      "deployed_by",
+      "deployed_at",
+      "promoted_at",
+      "rolled_back_at",
+      "rollback_reason",
+      "created_at",
+      "updated_at"
+    ],
+    "model_registry": [
+      "id",
+      "model_kind",
+      "name",
+      "version",
+      "provider",
+      "digest_sha256",
+      "eval_scores",
+      "red_team_pass",
+      "red_team_report_ref",
+      "registered_by",
+      "registered_at",
+      "is_active"
+    ],
+    "model_surveillance_events": [
+      "id",
+      "source_clinic_id",
+      "deployment_id",
+      "model_id",
+      "event_type",
+      "severity",
+      "payload",
+      "created_at"
+    ],
+    "notifications": [
+      "id",
+      "clinic_id",
+      "recipient_staff_id",
+      "type",
+      "title",
+      "body",
+      "link",
+      "priority",
+      "is_read",
+      "read_at",
+      "source_type",
+      "source_id",
+      "created_at",
+      "expires_at",
+      "updated_at",
+      "severity",
+      "category",
+      "payload",
+      "override_patient_sync"
+    ],
+    "nursing_assessments": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "episode_id",
+      "staff_id",
+      "assessment_type",
+      "scores",
+      "assessment_data",
+      "total_score",
+      "risk_level",
+      "notes",
+      "plan",
+      "assessed_at",
+      "created_at",
+      "updated_at",
+      "next_review_at"
+    ],
+    "oauth_access_tokens": [
+      "id",
+      "jti",
+      "client_id",
+      "clinic_id",
+      "user_id",
+      "patient_id",
+      "scopes",
+      "expires_at",
+      "issued_at",
+      "revoked_at",
+      "revoked_reason"
+    ],
+    "oauth_authorization_codes": [
+      "id",
+      "code_hash",
+      "client_id",
+      "clinic_id",
+      "user_id",
+      "patient_id",
+      "redirect_uri",
+      "scopes",
+      "code_challenge",
+      "code_challenge_method",
+      "launch_token",
+      "expires_at",
+      "created_at",
+      "redeemed_at"
+    ],
+    "oauth_refresh_tokens": [
+      "id",
+      "token_hash",
+      "client_id",
+      "clinic_id",
+      "user_id",
+      "patient_id",
+      "scopes",
+      "rotated_to_id",
+      "expires_at",
+      "issued_at",
+      "revoked_at"
+    ],
+    "op_notes": [
+      "id",
+      "clinic_id",
+      "case_id",
+      "indication",
+      "findings",
+      "procedure_text",
+      "complications",
+      "estimated_blood_loss_ml",
+      "specimens",
+      "closed_by",
+      "closed_at",
+      "created_at",
+      "deleted_at"
+    ],
+    "org_level_labels": [
+      "id",
+      "clinic_id",
+      "level",
+      "label",
+      "created_at",
+      "updated_at"
+    ],
+    "org_unit_programs": [
+      "id",
+      "clinic_id",
+      "org_unit_id",
+      "name",
+      "is_active",
+      "created_at",
+      "updated_at"
+    ],
+    "org_units": [
+      "id",
+      "clinic_id",
+      "name",
+      "level",
+      "parent_id",
+      "sort_order",
+      "is_active",
+      "created_at",
+      "updated_at"
+    ],
+    "outcome_measures": [
+      "id",
+      "patient_id",
+      "clinic_id",
+      "episode_id",
+      "staff_id",
+      "measure_type",
+      "collection_occasion",
+      "total_score",
+      "items",
+      "notes",
+      "created_at",
+      "updated_at",
+      "status",
+      "assigned_for_patient",
+      "template_id",
+      "template_name",
+      "assigned_by",
+      "completed_at",
+      "lock_version"
+    ],
+    "pacu_records": [
+      "id",
+      "clinic_id",
+      "case_id",
+      "vitals",
+      "aldrete_score",
+      "discharge_criteria_met",
+      "recovery_end_at",
+      "note",
+      "recorded_by",
+      "created_at",
+      "deleted_at"
+    ],
+    "password_reset_tokens": [
+      "id",
+      "clinic_id",
+      "staff_id",
+      "token_hash",
+      "expires_at",
+      "used_at",
+      "requested_ip",
+      "requested_user_agent",
+      "created_at"
+    ],
+    "pathology_orders": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "episode_id",
+      "appointment_id",
+      "ordered_by_id",
+      "order_number",
+      "panel_name",
+      "tests",
+      "urgency",
+      "clinical_notes",
+      "fasting",
+      "copy_to_gp",
+      "status",
+      "hl7_sent_at",
+      "hl7_message",
+      "created_at",
+      "updated_at",
+      "deleted_at"
+    ],
+    "pathology_results": [
+      "id",
+      "clinic_id",
+      "pathology_order_id",
+      "patient_id",
+      "test_code",
+      "test_name",
+      "result_value",
+      "result_unit",
+      "reference_range",
+      "abnormal_flag",
+      "result_status",
+      "collection_date",
+      "result_date",
+      "collected_at",
+      "performing_lab",
+      "hl7_raw",
+      "is_critical",
+      "critical_acknowledged_at",
+      "critical_acknowledged_by_id",
+      "flag_task_id",
+      "created_at",
+      "updated_at",
+      "lock_version"
+    ],
+    "patient_active_specialties": [
+      "patient_id",
+      "clinic_id",
+      "specialties"
+    ],
+    "patient_alert_attachments": [
+      "id",
+      "patient_alert_id",
+      "filename",
+      "mime_type",
+      "file_size",
+      "file_path",
+      "created_at",
+      "storage_backend",
+      "storage_key",
+      "storage_bucket",
+      "storage_etag",
+      "clinic_id",
+      "updated_at"
+    ],
+    "patient_alerts": [
+      "id",
+      "patient_id",
+      "clinic_id",
+      "alert_type_id",
+      "entered_by_id",
+      "title",
+      "notes",
+      "management_plan",
+      "severity",
+      "is_active",
+      "show_flag",
+      "created_at",
+      "updated_at",
+      "resolved_at"
+    ],
+    "patient_allergies": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "allergen",
+      "allergen_type",
+      "reaction",
+      "severity",
+      "status",
+      "recorded_by_staff_id",
+      "recorded_at",
+      "notes",
+      "created_at",
+      "updated_at",
+      "deleted_at"
+    ],
+    "patient_app_accounts": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "phone",
+      "email",
+      "password_hash",
+      "is_active",
+      "mfa_enabled",
+      "mfa_secret",
+      "last_login_at",
+      "failed_login_attempts",
+      "locked_until",
+      "created_at",
+      "updated_at"
+    ],
+    "patient_attachments": [
+      "id",
+      "patient_id",
+      "uploaded_by",
+      "filename",
+      "label",
+      "mime_type",
+      "file_size",
+      "file_path",
+      "is_active",
+      "created_at",
+      "storage_backend",
+      "storage_key",
+      "storage_bucket",
+      "storage_etag",
+      "clinic_id",
+      "episode_id",
+      "specialty_code",
+      "updated_at"
+    ],
+    "patient_behavior_contracts": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "pathway_id",
+      "trigger_text",
+      "commitment_behavior",
+      "fallback_plan",
+      "review_date",
+      "accountability_partner",
+      "adherence_status",
+      "adherence_note",
+      "last_adherence_check_at",
+      "is_active",
+      "lock_version",
+      "created_by_staff_id",
+      "updated_by_staff_id",
+      "created_at",
+      "updated_at"
+    ],
+    "patient_behavioral_segments": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "segment_code",
+      "confidence_score",
+      "rationale",
+      "computed_at",
+      "override_by_staff_id",
+      "override_reason",
+      "created_at",
+      "updated_at"
+    ],
+    "patient_contacts": [
+      "id",
+      "patient_id",
+      "given_name",
+      "family_name",
+      "relationship",
+      "phone_mobile",
+      "phone_home",
+      "email",
+      "is_emergency_contact",
+      "is_carer",
+      "has_consent",
+      "created_at",
+      "updated_at",
+      "contact_type",
+      "consent_level",
+      "consent_notes",
+      "deleted_at",
+      "clinic_id"
+    ],
+    "patient_device_sources": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "provider",
+      "device_label",
+      "external_device_id",
+      "is_active",
+      "metadata",
+      "last_ingested_at",
+      "lock_version",
+      "created_at",
+      "updated_at"
+    ],
+    "patient_digital_phenotypes": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "computation_day",
+      "lookback_days",
+      "sleep_hours_avg_7d",
+      "steps_avg_7d",
+      "resting_hr_avg_7d",
+      "hrv_avg_7d",
+      "mood_avg_7d",
+      "anxiety_avg_7d",
+      "adherence_score",
+      "risk_index",
+      "risk_band",
+      "contributing_signals",
+      "lock_version",
+      "created_at",
+      "updated_at"
+    ],
+    "patient_fcm_tokens": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "patient_app_account_id",
+      "device_token",
+      "platform",
+      "last_seen_at",
+      "created_at",
+      "deleted_at"
+    ],
+    "patient_flags": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "episode_id",
+      "category",
+      "severity",
+      "title",
+      "description",
+      "status",
+      "raised_by_staff_id",
+      "resolved_by_staff_id",
+      "raised_at",
+      "resolved_at",
+      "related_record_type",
+      "related_record_id",
+      "is_header_flag",
+      "created_at",
+      "updated_at",
+      "deleted_at"
+    ],
+    "patient_ihis": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "ihi_value",
+      "ihi_lookup",
+      "record_status",
+      "number_status",
+      "source",
+      "hi_verified_at",
+      "hi_display_name_original",
+      "hi_display_name_40",
+      "hi_name_was_truncated",
+      "created_by_staff_id",
+      "created_at"
+    ],
+    "patient_invites": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "code",
+      "qr_token",
+      "expires_at",
+      "used_at",
+      "created_by",
+      "created_at"
+    ],
+    "patient_legal_attachments": [
+      "id",
+      "patient_id",
+      "legal_order_id",
+      "category",
+      "filename",
+      "mime_type",
+      "file_size",
+      "file_path",
+      "created_at",
+      "storage_backend",
+      "storage_key",
+      "storage_bucket",
+      "storage_etag",
+      "clinic_id",
+      "updated_at"
+    ],
+    "patient_legal_orders": [
+      "id",
+      "patient_id",
+      "clinic_id",
+      "order_type_id",
+      "entered_by_id",
+      "order_number",
+      "start_date",
+      "end_date",
+      "review_date",
+      "next_application_date",
+      "status",
+      "notes",
+      "ai_summary",
+      "created_at",
+      "updated_at",
+      "lock_version"
+    ],
+    "patient_med_reminders": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "medication_id",
+      "drug_name",
+      "dose",
+      "instructions",
+      "days_of_week",
+      "reminder_time",
+      "is_active",
+      "created_by",
+      "created_at",
+      "updated_at"
+    ],
+    "patient_medications": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "episode_id",
+      "drug_product_id",
+      "drug_code",
+      "drug_label",
+      "generic_name",
+      "brand_name",
+      "dose",
+      "dose_unit",
+      "route",
+      "frequency",
+      "instructions",
+      "indication",
+      "start_date",
+      "end_date",
+      "status",
+      "reason_for_cessation",
+      "is_regular",
+      "is_prn",
+      "is_lai",
+      "taper_schedule",
+      "source",
+      "prescribed_by_staff_id",
+      "recorded_by_staff_id",
+      "notes",
+      "created_at",
+      "updated_at",
+      "deleted_at",
+      "prescribed_by_specialty_code",
+      "category",
+      "lock_version"
+    ],
+    "patient_merges": [
+      "id",
+      "clinic_id",
+      "source_patient_id",
+      "destination_patient_id",
+      "merged_by",
+      "reason",
+      "source_snapshot",
+      "created_at"
+    ],
+    "patient_micro_learning_assignments": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "card_id",
+      "rule_id",
+      "status",
+      "assigned_at",
+      "opened_at",
+      "completed_at",
+      "source_reason",
+      "created_at",
+      "updated_at"
+    ],
+    "patient_outreach_log": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "kind",
+      "channel",
+      "skip_reason",
+      "provider_message_id",
+      "title",
+      "body",
+      "deep_link",
+      "override_channel",
+      "override_reason",
+      "override_by_staff_id",
+      "attempted_at",
+      "delivered_at",
+      "failed_at",
+      "error_message"
+    ],
+    "patient_providers": [
+      "id",
+      "patient_id",
+      "clinic_id",
+      "provider_type",
+      "provider_name",
+      "provider_practice",
+      "provider_phone",
+      "provider_fax",
+      "provider_email",
+      "provider_number",
+      "provider_address",
+      "is_primary",
+      "created_at",
+      "updated_at"
+    ],
+    "patient_routine_events": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "routine_id",
+      "event_type",
+      "value_numeric",
+      "value_text",
+      "occurred_at",
+      "created_at"
+    ],
+    "patient_routine_plans": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "pathway_id",
+      "name",
+      "condition_kind",
+      "condition_threshold",
+      "condition_window_minutes",
+      "then_action_kind",
+      "then_action_text",
+      "fallback_after_minutes",
+      "fallback_action_text",
+      "review_date",
+      "is_active",
+      "lock_version",
+      "created_by_staff_id",
+      "updated_by_staff_id",
+      "created_at",
+      "updated_at"
+    ],
+    "patient_shared_documents": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "title",
+      "doc_type",
+      "file_path",
+      "url",
+      "shared_by",
+      "created_at"
+    ],
+    "patient_summary_signoffs": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "summary_section",
+      "signed_off_by_id",
+      "signed_off_at",
+      "review_due_date",
+      "review_interval_months",
+      "reminder_task_id",
+      "lock_version",
+      "created_at",
+      "updated_at"
+    ],
+    "patient_sync_preferences": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "module_key",
+      "enabled",
+      "updated_by_patient",
+      "updated_by_staff_id",
+      "updated_at",
+      "created_at"
+    ],
+    "patient_tasks": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "title",
+      "description",
+      "due_date",
+      "reminder_time",
+      "status",
+      "completed_at",
+      "created_by",
+      "created_at",
+      "updated_at"
+    ],
+    "patient_team_assignments": [
+      "id",
+      "patient_id",
+      "org_unit_id",
+      "primary_clinician_id",
+      "is_active",
+      "created_at",
+      "updated_at",
+      "referral_status",
+      "reviewed_by_id",
+      "reviewed_at",
+      "referred_by_id",
+      "escalation_id",
+      "rejection_reason"
+    ],
+    "patient_team_reallocations": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "to_org_unit_id",
+      "to_primary_clinician_id",
+      "from_org_unit_id",
+      "status",
+      "referred_by_id",
+      "reviewed_by_id",
+      "reviewed_at",
+      "reason",
+      "rejection_reason",
+      "created_at",
+      "updated_at"
+    ],
+    "patient_tracking": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "tracking_type",
+      "value",
+      "note",
+      "recorded_at",
+      "source",
+      "created_at"
+    ],
+    "patients": [
+      "id",
+      "clinic_id",
+      "emr_number",
+      "given_name",
+      "family_name",
+      "preferred_name",
+      "date_of_birth",
+      "gender",
+      "pronouns",
+      "email",
+      "email_primary",
+      "phone_mobile",
+      "phone_home",
+      "address_line1",
+      "address_line2",
+      "suburb",
+      "state",
+      "postcode",
+      "country",
+      "status",
+      "medicare_number",
+      "medicare_reference",
+      "medicare_expiry",
+      "ihi_number",
+      "dva_number",
+      "dva_card_type",
+      "indigenous_status",
+      "atsi_status",
+      "interpreter_required",
+      "interpreter_language",
+      "emergency_contact_name",
+      "emergency_contact_phone",
+      "emergency_contact_relationship",
+      "gp_name",
+      "gp_practice",
+      "gp_phone",
+      "gp_fax",
+      "gp_email",
+      "gp_provider_number",
+      "gp_address_street",
+      "gp_address_suburb",
+      "gp_address_state",
+      "gp_address_postcode",
+      "nok_name",
+      "nok_relationship",
+      "nok_phone",
+      "consent_to_treatment",
+      "consent_for_research",
+      "consent_to_share_with_gp",
+      "consent_to_share_with_carer",
+      "created_at",
+      "updated_at",
+      "deleted_at",
+      "viva_triage_number",
+      "health_fund_name",
+      "health_fund_number",
+      "medicare_number_lookup",
+      "ihi_number_lookup",
+      "dva_number_lookup",
+      "sms_consent",
+      "sms_consent_updated_at",
+      "sms_consent_updated_by",
+      "photo_url",
+      "deceased_date",
+      "purged_at",
+      "last_contact_at",
+      "ihi_record_status",
+      "ihi_number_status",
+      "ihi_verified_at",
+      "search_tsv"
+    ],
+    "payments": [
+      "id",
+      "invoice_id",
+      "clinic_id",
+      "amount_cents",
+      "payment_method",
+      "reference",
+      "status",
+      "paid_at",
+      "created_at",
+      "received_by_id",
+      "payment_date",
+      "claim_status",
+      "claim_reference",
+      "notes",
+      "updated_at"
+    ],
+    "permissions": [
+      "id",
+      "name",
+      "description",
+      "created_at",
+      "updated_at"
+    ],
+    "phi_scrubber_rules": [
+      "id",
+      "clinic_id",
+      "category",
+      "name",
+      "pattern",
+      "replacement",
+      "precedence",
+      "is_active",
+      "created_at",
+      "updated_at"
+    ],
+    "phone_triage": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "caller_name",
+      "caller_relationship",
+      "caller_phone",
+      "reason_for_call",
+      "urgency",
+      "triage_notes",
+      "action_taken",
+      "assigned_to_id",
+      "received_by_id",
+      "triaged_by_staff_id",
+      "status",
+      "created_at",
+      "updated_at",
+      "receptionist_summary",
+      "clinical_risk_flags",
+      "lock_version"
+    ],
+    "planned_transition_assignments": [
+      "id",
+      "transition_id",
+      "patient_id",
+      "episode_id",
+      "to_staff_id",
+      "to_team",
+      "status",
+      "handover_notes",
+      "executed_at",
+      "created_at",
+      "updated_at"
+    ],
+    "planned_transitions": [
+      "id",
+      "clinic_id",
+      "from_staff_id",
+      "reason",
+      "effective_date",
+      "status",
+      "created_by_id",
+      "approved_by_id",
+      "approved_at",
+      "executed_at",
+      "notes",
+      "created_at",
+      "updated_at",
+      "deleted_at"
+    ],
+    "pregnancies": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "episode_id",
+      "lmp_date",
+      "edd_date",
+      "gtpal",
+      "status",
+      "note",
+      "recorded_by",
+      "created_at",
+      "updated_at",
+      "deleted_at"
+    ],
+    "prescriptions": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "episode_id",
+      "drug_product_id",
+      "prescribed_by_staff_id",
+      "patient_medication_id",
+      "generic_name",
+      "brand_name",
+      "dose",
+      "route",
+      "frequency",
+      "directions",
+      "quantity",
+      "repeats",
+      "pbs_item_code",
+      "is_authority",
+      "authority_code",
+      "is_s8",
+      "prescription_type",
+      "status",
+      "safescript_checked",
+      "safescript_checked_at",
+      "safescript_result",
+      "erx_token",
+      "erx_dsp_id",
+      "erx_submitted_at",
+      "is_electronic",
+      "prescribed_date",
+      "expires_at",
+      "notes",
+      "created_at",
+      "updated_at",
+      "deleted_at",
+      "prescription_category",
+      "lock_version",
+      "cancellation_reason",
+      "cancelled_at",
+      "cancelled_by_staff_id"
+    ],
+    "primary_cancer_conditions": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "episode_id",
+      "icd10",
+      "snomed",
+      "histology",
+      "laterality",
+      "diagnosis_date",
+      "stage_system",
+      "notes",
+      "created_by_staff_id",
+      "created_at",
+      "updated_at",
+      "deleted_at"
+    ],
+    "problem_list": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "episode_id",
+      "code_system",
+      "code",
+      "display",
+      "category",
+      "clinical_status",
+      "verification_status",
+      "severity",
+      "is_chronic",
+      "onset_date",
+      "onset_age_years",
+      "abatement_date",
+      "note",
+      "recorded_date",
+      "recorded_by",
+      "created_at",
+      "updated_at",
+      "deleted_at"
+    ],
+    "professional_disciplines": [
+      "id",
+      "clinic_id",
+      "name",
+      "is_active",
+      "sort_order",
+      "created_at",
+      "updated_at"
+    ],
+    "programs": [
+      "id",
+      "clinic_id",
+      "name",
+      "description",
+      "is_active",
+      "created_at",
+      "updated_at"
+    ],
+    "psychology_session_notes": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "episode_id",
+      "staff_id",
+      "session_date",
+      "duration_min",
+      "session_type",
+      "content",
+      "outcome_scores",
+      "shared_with_clinicians",
+      "created_at",
+      "updated_at",
+      "deleted_at"
+    ],
+    "referral_attachments": [
+      "id",
+      "clinic_id",
+      "referral_id",
+      "original_filename",
+      "stored_filename",
+      "mime_type",
+      "file_size_bytes",
+      "storage_key",
+      "category",
+      "ocr_status",
+      "ocr_result",
+      "ocr_error_message",
+      "created_at",
+      "updated_at",
+      "deleted_at"
+    ],
+    "referral_clinician_offers": [
+      "id",
+      "clinic_id",
+      "referral_id",
+      "staff_id",
+      "offered_at",
+      "response",
+      "responded_at",
+      "decline_reason",
+      "created_at",
+      "updated_at"
+    ],
+    "referral_feedback_log": [
+      "id",
+      "clinic_id",
+      "referral_id",
+      "feedback_type",
+      "recipient_email",
+      "sent_at",
+      "message_body",
+      "sent_by_staff_id",
+      "delivery_status",
+      "created_at"
+    ],
+    "referral_sources": [
+      "id",
+      "clinic_id",
+      "category",
+      "name",
+      "is_active",
+      "sort_order",
+      "created_at",
+      "updated_at"
+    ],
+    "referral_state_transitions": [
+      "id",
+      "clinic_id",
+      "referral_id",
+      "from_task_status",
+      "to_task_status",
+      "actor_id",
+      "reason",
+      "created_at"
+    ],
+    "referral_validity": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "referring_provider_name",
+      "referring_provider_number",
+      "referral_type",
+      "referral_date",
+      "expires_at",
+      "is_active",
+      "notes",
+      "created_at",
+      "updated_at"
+    ],
+    "referral_workflow_events": [
+      "id",
+      "clinic_id",
+      "referral_id",
+      "event_type",
+      "performed_by_staff_id",
+      "notes",
+      "outcome",
+      "event_at",
+      "created_at",
+      "updated_at"
+    ],
+    "referrals": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "referral_number",
+      "referral_date",
+      "source",
+      "from_service",
+      "from_provider_name",
+      "from_provider_phone",
+      "from_provider_email",
+      "from_provider_prescriber_no",
+      "referring_org",
+      "reason",
+      "clinical_summary",
+      "current_medications",
+      "diagnosis_info",
+      "urgency",
+      "status",
+      "status_changed_at",
+      "received_at",
+      "assigned_to_staff_id",
+      "linked_episode_id",
+      "has_attachment",
+      "ocr_extracted",
+      "rejection_reason",
+      "redirect_to",
+      "sla_due_date",
+      "sla_breached",
+      "internal_notes",
+      "created_at",
+      "updated_at",
+      "deleted_at",
+      "referral_mode",
+      "target_clinician_id",
+      "distribution_mode",
+      "distribution_speciality",
+      "accepted_by_staff_id",
+      "broadcast_at",
+      "reminder_sent_at",
+      "final_reminder_sent_at",
+      "auto_close_at",
+      "feedback_sent_at",
+      "clarification_notes",
+      "created_by_staff_id",
+      "target_specialty_code",
+      "service_request_status",
+      "task_status",
+      "coordinator_id",
+      "triaged_at",
+      "triaged_by"
+    ],
+    "report_runs": [
+      "id",
+      "clinic_id",
+      "requested_by_id",
+      "report_type",
+      "filters",
+      "format",
+      "status",
+      "total_rows",
+      "result_data",
+      "error_message",
+      "generated_at",
+      "created_at",
+      "updated_at"
+    ],
+    "report_schedules": [
+      "id",
+      "clinic_id",
+      "report_type",
+      "name",
+      "frequency",
+      "schedule_cron",
+      "recipients",
+      "filters",
+      "format",
+      "is_active",
+      "created_by_staff_id",
+      "last_run_at",
+      "next_run_at",
+      "created_at",
+      "updated_at"
+    ],
+    "restrictive_interventions": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "episode_id",
+      "intervention_type",
+      "start_time",
+      "end_time",
+      "duration_minutes",
+      "reason",
+      "authorised_by_id",
+      "recorded_by_id",
+      "outcome",
+      "created_at",
+      "updated_at",
+      "alternatives_tried",
+      "debrief_completed",
+      "debrief_notes",
+      "notified_persons",
+      "lock_version"
+    ],
+    "review_plans": [
+      "id",
+      "clinic_id",
+      "encounter_id",
+      "patient_id",
+      "episode_id",
+      "plan_text",
+      "follow_up_date",
+      "follow_up_type",
+      "tasks_to_create",
+      "generate_letter",
+      "letter_type",
+      "letter_recipient",
+      "letter_job_id",
+      "tasks_created",
+      "created_at",
+      "updated_at",
+      "deleted_at"
+    ],
+    "risk_assessments": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "episode_id",
+      "template_submission_id",
+      "assessment_type",
+      "total_score",
+      "score_band",
+      "interpretation_detail",
+      "overall_risk_level",
+      "suicide_risk",
+      "self_harm_risk",
+      "harm_to_others_risk",
+      "absconding_risk",
+      "vulnerability_risk",
+      "protective_factors",
+      "risk_narrative",
+      "risk_management_plan",
+      "safety_plan_in_place",
+      "safety_plan_summary",
+      "assessed_by_id",
+      "assessment_date",
+      "review_date",
+      "created_at",
+      "updated_at",
+      "deleted_at",
+      "lock_version"
+    ],
+    "safety_checklists": [
+      "id",
+      "clinic_id",
+      "case_id",
+      "phase",
+      "items",
+      "completed_by",
+      "completed_at",
+      "created_at",
+      "deleted_at"
+    ],
+    "safety_plans": [
+      "id",
+      "patient_id",
+      "clinic_id",
+      "content",
+      "status",
+      "created_at",
+      "updated_at"
+    ],
+    "scribe_action_items": [
+      "id",
+      "clinic_id",
+      "session_id",
+      "patient_id",
+      "item_type",
+      "description",
+      "assignee_role",
+      "due_date",
+      "status",
+      "downstream_table",
+      "downstream_id",
+      "reviewed_by",
+      "reviewed_at",
+      "created_at",
+      "updated_at",
+      "lineage_key"
+    ],
+    "scribe_consents": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "session_id",
+      "mode",
+      "patient_signature_png",
+      "clinician_attested_by_id",
+      "clinician_attestation_text",
+      "attested_at",
+      "created_at",
+      "revoked_at",
+      "revoked_by",
+      "revoke_reason"
+    ],
+    "scribe_note_templates": [
+      "id",
+      "clinic_id",
+      "variant",
+      "name",
+      "system_prompt",
+      "user_prompt_template",
+      "sections",
+      "is_active",
+      "created_at",
+      "updated_at"
+    ],
+    "scribe_sensitive_flags": [
+      "id",
+      "clinic_id",
+      "session_id",
+      "patient_id",
+      "category",
+      "severity",
+      "transcript_offset",
+      "snippet",
+      "reviewed_by",
+      "reviewed_at",
+      "review_disposition",
+      "created_at"
+    ],
+    "scribe_sessions": [
+      "id",
+      "clinic_id",
+      "clinician_id",
+      "patient_id",
+      "consent_id",
+      "status",
+      "whisper_mode",
+      "started_at",
+      "paused_at",
+      "resumed_at",
+      "ended_at",
+      "created_at",
+      "updated_at"
+    ],
+    "scribe_talk_time_metrics": [
+      "id",
+      "clinic_id",
+      "session_id",
+      "clinician_seconds",
+      "patient_seconds",
+      "silence_seconds",
+      "total_seconds",
+      "created_at"
+    ],
+    "shift_handovers": [
+      "id",
+      "clinic_id",
+      "ward",
+      "shift_type",
+      "summary_manual",
+      "key_issues",
+      "patient_updates",
+      "outgoing_staff_id",
+      "incoming_staff_id",
+      "pending_actions",
+      "shift_date",
+      "status",
+      "created_by_id",
+      "acknowledged_at",
+      "created_at",
+      "updated_at",
+      "lock_version"
+    ],
+    "side_effect_schedules": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "patient_medication_id",
+      "schedule_type",
+      "frequency_weeks",
+      "next_due_date",
+      "last_completed_date",
+      "parameters",
+      "notes",
+      "status",
+      "created_by_id",
+      "created_at",
+      "updated_at"
+    ],
+    "smart_apps": [
+      "id",
+      "clinic_id",
+      "client_id",
+      "client_secret_hash",
+      "name",
+      "description",
+      "vendor",
+      "vendor_url",
+      "logo_url",
+      "app_type",
+      "redirect_uris",
+      "scopes",
+      "launch_modes",
+      "is_active",
+      "is_approved",
+      "approved_by_id",
+      "approved_at",
+      "created_at",
+      "updated_at"
+    ],
+    "smart_launch_contexts": [
+      "id",
+      "launch_token",
+      "client_id",
+      "clinic_id",
+      "user_id",
+      "patient_id",
+      "encounter_id",
+      "scopes",
+      "expires_at",
+      "created_at",
+      "consumed_at"
+    ],
+    "specialties": [
+      "code",
+      "display",
+      "system",
+      "snomed_code",
+      "sort_order",
+      "is_active",
+      "created_at",
+      "updated_at"
+    ],
+    "staff": [
+      "id",
+      "clinic_id",
+      "given_name",
+      "family_name",
+      "preferred_name",
+      "email",
+      "password_hash",
+      "role",
+      "discipline",
+      "discipline_id",
+      "phone_mobile",
+      "phone_work",
+      "ahpra_number",
+      "prescriber_number",
+      "provider_number",
+      "hpii",
+      "qualifications",
+      "specialisation",
+      "employment_type",
+      "worker_type",
+      "is_active",
+      "require_mfa",
+      "has_mfa_configured",
+      "mfa_enabled",
+      "mfa_secret",
+      "recovery_codes",
+      "must_change_password",
+      "failed_login_attempts",
+      "locked_until",
+      "last_login_at",
+      "outlook_email",
+      "outlook_refresh_token",
+      "outlook_token_expires_at",
+      "outlook_calendar_id",
+      "created_at",
+      "updated_at",
+      "deleted_at",
+      "digital_signature",
+      "max_concurrent_sessions"
+    ],
+    "staff_fcm_tokens": [
+      "id",
+      "clinic_id",
+      "staff_id",
+      "device_token",
+      "platform",
+      "last_seen_at",
+      "created_at",
+      "deleted_at"
+    ],
+    "staff_leave": [
+      "id",
+      "clinic_id",
+      "staff_id",
+      "leave_type",
+      "start_date",
+      "end_date",
+      "reason",
+      "cover_staff_id",
+      "status",
+      "requested_by",
+      "approved_by_staff_id",
+      "approved_at",
+      "created_at",
+      "updated_at"
+    ],
+    "staff_module_access": [
+      "id",
+      "staff_id",
+      "clinic_id",
+      "module",
+      "access_level",
+      "granted_by_id",
+      "can_delegate_this",
+      "created_at",
+      "updated_at"
+    ],
+    "staff_permissions": [
+      "id",
+      "staff_id",
+      "permission_id",
+      "granted_at",
+      "granted_by",
+      "created_at",
+      "updated_at"
+    ],
+    "staff_role_assignments": [
+      "id",
+      "staff_id",
+      "org_unit_id",
+      "clinical_role_id",
+      "role_type",
+      "start_date",
+      "end_date",
+      "is_active",
+      "created_at",
+      "updated_at",
+      "clinic_id"
+    ],
+    "staff_sessions": [
+      "id",
+      "staff_id",
+      "clinic_id",
+      "refresh_token",
+      "user_agent",
+      "ip_address",
+      "expires_at",
+      "created_at",
+      "updated_at",
+      "revoked_at",
+      "family_id",
+      "lock_version"
+    ],
+    "staff_settings": [
+      "id",
+      "staff_id",
+      "setting_key",
+      "setting_value",
+      "created_at",
+      "updated_at"
+    ],
+    "staff_specialties": [
+      "id",
+      "clinic_id",
+      "staff_id",
+      "specialty_code",
+      "is_primary",
+      "credential_ref",
+      "created_at",
+      "created_by",
+      "updated_at",
+      "deleted_at"
+    ],
+    "staff_team_assignments": [
+      "id",
+      "staff_id",
+      "org_unit_id",
+      "start_date",
+      "end_date",
+      "is_active",
+      "created_at",
+      "updated_at",
+      "clinic_id"
+    ],
+    "state_mha_forms": [
+      "id",
+      "state_code",
+      "form_code",
+      "name",
+      "act_reference",
+      "section_reference",
+      "field_schema",
+      "requires_authorised_psychiatrist",
+      "max_duration_days",
+      "is_active",
+      "created_at",
+      "updated_at"
+    ],
+    "step_care_rule_events": [
+      "id",
+      "clinic_id",
+      "rule_id",
+      "patient_id",
+      "pathway_id",
+      "event_type",
+      "fingerprint",
+      "details",
+      "created_at"
+    ],
+    "structured_observations": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "staff_id",
+      "observation_type",
+      "location",
+      "mood",
+      "behaviour",
+      "risk_concerns",
+      "sleep_quality",
+      "values",
+      "notes",
+      "observed_at",
+      "created_at",
+      "escalation_required",
+      "escalation_notes"
+    ],
+    "subscriber_branding": [
+      "id",
+      "clinic_id",
+      "logo_url",
+      "primary_color",
+      "sidebar_color",
+      "sidebar_title",
+      "sidebar_subtitle",
+      "org_name",
+      "created_at",
+      "updated_at"
+    ],
+    "subscriptions": [
+      "id",
+      "clinic_id",
+      "plan_type",
+      "seats",
+      "price_per_month",
+      "price_per_year",
+      "discount_percent",
+      "discount_amount",
+      "status",
+      "start_date",
+      "end_date",
+      "renewal_date",
+      "reminder_days",
+      "notes",
+      "created_at",
+      "updated_at"
+    ],
+    "surgical_cases": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "episode_id",
+      "procedure_code",
+      "procedure_display",
+      "primary_surgeon_id",
+      "planned_date",
+      "urgency",
+      "asa_class",
+      "consent_status",
+      "status",
+      "note",
+      "created_at",
+      "updated_at",
+      "deleted_at"
+    ],
+    "tasks": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "episode_id",
+      "assigned_to_id",
+      "assigned_by_id",
+      "title",
+      "description",
+      "task_type",
+      "priority",
+      "status",
+      "due_date",
+      "completed_at",
+      "completed_by_id",
+      "notes",
+      "created_at",
+      "updated_at",
+      "lock_version"
+    ],
+    "template_categories": [
+      "id",
+      "clinic_id",
+      "name",
+      "is_active",
+      "sort_order",
+      "created_at",
+      "updated_at"
+    ],
+    "template_sections": [
+      "id",
+      "template_id",
+      "section_type",
+      "label",
+      "options",
+      "sort_order",
+      "is_required",
+      "created_at",
+      "field_type",
+      "soap_field",
+      "required",
+      "position",
+      "min_value",
+      "max_value",
+      "placeholder",
+      "updated_at"
+    ],
+    "templates": [
+      "id",
+      "clinic_id",
+      "name",
+      "type",
+      "description",
+      "category",
+      "content",
+      "is_active",
+      "status",
+      "sort_order",
+      "created_by_id",
+      "published_at",
+      "retired_at",
+      "created_at",
+      "updated_at",
+      "deleted_at"
+    ],
+    "tms_courses": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "episode_id",
+      "treating_psychiatrist_id",
+      "protocol",
+      "target_area",
+      "total_planned_sessions",
+      "motor_threshold_percent",
+      "consent_obtained",
+      "consent_date",
+      "consent_recorded_by",
+      "indication",
+      "status",
+      "notes",
+      "created_at",
+      "updated_at",
+      "deleted_at"
+    ],
+    "tms_sessions": [
+      "id",
+      "course_id",
+      "clinic_id",
+      "session_number",
+      "session_date",
+      "pulses_delivered",
+      "intensity_percent",
+      "coil_position",
+      "duration_minutes",
+      "adverse_events",
+      "patient_tolerance",
+      "administered_by",
+      "phq9_score",
+      "clinician_notes",
+      "created_at",
+      "updated_at"
+    ],
+    "tnm_stage_groups": [
+      "id",
+      "clinic_id",
+      "condition_id",
+      "t",
+      "n",
+      "m",
+      "stage_group",
+      "staged_at",
+      "staged_by_staff_id",
+      "notes",
+      "created_at"
+    ],
+    "training_corpus_items": [
+      "id",
+      "source_clinic_id",
+      "source_session_id",
+      "scrubber_version",
+      "sanitised_transcript",
+      "redaction_summary",
+      "status",
+      "reviewed_by",
+      "reviewed_at",
+      "rejection_reason",
+      "created_at"
+    ],
+    "training_export_requests": [
+      "id",
+      "clinic_id",
+      "requested_by_id",
+      "requested_at",
+      "approved_by_id",
+      "approved_at",
+      "status",
+      "format",
+      "reason",
+      "rejection_reason",
+      "download_token",
+      "downloaded_at",
+      "row_count",
+      "expires_at",
+      "created_at"
+    ],
+    "treatment_pathways": [
+      "id",
+      "patient_id",
+      "clinic_id",
+      "name",
+      "status",
+      "milestones",
+      "created_at",
+      "updated_at",
+      "lock_version",
+      "updated_by_staff_id"
+    ],
+    "treatment_plans": [
+      "id",
+      "patient_id",
+      "clinic_id",
+      "episode_id",
+      "staff_id",
+      "title",
+      "status",
+      "goals",
+      "interventions",
+      "review_date",
+      "created_at",
+      "updated_at"
+    ],
+    "tumour_board_decisions": [
+      "id",
+      "clinic_id",
+      "condition_id",
+      "meeting_date",
+      "recommendation",
+      "rationale",
+      "attendee_staff_ids",
+      "chaired_by_staff_id",
+      "created_at"
+    ],
+    "viva_alert_thresholds": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "tracking_type",
+      "direction",
+      "threshold",
+      "consecutive_days",
+      "is_active",
+      "created_by",
+      "created_at",
+      "updated_at"
+    ],
+    "voice_calls": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "episode_id",
+      "script_id",
+      "initiated_by_id",
+      "direction",
+      "status",
+      "phone_number_masked",
+      "duration_seconds",
+      "started_at",
+      "ended_at",
+      "call_sid",
+      "transcript_available",
+      "transcript_s3_key",
+      "outcome",
+      "notes",
+      "created_at",
+      "updated_at",
+      "deleted_at"
+    ],
+    "voice_patient_preferences": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "opted_out",
+      "opted_out_at",
+      "opt_out_channel",
+      "preferred_call_start",
+      "preferred_call_end",
+      "preferred_call_time",
+      "preferred_days",
+      "preferred_call_days",
+      "created_at",
+      "updated_at"
+    ],
+    "voice_scripts": [
+      "id",
+      "clinic_id",
+      "name",
+      "description",
+      "script_type",
+      "version",
+      "content",
+      "is_active",
+      "created_by_id",
+      "created_at",
+      "updated_at"
+    ],
+    "waitlist_entries": [
+      "id",
+      "clinic_id",
+      "patient_id",
+      "referral_id",
+      "preferred_clinician_id",
+      "priority",
+      "preferred_time_of_day",
+      "preferred_start_time",
+      "preferred_end_time",
+      "added_date",
+      "target_appointment_by",
+      "status",
+      "converted_appointment_id",
+      "notes",
+      "created_at",
+      "updated_at",
+      "deleted_at"
+    ],
+    "webauthn_credentials": [
+      "id",
+      "staff_id",
+      "clinic_id",
+      "credential_id",
+      "public_key",
+      "counter",
+      "transports",
+      "device_name",
+      "aaguid",
+      "backup_eligible",
+      "backup_state",
+      "last_used_at",
+      "created_at",
+      "updated_at",
+      "deleted_at"
+    ],
+    "webhook_audit_log": [
+      "id",
+      "clinic_id",
+      "source",
+      "payload_hash",
+      "nonce",
+      "outcome",
+      "error_text",
+      "job_id",
+      "body_size",
+      "source_ip",
+      "received_at"
+    ],
+    "webhook_secrets": [
+      "id",
+      "clinic_id",
+      "source",
+      "hmac_secret",
+      "signature_header",
+      "timestamp_header",
+      "replay_window_seconds",
+      "rate_limit_per_minute",
+      "ip_allowlist",
+      "queue_name",
+      "is_active",
+      "created_at",
+      "updated_at"
+    ],
+    "workflow_executions": [
+      "id",
+      "clinic_id",
+      "workflow_id",
+      "trigger_data",
+      "status",
+      "steps_completed",
+      "total_steps",
+      "error_message",
+      "step_results",
+      "started_at",
+      "completed_at"
+    ],
+    "workflows": [
+      "id",
+      "clinic_id",
+      "name",
+      "description",
+      "trigger_event",
+      "steps",
+      "is_active",
+      "created_by_staff_id",
+      "created_at",
+      "updated_at",
+      "deleted_at"
+    ]
+  },
+  "foreignKeys": {
+    "active_sessions.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "active_sessions.staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "admin_impersonation_sessions.admin_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "admin_impersonation_sessions.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "admin_impersonation_sessions.impersonated_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "admission_waitlist.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "admission_waitlist.episode_id": {
+      "foreignTable": "episodes",
+      "foreignColumn": "id"
+    },
+    "admission_waitlist.flagged_by_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "admission_waitlist.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "admission_waitlist.removed_by_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "advance_directives.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "advance_directives.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "ai_context_files.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "ai_context_files.uploaded_by_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "ai_model_approvals.approved_by_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "ai_model_approvals.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "ai_modelfiles.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "ai_modelfiles.updated_by_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "ai_training_feedback.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "ai_training_feedback.interaction_id": {
+      "foreignTable": "llm_interactions",
+      "foreignColumn": "id"
+    },
+    "ai_training_feedback.staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "aims_assessments.assessed_by_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "aims_assessments.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "aims_assessments.lai_schedule_id": {
+      "foreignTable": "lai_schedules",
+      "foreignColumn": "id"
+    },
+    "aims_assessments.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "alert_types.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "antenatal_visits.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "antenatal_visits.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "antenatal_visits.pregnancy_id": {
+      "foreignTable": "pregnancies",
+      "foreignColumn": "id"
+    },
+    "antenatal_visits.seen_by": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "appointment_attendees.appointment_id": {
+      "foreignTable": "appointments",
+      "foreignColumn": "id"
+    },
+    "appointment_attendees.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "appointment_attendees.staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "appointment_checklists.appointment_id": {
+      "foreignTable": "appointments",
+      "foreignColumn": "id"
+    },
+    "appointment_checklists.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "appointment_checklists.created_by": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "appointment_checklists.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "appointment_modes.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "appointments.cancelled_by_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "appointments.checked_in_by_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "appointments.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "appointments.clinician_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "appointments.episode_id": {
+      "foreignTable": "episodes",
+      "foreignColumn": "id"
+    },
+    "appointments.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "appointments.recurrence_parent_id": {
+      "foreignTable": "appointments",
+      "foreignColumn": "id"
+    },
+    "appointments.specialty_code": {
+      "foreignTable": "specialties",
+      "foreignColumn": "code"
+    },
+    "appointments.staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "assessment_responses.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "assessment_responses.episode_id": {
+      "foreignTable": "episodes",
+      "foreignColumn": "id"
+    },
+    "assessment_responses.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "assessment_responses.staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "assessment_responses.template_id": {
+      "foreignTable": "templates",
+      "foreignColumn": "id"
+    },
+    "audit_log.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "audit_log.staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "audit_runs.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "audit_runs.clinician_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "audit_runs.created_by_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "audit_runs.team_id": {
+      "foreignTable": "org_units",
+      "foreignColumn": "id"
+    },
+    "audit_runs.template_id": {
+      "foreignTable": "audit_templates",
+      "foreignColumn": "id"
+    },
+    "audit_templates.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "audit_templates.created_by_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "backup_history.triggered_by_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "bed_movements.authorised_by_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "bed_movements.bed_id": {
+      "foreignTable": "beds",
+      "foreignColumn": "id"
+    },
+    "bed_movements.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "bed_movements.episode_id": {
+      "foreignTable": "episodes",
+      "foreignColumn": "id"
+    },
+    "bed_movements.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "beds.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "beds.org_unit_id": {
+      "foreignTable": "org_units",
+      "foreignColumn": "id"
+    },
+    "billing_accounts.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "billing_accounts.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "billing_queue.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "billing_queue.invoice_id": {
+      "foreignTable": "invoices",
+      "foreignColumn": "id"
+    },
+    "break_glass_sessions.approver_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "break_glass_sessions.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "break_glass_sessions.revoked_by": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "break_glass_sessions.staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "cancer_treatment_plans.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "cancer_treatment_plans.condition_id": {
+      "foreignTable": "primary_cancer_conditions",
+      "foreignColumn": "id"
+    },
+    "cancer_treatment_plans.created_by_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "capacity_assessments.assessor_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "capacity_assessments.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "capacity_assessments.episode_id": {
+      "foreignTable": "episodes",
+      "foreignColumn": "id"
+    },
+    "capacity_assessments.letter_id": {
+      "foreignTable": "letters",
+      "foreignColumn": "id"
+    },
+    "capacity_assessments.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "care_plan_goals.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "care_plan_goals.created_by_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "care_plan_goals.treatment_plan_id": {
+      "foreignTable": "care_plans",
+      "foreignColumn": "id"
+    },
+    "care_plan_interventions.care_plan_goal_id": {
+      "foreignTable": "care_plan_goals",
+      "foreignColumn": "id"
+    },
+    "care_plan_interventions.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "care_plan_interventions.created_by_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "care_plan_interventions.responsible_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "care_plans.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "care_plans.created_by_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "care_plans.episode_id": {
+      "foreignTable": "episodes",
+      "foreignColumn": "id"
+    },
+    "care_plans.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "care_plans.recovery_star_updated_by": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "carers.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "carers.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "checklist_instances.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "checklist_instances.completed_by_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "checklist_instances.episode_id": {
+      "foreignTable": "episodes",
+      "foreignColumn": "id"
+    },
+    "checklist_instances.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "checklist_instances.template_id": {
+      "foreignTable": "checklist_templates",
+      "foreignColumn": "id"
+    },
+    "checklist_templates.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "checklist_templates.created_by_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "chemo_cycles.administered_by_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "chemo_cycles.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "chemo_cycles.plan_id": {
+      "foreignTable": "cancer_treatment_plans",
+      "foreignColumn": "id"
+    },
+    "clinic_choice_architecture_defaults.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "clinic_contact_options.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "clinic_enabled_specialties.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "clinic_enabled_specialties.enabled_by": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "clinic_enabled_specialties.specialty_code": {
+      "foreignTable": "specialties",
+      "foreignColumn": "code"
+    },
+    "clinic_micro_learning_rules.card_id": {
+      "foreignTable": "micro_learning_cards",
+      "foreignColumn": "id"
+    },
+    "clinic_micro_learning_rules.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "clinic_modules.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "clinic_scribe_vocabulary.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "clinic_sequences.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "clinic_settings.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "clinic_step_care_rules.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "clinic_step_care_rules.created_by_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "clinic_thresholds.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "clinical_formulations.author_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "clinical_formulations.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "clinical_formulations.episode_id": {
+      "foreignTable": "episodes",
+      "foreignColumn": "id"
+    },
+    "clinical_formulations.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "clinical_note_codes.accepted_by_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "clinical_note_codes.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "clinical_note_codes.note_id": {
+      "foreignTable": "clinical_notes",
+      "foreignColumn": "id"
+    },
+    "clinical_note_codes.rejected_by_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "clinical_note_evidence.accepted_by_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "clinical_note_evidence.chunk_id": {
+      "foreignTable": "evidence_chunks",
+      "foreignColumn": "id"
+    },
+    "clinical_note_evidence.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "clinical_note_evidence.note_id": {
+      "foreignTable": "clinical_notes",
+      "foreignColumn": "id"
+    },
+    "clinical_note_versions.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "clinical_note_versions.edited_by_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "clinical_note_versions.note_id": {
+      "foreignTable": "clinical_notes",
+      "foreignColumn": "id"
+    },
+    "clinical_notes.appointment_id": {
+      "foreignTable": "appointments",
+      "foreignColumn": "id"
+    },
+    "clinical_notes.author_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "clinical_notes.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "clinical_notes.consent_id": {
+      "foreignTable": "scribe_consents",
+      "foreignColumn": "id"
+    },
+    "clinical_notes.episode_id": {
+      "foreignTable": "episodes",
+      "foreignColumn": "id"
+    },
+    "clinical_notes.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "clinical_notes.reviewed_and_adopted_by_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "clinical_notes.signed_by": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "clinical_notes.signed_by_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "clinical_notes.template_id": {
+      "foreignTable": "templates",
+      "foreignColumn": "id"
+    },
+    "clinical_policies.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "clinical_reviews.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "clinical_reviews.episode_id": {
+      "foreignTable": "episodes",
+      "foreignColumn": "id"
+    },
+    "clinical_reviews.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "clinical_reviews.reviewed_by_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "clinical_roles.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "clinical_templates.category_id": {
+      "foreignTable": "template_categories",
+      "foreignColumn": "id"
+    },
+    "clinical_templates.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "clinical_templates.created_by_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "clinician_availability_blocks.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "clinician_availability_blocks.clinician_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "clinician_availability_blocks.created_by_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "clinician_fee_overrides.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "clinician_fee_overrides.staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "clinics.delegated_admin_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "clinics.nominated_admin_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "clinics.retention_purge_enabled_by_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "clinics.retention_purge_manager_approved_by_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "clozapine_administrations.administered_by_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "clozapine_administrations.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "clozapine_administrations.registration_id": {
+      "foreignTable": "clozapine_registrations",
+      "foreignColumn": "id"
+    },
+    "clozapine_administrations.titration_day_id": {
+      "foreignTable": "clozapine_titration_days",
+      "foreignColumn": "id"
+    },
+    "clozapine_blood_results.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "clozapine_blood_results.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "clozapine_blood_results.recorded_by_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "clozapine_blood_results.registration_id": {
+      "foreignTable": "clozapine_registrations",
+      "foreignColumn": "id"
+    },
+    "clozapine_monitoring_checks.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "clozapine_monitoring_checks.recorded_by_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "clozapine_monitoring_checks.registration_id": {
+      "foreignTable": "clozapine_registrations",
+      "foreignColumn": "id"
+    },
+    "clozapine_observations.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "clozapine_observations.recorded_by_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "clozapine_observations.registration_id": {
+      "foreignTable": "clozapine_registrations",
+      "foreignColumn": "id"
+    },
+    "clozapine_registrations.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "clozapine_registrations.drug_product_id": {
+      "foreignTable": "drug_products",
+      "foreignColumn": "id"
+    },
+    "clozapine_registrations.episode_id": {
+      "foreignTable": "episodes",
+      "foreignColumn": "id"
+    },
+    "clozapine_registrations.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "clozapine_registrations.prescriber_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "clozapine_titration_days.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "clozapine_titration_days.prescribed_by_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "clozapine_titration_days.registration_id": {
+      "foreignTable": "clozapine_registrations",
+      "foreignColumn": "id"
+    },
+    "community_resources.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "consent_records.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "consent_records.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "consent_records.recorded_by_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "consultations.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "consultations.clinician_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "consultations.episode_id": {
+      "foreignTable": "episodes",
+      "foreignColumn": "id"
+    },
+    "consultations.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "contact_records.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "contact_records.episode_id": {
+      "foreignTable": "episodes",
+      "foreignColumn": "id"
+    },
+    "contact_records.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "contact_records.staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "contact_records.template_id": {
+      "foreignTable": "templates",
+      "foreignColumn": "id"
+    },
+    "correspondence_letters.author_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "correspondence_letters.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "correspondence_letters.episode_id": {
+      "foreignTable": "episodes",
+      "foreignColumn": "id"
+    },
+    "correspondence_letters.generated_by_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "correspondence_letters.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "correspondence_letters.template_id": {
+      "foreignTable": "templates",
+      "foreignColumn": "id"
+    },
+    "data_breach_log.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "data_breach_log.reported_by_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "data_retention_policies.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "data_sharing_agreements.approved_by_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "data_sharing_agreements.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "developmental_milestones.assessed_by": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "developmental_milestones.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "developmental_milestones.episode_id": {
+      "foreignTable": "episodes",
+      "foreignColumn": "id"
+    },
+    "developmental_milestones.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "diagnoses.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "diagnoses.created_by_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "diagnoses.episode_id": {
+      "foreignTable": "episodes",
+      "foreignColumn": "id"
+    },
+    "diagnoses.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "drug_products.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "ecog_performance_status.assessed_by_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "ecog_performance_status.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "ecog_performance_status.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "ect_courses.anaesthetist_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "ect_courses.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "ect_courses.consent_recorded_by": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "ect_courses.episode_id": {
+      "foreignTable": "episodes",
+      "foreignColumn": "id"
+    },
+    "ect_courses.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "ect_courses.treating_psychiatrist_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "ect_sessions.administered_by": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "ect_sessions.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "ect_sessions.course_id": {
+      "foreignTable": "ect_courses",
+      "foreignColumn": "id"
+    },
+    "engagement_scores.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "engagement_scores.encounter_id": {
+      "foreignTable": "consultations",
+      "foreignColumn": "id"
+    },
+    "engagement_scores.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "episode_types.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "episodes.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "episodes.closure_vetted_by_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "episodes.discharge_signed_by_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "episodes.discharge_vetted_by_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "episodes.key_worker_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "episodes.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "episodes.primary_clinician_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "episodes.specialty_code": {
+      "foreignTable": "specialties",
+      "foreignColumn": "code"
+    },
+    "ereferrals.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "ereferrals.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "erx_tokens.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "erx_tokens.prescription_id": {
+      "foreignTable": "prescriptions",
+      "foreignColumn": "id"
+    },
+    "escalation_events.actor_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "escalation_events.escalation_id": {
+      "foreignTable": "escalations",
+      "foreignColumn": "id"
+    },
+    "escalations.acknowledged_by_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "escalations.assigned_to_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "escalations.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "escalations.episode_id": {
+      "foreignTable": "episodes",
+      "foreignColumn": "id"
+    },
+    "escalations.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "escalations.raised_by_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "escalations.resolved_by_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "evidence_chunks.document_id": {
+      "foreignTable": "evidence_documents",
+      "foreignColumn": "id"
+    },
+    "feature_flag_disable_requests.approved_by_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "feature_flag_disable_requests.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "feature_flag_disable_requests.requested_by_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "feature_flags.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "fee_schedules.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "fhir_bulk_export_jobs.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "fhir_bulk_export_jobs.requested_by_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "fhir_subscriptions.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "fhir_subscriptions.created_by_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "forensic_risk_formulations.assessor_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "forensic_risk_formulations.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "forensic_risk_formulations.letter_id": {
+      "foreignTable": "letters",
+      "foreignColumn": "id"
+    },
+    "forensic_risk_formulations.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "glucose_readings.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "glucose_readings.episode_id": {
+      "foreignTable": "episodes",
+      "foreignColumn": "id"
+    },
+    "glucose_readings.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "glucose_readings.recorded_by": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "group_session_attendees.group_session_id": {
+      "foreignTable": "group_sessions",
+      "foreignColumn": "id"
+    },
+    "group_session_attendees.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "group_sessions.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "group_sessions.facilitator_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "growth_measurements.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "growth_measurements.episode_id": {
+      "foreignTable": "episodes",
+      "foreignColumn": "id"
+    },
+    "growth_measurements.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "growth_measurements.recorded_by": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "hi_error_log.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "hi_error_log.created_by_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "hi_error_log.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "hotspots.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "hotspots.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "immunizations.administered_by": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "immunizations.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "immunizations.episode_id": {
+      "foreignTable": "episodes",
+      "foreignColumn": "id"
+    },
+    "immunizations.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "import_jobs.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "import_jobs.uploaded_by_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "insulin_regimens.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "insulin_regimens.episode_id": {
+      "foreignTable": "episodes",
+      "foreignColumn": "id"
+    },
+    "insulin_regimens.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "insulin_regimens.prescribed_by": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "investigation_types.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "invoice_line_items.invoice_id": {
+      "foreignTable": "invoices",
+      "foreignColumn": "id"
+    },
+    "invoices.appointment_id": {
+      "foreignTable": "appointments",
+      "foreignColumn": "id"
+    },
+    "invoices.approved_by_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "invoices.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "invoices.clinician_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "invoices.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "key_issues.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "key_issues.encounter_id": {
+      "foreignTable": "consultations",
+      "foreignColumn": "id"
+    },
+    "key_issues.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "lai_given.administered_by_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "lai_given.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "lai_given.lai_schedule_id": {
+      "foreignTable": "lai_schedules",
+      "foreignColumn": "id"
+    },
+    "lai_given.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "lai_schedules.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "lai_schedules.drug_product_id": {
+      "foreignTable": "drug_products",
+      "foreignColumn": "id"
+    },
+    "lai_schedules.episode_id": {
+      "foreignTable": "episodes",
+      "foreignColumn": "id"
+    },
+    "lai_schedules.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "lai_schedules.prescriber_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "lai_validations.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "lai_validations.lai_schedule_id": {
+      "foreignTable": "lai_schedules",
+      "foreignColumn": "id"
+    },
+    "lai_validations.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "lai_validations.validated_by_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "legal_order_type_configs.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "legal_orders.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "legal_orders.created_by_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "legal_orders.episode_id": {
+      "foreignTable": "episodes",
+      "foreignColumn": "id"
+    },
+    "legal_orders.order_type_id": {
+      "foreignTable": "legal_order_types",
+      "foreignColumn": "id"
+    },
+    "legal_orders.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "letter_audit_log.actor_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "letter_audit_log.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "letter_audit_log.letter_id": {
+      "foreignTable": "letters",
+      "foreignColumn": "id"
+    },
+    "letter_citations.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "letter_citations.letter_id": {
+      "foreignTable": "letters",
+      "foreignColumn": "id"
+    },
+    "letter_citations.section_id": {
+      "foreignTable": "letter_sections",
+      "foreignColumn": "id"
+    },
+    "letter_deliveries.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "letter_deliveries.letter_id": {
+      "foreignTable": "letters",
+      "foreignColumn": "id"
+    },
+    "letter_deliveries.sent_by": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "letter_exports.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "letter_exports.generated_by": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "letter_exports.letter_id": {
+      "foreignTable": "letters",
+      "foreignColumn": "id"
+    },
+    "letter_revisions.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "letter_revisions.letter_id": {
+      "foreignTable": "letters",
+      "foreignColumn": "id"
+    },
+    "letter_revisions.requested_by": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "letter_sections.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "letter_sections.last_regen_by": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "letter_sections.letter_id": {
+      "foreignTable": "letters",
+      "foreignColumn": "id"
+    },
+    "letter_templates.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "letter_tone_presets.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "letter_translations.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "letter_translations.letter_id": {
+      "foreignTable": "letters",
+      "foreignColumn": "id"
+    },
+    "letter_translations.translated_by": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "letters.approved_by": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "letters.author_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "letters.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "letters.episode_id": {
+      "foreignTable": "episodes",
+      "foreignColumn": "id"
+    },
+    "letters.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "letters.sent_by": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "letters.session_id": {
+      "foreignTable": "scribe_sessions",
+      "foreignColumn": "id"
+    },
+    "letters.template_id": {
+      "foreignTable": "letter_templates",
+      "foreignColumn": "id"
+    },
+    "llm_interactions.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "llm_interactions.episode_id": {
+      "foreignTable": "episodes",
+      "foreignColumn": "id"
+    },
+    "llm_interactions.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "llm_interactions.user_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "llm_prompts_outputs.consent_id": {
+      "foreignTable": "scribe_consents",
+      "foreignColumn": "id"
+    },
+    "llm_prompts_outputs.llm_interaction_id": {
+      "foreignTable": "llm_interactions",
+      "foreignColumn": "id"
+    },
+    "medication_administrations.administered_by_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "medication_administrations.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "medication_administrations.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "medication_administrations.patient_medication_id": {
+      "foreignTable": "patient_medications",
+      "foreignColumn": "id"
+    },
+    "medication_administrations.witnessed_by_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "medication_reconciliations.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "medication_reconciliations.episode_id": {
+      "foreignTable": "episodes",
+      "foreignColumn": "id"
+    },
+    "medication_reconciliations.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "medication_reconciliations.performed_by": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "message_thread_participants.thread_id": {
+      "foreignTable": "message_threads",
+      "foreignColumn": "id"
+    },
+    "message_thread_participants.user_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "message_threads.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "message_threads.created_by_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "message_threads.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "messages.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "messages.sender_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "messages.thread_id": {
+      "foreignTable": "message_threads",
+      "foreignColumn": "id"
+    },
+    "mfa_secrets.staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "mha_reviews.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "mha_reviews.legal_order_id": {
+      "foreignTable": "legal_orders",
+      "foreignColumn": "id"
+    },
+    "mha_reviews.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "mha_reviews.reviewed_by_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "mha_reviews.reviewed_by_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "model_deployments.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "model_deployments.deployed_by": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "model_deployments.model_id": {
+      "foreignTable": "model_registry",
+      "foreignColumn": "id"
+    },
+    "model_registry.registered_by": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "model_surveillance_events.deployment_id": {
+      "foreignTable": "model_deployments",
+      "foreignColumn": "id"
+    },
+    "model_surveillance_events.model_id": {
+      "foreignTable": "model_registry",
+      "foreignColumn": "id"
+    },
+    "model_surveillance_events.source_clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "notifications.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "notifications.recipient_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "nursing_assessments.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "nursing_assessments.episode_id": {
+      "foreignTable": "episodes",
+      "foreignColumn": "id"
+    },
+    "nursing_assessments.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "nursing_assessments.staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "oauth_access_tokens.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "oauth_access_tokens.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "oauth_authorization_codes.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "oauth_authorization_codes.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "oauth_refresh_tokens.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "oauth_refresh_tokens.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "op_notes.case_id": {
+      "foreignTable": "surgical_cases",
+      "foreignColumn": "id"
+    },
+    "op_notes.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "op_notes.closed_by": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "org_level_labels.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "org_unit_programs.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "org_unit_programs.org_unit_id": {
+      "foreignTable": "org_units",
+      "foreignColumn": "id"
+    },
+    "org_units.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "org_units.parent_id": {
+      "foreignTable": "org_units",
+      "foreignColumn": "id"
+    },
+    "outcome_measures.assigned_by": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "outcome_measures.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "outcome_measures.episode_id": {
+      "foreignTable": "episodes",
+      "foreignColumn": "id"
+    },
+    "outcome_measures.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "outcome_measures.staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "outcome_measures.template_id": {
+      "foreignTable": "templates",
+      "foreignColumn": "id"
+    },
+    "pacu_records.case_id": {
+      "foreignTable": "surgical_cases",
+      "foreignColumn": "id"
+    },
+    "pacu_records.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "pacu_records.recorded_by": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "password_reset_tokens.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "password_reset_tokens.staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "pathology_orders.appointment_id": {
+      "foreignTable": "appointments",
+      "foreignColumn": "id"
+    },
+    "pathology_orders.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "pathology_orders.episode_id": {
+      "foreignTable": "episodes",
+      "foreignColumn": "id"
+    },
+    "pathology_orders.ordered_by_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "pathology_orders.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "pathology_results.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "pathology_results.critical_acknowledged_by_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "pathology_results.pathology_order_id": {
+      "foreignTable": "pathology_orders",
+      "foreignColumn": "id"
+    },
+    "pathology_results.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "patient_alert_attachments.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "patient_alert_attachments.patient_alert_id": {
+      "foreignTable": "patient_alerts",
+      "foreignColumn": "id"
+    },
+    "patient_alerts.alert_type_id": {
+      "foreignTable": "alert_types",
+      "foreignColumn": "id"
+    },
+    "patient_alerts.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "patient_alerts.entered_by_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "patient_alerts.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "patient_allergies.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "patient_allergies.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "patient_allergies.recorded_by_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "patient_app_accounts.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "patient_app_accounts.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "patient_attachments.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "patient_attachments.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "patient_attachments.specialty_code": {
+      "foreignTable": "specialties",
+      "foreignColumn": "code"
+    },
+    "patient_attachments.uploaded_by": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "patient_behavior_contracts.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "patient_behavior_contracts.created_by_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "patient_behavior_contracts.pathway_id": {
+      "foreignTable": "treatment_pathways",
+      "foreignColumn": "id"
+    },
+    "patient_behavior_contracts.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "patient_behavior_contracts.updated_by_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "patient_behavioral_segments.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "patient_behavioral_segments.override_by_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "patient_behavioral_segments.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "patient_contacts.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "patient_contacts.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "patient_device_sources.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "patient_device_sources.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "patient_digital_phenotypes.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "patient_digital_phenotypes.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "patient_fcm_tokens.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "patient_fcm_tokens.patient_app_account_id": {
+      "foreignTable": "patient_app_accounts",
+      "foreignColumn": "id"
+    },
+    "patient_fcm_tokens.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "patient_flags.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "patient_flags.episode_id": {
+      "foreignTable": "episodes",
+      "foreignColumn": "id"
+    },
+    "patient_flags.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "patient_flags.raised_by_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "patient_flags.resolved_by_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "patient_ihis.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "patient_ihis.created_by_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "patient_ihis.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "patient_invites.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "patient_invites.created_by": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "patient_invites.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "patient_legal_attachments.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "patient_legal_attachments.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "patient_legal_orders.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "patient_legal_orders.entered_by_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "patient_legal_orders.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "patient_med_reminders.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "patient_med_reminders.created_by": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "patient_med_reminders.medication_id": {
+      "foreignTable": "patient_medications",
+      "foreignColumn": "id"
+    },
+    "patient_med_reminders.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "patient_medications.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "patient_medications.drug_product_id": {
+      "foreignTable": "drug_products",
+      "foreignColumn": "id"
+    },
+    "patient_medications.episode_id": {
+      "foreignTable": "episodes",
+      "foreignColumn": "id"
+    },
+    "patient_medications.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "patient_medications.prescribed_by_specialty_code": {
+      "foreignTable": "specialties",
+      "foreignColumn": "code"
+    },
+    "patient_medications.prescribed_by_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "patient_medications.recorded_by_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "patient_merges.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "patient_merges.destination_patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "patient_merges.merged_by": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "patient_merges.source_patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "patient_micro_learning_assignments.card_id": {
+      "foreignTable": "micro_learning_cards",
+      "foreignColumn": "id"
+    },
+    "patient_micro_learning_assignments.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "patient_micro_learning_assignments.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "patient_micro_learning_assignments.rule_id": {
+      "foreignTable": "clinic_micro_learning_rules",
+      "foreignColumn": "id"
+    },
+    "patient_outreach_log.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "patient_outreach_log.override_by_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "patient_outreach_log.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "patient_providers.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "patient_providers.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "patient_routine_events.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "patient_routine_events.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "patient_routine_events.routine_id": {
+      "foreignTable": "patient_routine_plans",
+      "foreignColumn": "id"
+    },
+    "patient_routine_plans.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "patient_routine_plans.created_by_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "patient_routine_plans.pathway_id": {
+      "foreignTable": "treatment_pathways",
+      "foreignColumn": "id"
+    },
+    "patient_routine_plans.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "patient_routine_plans.updated_by_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "patient_shared_documents.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "patient_shared_documents.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "patient_shared_documents.shared_by": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "patient_summary_signoffs.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "patient_summary_signoffs.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "patient_summary_signoffs.reminder_task_id": {
+      "foreignTable": "tasks",
+      "foreignColumn": "id"
+    },
+    "patient_summary_signoffs.signed_off_by_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "patient_sync_preferences.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "patient_sync_preferences.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "patient_sync_preferences.updated_by_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "patient_tasks.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "patient_tasks.created_by": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "patient_tasks.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "patient_team_assignments.escalation_id": {
+      "foreignTable": "escalations",
+      "foreignColumn": "id"
+    },
+    "patient_team_assignments.org_unit_id": {
+      "foreignTable": "org_units",
+      "foreignColumn": "id"
+    },
+    "patient_team_assignments.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "patient_team_assignments.primary_clinician_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "patient_team_assignments.referred_by_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "patient_team_assignments.reviewed_by_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "patient_team_reallocations.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "patient_team_reallocations.from_org_unit_id": {
+      "foreignTable": "org_units",
+      "foreignColumn": "id"
+    },
+    "patient_team_reallocations.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "patient_team_reallocations.referred_by_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "patient_team_reallocations.reviewed_by_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "patient_team_reallocations.to_org_unit_id": {
+      "foreignTable": "org_units",
+      "foreignColumn": "id"
+    },
+    "patient_team_reallocations.to_primary_clinician_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "patient_tracking.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "patient_tracking.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "patients.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "patients.sms_consent_updated_by": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "payments.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "payments.invoice_id": {
+      "foreignTable": "invoices",
+      "foreignColumn": "id"
+    },
+    "payments.received_by_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "phi_scrubber_rules.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "phone_triage.assigned_to_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "phone_triage.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "phone_triage.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "phone_triage.received_by_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "phone_triage.triaged_by_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "planned_transition_assignments.episode_id": {
+      "foreignTable": "episodes",
+      "foreignColumn": "id"
+    },
+    "planned_transition_assignments.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "planned_transition_assignments.to_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "planned_transition_assignments.transition_id": {
+      "foreignTable": "planned_transitions",
+      "foreignColumn": "id"
+    },
+    "planned_transitions.approved_by_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "planned_transitions.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "planned_transitions.created_by_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "planned_transitions.from_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "pregnancies.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "pregnancies.episode_id": {
+      "foreignTable": "episodes",
+      "foreignColumn": "id"
+    },
+    "pregnancies.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "pregnancies.recorded_by": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "prescriptions.cancelled_by_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "prescriptions.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "prescriptions.drug_product_id": {
+      "foreignTable": "drug_products",
+      "foreignColumn": "id"
+    },
+    "prescriptions.episode_id": {
+      "foreignTable": "episodes",
+      "foreignColumn": "id"
+    },
+    "prescriptions.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "prescriptions.patient_medication_id": {
+      "foreignTable": "patient_medications",
+      "foreignColumn": "id"
+    },
+    "prescriptions.prescribed_by_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "primary_cancer_conditions.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "primary_cancer_conditions.created_by_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "primary_cancer_conditions.episode_id": {
+      "foreignTable": "episodes",
+      "foreignColumn": "id"
+    },
+    "primary_cancer_conditions.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "problem_list.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "problem_list.episode_id": {
+      "foreignTable": "episodes",
+      "foreignColumn": "id"
+    },
+    "problem_list.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "problem_list.recorded_by": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "professional_disciplines.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "programs.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "psychology_session_notes.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "psychology_session_notes.episode_id": {
+      "foreignTable": "episodes",
+      "foreignColumn": "id"
+    },
+    "psychology_session_notes.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "psychology_session_notes.staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "referral_attachments.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "referral_attachments.referral_id": {
+      "foreignTable": "referrals",
+      "foreignColumn": "id"
+    },
+    "referral_clinician_offers.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "referral_clinician_offers.referral_id": {
+      "foreignTable": "referrals",
+      "foreignColumn": "id"
+    },
+    "referral_clinician_offers.staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "referral_feedback_log.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "referral_feedback_log.referral_id": {
+      "foreignTable": "referrals",
+      "foreignColumn": "id"
+    },
+    "referral_feedback_log.sent_by_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "referral_sources.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "referral_state_transitions.actor_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "referral_state_transitions.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "referral_state_transitions.referral_id": {
+      "foreignTable": "referrals",
+      "foreignColumn": "id"
+    },
+    "referral_validity.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "referral_validity.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "referral_workflow_events.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "referral_workflow_events.performed_by_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "referral_workflow_events.referral_id": {
+      "foreignTable": "referrals",
+      "foreignColumn": "id"
+    },
+    "referrals.accepted_by_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "referrals.assigned_to_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "referrals.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "referrals.coordinator_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "referrals.created_by_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "referrals.linked_episode_id": {
+      "foreignTable": "episodes",
+      "foreignColumn": "id"
+    },
+    "referrals.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "referrals.target_clinician_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "referrals.target_specialty_code": {
+      "foreignTable": "specialties",
+      "foreignColumn": "code"
+    },
+    "referrals.triaged_by": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "report_runs.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "report_runs.requested_by_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "report_schedules.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "report_schedules.created_by_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "restrictive_interventions.authorised_by_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "restrictive_interventions.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "restrictive_interventions.episode_id": {
+      "foreignTable": "episodes",
+      "foreignColumn": "id"
+    },
+    "restrictive_interventions.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "restrictive_interventions.recorded_by_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "review_plans.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "review_plans.encounter_id": {
+      "foreignTable": "consultations",
+      "foreignColumn": "id"
+    },
+    "review_plans.episode_id": {
+      "foreignTable": "episodes",
+      "foreignColumn": "id"
+    },
+    "review_plans.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "risk_assessments.assessed_by_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "risk_assessments.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "risk_assessments.episode_id": {
+      "foreignTable": "episodes",
+      "foreignColumn": "id"
+    },
+    "risk_assessments.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "safety_checklists.case_id": {
+      "foreignTable": "surgical_cases",
+      "foreignColumn": "id"
+    },
+    "safety_checklists.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "safety_checklists.completed_by": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "safety_plans.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "safety_plans.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "scribe_action_items.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "scribe_action_items.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "scribe_action_items.reviewed_by": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "scribe_action_items.session_id": {
+      "foreignTable": "scribe_sessions",
+      "foreignColumn": "id"
+    },
+    "scribe_consents.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "scribe_consents.clinician_attested_by_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "scribe_consents.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "scribe_consents.revoked_by": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "scribe_note_templates.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "scribe_sensitive_flags.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "scribe_sensitive_flags.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "scribe_sensitive_flags.reviewed_by": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "scribe_sensitive_flags.session_id": {
+      "foreignTable": "scribe_sessions",
+      "foreignColumn": "id"
+    },
+    "scribe_sessions.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "scribe_sessions.clinician_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "scribe_sessions.consent_id": {
+      "foreignTable": "scribe_consents",
+      "foreignColumn": "id"
+    },
+    "scribe_sessions.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "scribe_talk_time_metrics.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "scribe_talk_time_metrics.session_id": {
+      "foreignTable": "scribe_sessions",
+      "foreignColumn": "id"
+    },
+    "shift_handovers.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "shift_handovers.created_by_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "shift_handovers.incoming_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "shift_handovers.outgoing_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "side_effect_schedules.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "side_effect_schedules.created_by_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "side_effect_schedules.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "side_effect_schedules.patient_medication_id": {
+      "foreignTable": "patient_medications",
+      "foreignColumn": "id"
+    },
+    "smart_apps.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "smart_launch_contexts.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "smart_launch_contexts.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "staff.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "staff_fcm_tokens.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "staff_fcm_tokens.staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "staff_leave.approved_by_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "staff_leave.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "staff_leave.cover_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "staff_leave.requested_by": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "staff_leave.staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "staff_module_access.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "staff_module_access.granted_by_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "staff_module_access.staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "staff_permissions.granted_by": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "staff_permissions.permission_id": {
+      "foreignTable": "permissions",
+      "foreignColumn": "id"
+    },
+    "staff_permissions.staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "staff_role_assignments.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "staff_role_assignments.clinical_role_id": {
+      "foreignTable": "clinical_roles",
+      "foreignColumn": "id"
+    },
+    "staff_role_assignments.org_unit_id": {
+      "foreignTable": "org_units",
+      "foreignColumn": "id"
+    },
+    "staff_role_assignments.staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "staff_sessions.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "staff_sessions.staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "staff_settings.staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "staff_specialties.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "staff_specialties.created_by": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "staff_specialties.specialty_code": {
+      "foreignTable": "specialties",
+      "foreignColumn": "code"
+    },
+    "staff_specialties.staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "staff_team_assignments.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "staff_team_assignments.org_unit_id": {
+      "foreignTable": "org_units",
+      "foreignColumn": "id"
+    },
+    "staff_team_assignments.staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "step_care_rule_events.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "step_care_rule_events.pathway_id": {
+      "foreignTable": "treatment_pathways",
+      "foreignColumn": "id"
+    },
+    "step_care_rule_events.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "step_care_rule_events.rule_id": {
+      "foreignTable": "clinic_step_care_rules",
+      "foreignColumn": "id"
+    },
+    "structured_observations.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "structured_observations.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "structured_observations.staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "subscriber_branding.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "subscriptions.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "surgical_cases.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "surgical_cases.episode_id": {
+      "foreignTable": "episodes",
+      "foreignColumn": "id"
+    },
+    "surgical_cases.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "surgical_cases.primary_surgeon_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "tasks.assigned_by_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "tasks.assigned_to_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "tasks.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "tasks.completed_by_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "tasks.episode_id": {
+      "foreignTable": "episodes",
+      "foreignColumn": "id"
+    },
+    "tasks.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "template_categories.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "template_sections.template_id": {
+      "foreignTable": "templates",
+      "foreignColumn": "id"
+    },
+    "templates.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "templates.created_by_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "tms_courses.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "tms_courses.consent_recorded_by": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "tms_courses.episode_id": {
+      "foreignTable": "episodes",
+      "foreignColumn": "id"
+    },
+    "tms_courses.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "tms_courses.treating_psychiatrist_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "tms_sessions.administered_by": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "tms_sessions.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "tms_sessions.course_id": {
+      "foreignTable": "tms_courses",
+      "foreignColumn": "id"
+    },
+    "tnm_stage_groups.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "tnm_stage_groups.condition_id": {
+      "foreignTable": "primary_cancer_conditions",
+      "foreignColumn": "id"
+    },
+    "tnm_stage_groups.staged_by_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "training_corpus_items.reviewed_by": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "training_corpus_items.source_clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "training_corpus_items.source_session_id": {
+      "foreignTable": "scribe_sessions",
+      "foreignColumn": "id"
+    },
+    "training_export_requests.approved_by_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "training_export_requests.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "training_export_requests.requested_by_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "treatment_pathways.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "treatment_pathways.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "treatment_pathways.updated_by_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "treatment_plans.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "treatment_plans.episode_id": {
+      "foreignTable": "episodes",
+      "foreignColumn": "id"
+    },
+    "treatment_plans.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "treatment_plans.staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "tumour_board_decisions.chaired_by_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "tumour_board_decisions.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "tumour_board_decisions.condition_id": {
+      "foreignTable": "primary_cancer_conditions",
+      "foreignColumn": "id"
+    },
+    "viva_alert_thresholds.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "viva_alert_thresholds.created_by": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "viva_alert_thresholds.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "voice_calls.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "voice_calls.episode_id": {
+      "foreignTable": "episodes",
+      "foreignColumn": "id"
+    },
+    "voice_calls.initiated_by_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "voice_calls.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "voice_calls.script_id": {
+      "foreignTable": "voice_scripts",
+      "foreignColumn": "id"
+    },
+    "voice_patient_preferences.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "voice_patient_preferences.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "voice_scripts.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "voice_scripts.created_by_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "waitlist_entries.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "waitlist_entries.patient_id": {
+      "foreignTable": "patients",
+      "foreignColumn": "id"
+    },
+    "waitlist_entries.preferred_clinician_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "webauthn_credentials.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "webauthn_credentials.staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    },
+    "webhook_audit_log.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "webhook_secrets.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "workflow_executions.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "workflow_executions.workflow_id": {
+      "foreignTable": "workflows",
+      "foreignColumn": "id"
+    },
+    "workflows.clinic_id": {
+      "foreignTable": "clinics",
+      "foreignColumn": "id"
+    },
+    "workflows.created_by_staff_id": {
+      "foreignTable": "staff",
+      "foreignColumn": "id"
+    }
+  }
+}

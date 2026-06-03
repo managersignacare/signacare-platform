@@ -1,0 +1,14 @@
+{
+  "name": "eslint-plugin-signacare-rules",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Signacare-specific ESLint rules. BUG-531: no-empty-catch-on-safety-surface.",
+  "main": "index.js",
+  "files": [
+    "index.js",
+    "rules"
+  ],
+  "peerDependencies": {
+    "eslint": ">=8"
+  }
+}

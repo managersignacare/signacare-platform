@@ -1,0 +1,41 @@
+# scripts/guards/log-phi.allowlist
+#
+# BUG-269 — keys that MATCH the PHI regex but are LEGITIMATE in logging
+# contexts because they are workflow metadata, not patient data. Each
+# entry should have an inline rationale.
+#
+# Format: one key per line; lines starting with # are comments; blank
+# lines are skipped.
+#
+# KEEP THIS LIST SHORT. Prefer renaming ambiguous keys or adding the
+# key to PHI_FIELDS (when it IS PHI) over growing the allowlist.
+# Expiry-policy: per-entry (added 2026-05-03 cycle Phase 0a.7)
+# Each non-comment line carries an `| expires: <YYYY-MM-DD> (cascade: <BUG>)`
+# OR `| permanent: <reason>` annotation. Entries past their expiry date
+# fail the merge gate via `scripts/guards/check-allowlist-expiry.ts`.
+# Renewal: when a target close-by date passes, EITHER drain the entry
+# (preferred) OR explicitly extend the date with operator authorization.
+
+# Database column name in schema-drift logs — not PHI, just a column
+# label. Used by utils/logger.ts:checkSchemaPhiDrift.
+suspects | permanent: BUG-269 baseline — workflow metadata keys matching PHI regex but legitimate in logging context (not patient data)
+
+# Session/refresh-token "family" — security concept for token rotation
+# families, not a patient's family. Logged by authService session
+# revocation.
+familyId | permanent: BUG-269 baseline — workflow metadata keys matching PHI regex but legitimate in logging context (not patient data)
+
+# Boolean status flag "did we send the email" — NOT the email itself.
+# Context: tokenDeliveryService logs { emailSent: result.email.sent }
+# where `sent` is a boolean. Adding the underlying email key (e.g.
+# `email`) would be blocked; this is the status, not the value.
+emailSent | permanent: BUG-269 baseline — workflow metadata keys matching PHI regex but legitimate in logging context (not patient data)
+
+# BUG-296 — boolean flags logged by requireValidHpii WARN path
+# indicating whether the prescriber's HPI-I is absent vs malformed.
+# Both are booleans (not HPI-I values). The underlying `hpii` key IS
+# PHI-sensitive (would be blocked) but these status booleans are
+# workflow flags only. Context: shared/authGuards.ts inside the
+# WARN-mode emit for STRICT_PRESCRIBER_HPII.
+hpiiMissing | permanent: BUG-269 baseline — workflow metadata keys matching PHI regex but legitimate in logging context (not patient data)
+hpiiMalformed | permanent: BUG-269 baseline — workflow metadata keys matching PHI regex but legitimate in logging context (not patient data)

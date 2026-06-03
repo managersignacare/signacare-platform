@@ -1,0 +1,30 @@
+#!/usr/bin/env sh
+# Phase 0a.12 — commit-msg hook for the claim-discipline guard.
+# BUG-PRECOMMIT-REVIEW-CHAIN-FOR-S1 (S2) D4 — review-attestation guard.
+#
+# 1. claim-discipline guard reads the commit message about to land
+#    (`.git/COMMIT_EDITMSG` is $1 per the git commit-msg hook contract)
+#    and rejects banned-phrase claims that lack honest qualifiers. Same
+#    rubric as shortcut-detector + gold-standard-enforcer agents.
+#
+# 2. review-attestation guard (D4) runs detectTriggerCommit against the
+#    staged diff + commit message. If a trigger fires (migrations / 3+
+#    features files / BUG-X (S0|S1|S2) closure), require a tree-hash-
+#    bound attestation artifact at .git/signacare-review-attestation.json
+#    proving the L1-L5 review chain ran for THIS staged snapshot.
+#
+# Bypass: `git commit --no-verify` (per Q3 operator decision 2026-05-06,
+# no in-hook bypass; --no-verify is the OS-level escape hatch and is
+# visible in git log forever).
+
+set -e
+
+echo "→ Commit-msg claim-discipline guard (Phase 0a.12)"
+
+# $1 is the path to the commit-msg file passed by git
+npm run guard:commit-claims --silent -- --commit-msg "$1"
+
+echo "✓ Commit-msg claim discipline passed"
+
+echo "→ Commit-msg review-attestation guard (BUG-PRECOMMIT-REVIEW-CHAIN-FOR-S1 D4)"
+npm run guard:review-attestation --silent -- --commit-msg "$1"

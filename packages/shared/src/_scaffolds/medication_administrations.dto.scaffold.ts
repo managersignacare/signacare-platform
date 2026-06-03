@@ -1,0 +1,28 @@
+// AUTO-GENERATED scaffold by scripts/generate-types-from-migrations.ts
+// DO NOT EDIT MANUALLY. Hand-written DTO must `extends` this scaffold's
+// Zod schema OR carry a `// @scaffold-divergence: <reason>` annotation.
+// The scaffold-extension guard (Phase 0b.1b) enforces this at merge gate.
+
+import { z } from 'zod';
+
+export const MedicationAdministrationsDtoScaffoldSchema = z.object({
+  id: z.string().uuid(),
+  clinicId: z.string().uuid(),
+  patientId: z.string().uuid(),
+  patientMedicationId: z.string().uuid().nullable().optional(),
+  scheduledTime: z.string().datetime().nullable().optional(),
+  status: z.string().max(30),
+  administeredTime: z.string().datetime().nullable().optional(),
+  administeredByStaffId: z.string().uuid().nullable().optional(),
+  doseGiven: z.string().max(100).nullable().optional(),
+  route: z.string().max(50).nullable().optional(),
+  site: z.string().max(100).nullable().optional(),
+  notes: z.string().nullable().optional(),
+  reasonNotGiven: z.string().nullable().optional(),
+  witnessedByStaffId: z.string().uuid().nullable().optional(),
+  batchNumber: z.string().max(100).nullable().optional(),
+  createdAt: z.string().datetime(),
+  lockVersion: z.number().int(),
+});
+
+export type MedicationAdministrationsDtoScaffold = z.infer<typeof MedicationAdministrationsDtoScaffoldSchema>;

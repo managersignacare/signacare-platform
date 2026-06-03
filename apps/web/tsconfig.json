@@ -1,0 +1,17 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["vite/client"],
+    "noEmit": true,
+    "ignoreDeprecations": "6.0",
+    "baseUrl": "src",
+    "paths": {
+      "@/*": ["*"],
+      "@signacare/shared": ["../../packages/shared/src"],
+      "@signacare/shared/*": ["../../packages/shared/src/*"],
+      "@signacare/ui-components": ["../../packages/ui-components/src"],
+      "@signacare/ui-components/*": ["../../packages/ui-components/src/*"]
+    }
+  },
+  "include": ["src", "vite.config.ts"]
+}

@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://signacare.local/schemas/evidence-packet.schema.json",
+  "title": "Remediation Evidence Packet",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "module_id",
+    "phase",
+    "commit_sha",
+    "bug_ids",
+    "guard_names",
+    "regression_test_ids",
+    "evidence_artifacts",
+    "approver",
+    "generated_at"
+  ],
+  "properties": {
+    "module_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "phase": {
+      "type": "string",
+      "enum": ["R0", "R1"]
+    },
+    "commit_sha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{7,40}$"
+    },
+    "bug_ids": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "pattern": "^BUG-[A-Z0-9._*-]+$"
+      }
+    },
+    "guard_names": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "regression_test_ids": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "evidence_artifacts": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "approver": {
+      "type": "string",
+      "minLength": 1
+    },
+    "rollout_window": {
+      "type": "string",
+      "minLength": 1
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "notes": {
+      "type": "string"
+    }
+  }
+}

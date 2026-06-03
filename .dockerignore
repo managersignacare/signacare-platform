@@ -1,0 +1,85 @@
+# Signacare EMR — Docker build context excludes
+#
+# Phase R3 Azure dev/test deploy artifact (2026-04-30). Keeps Docker
+# build context lean and prevents accidental inclusion of secrets,
+# local-only configuration, and large directories that would bloat the
+# image without contributing to runtime behaviour.
+
+# Dependency directories — re-installed inside the image
+node_modules
+**/node_modules
+**/node_modules/**
+
+# Build outputs — Dockerfile builds from source (apps/web Dockerfile rebuilds Vite SPA; apps/api Dockerfile rebuilds tsc output)
+**/dist
+**/build
+**/out
+**/.next
+
+# Test + coverage outputs
+**/coverage
+**/.nyc_output
+**/*.lcov
+**/node_modules
+
+# Local environment files — secrets MUST come from Azure Key Vault, not baked in
+.env
+.env.*
+!.env.example
+!.env.production
+**/.env
+**/.env.*
+!**/.env.example
+
+# Local-only configuration
+.claude
+.cursor
+.vscode
+.idea
+*.swp
+*.swo
+.DS_Store
+
+# Git metadata — image doesn't need history
+.git
+.gitignore
+.gitattributes
+.github
+
+# Logs + ephemeral state
+**/*.log
+**/logs
+**/tmp
+**/.cache
+
+# Documentation + planning artifacts (not needed at runtime)
+docs/archive
+docs/quality
+README.md
+CLAUDE.md
+
+# CI / development tooling
+scripts/guards/__tests__
+**/*.test.ts
+**/*.test.tsx
+**/*.spec.ts
+**/*.spec.tsx
+e2e
+playwright-report
+test-results
+
+# Package manager state files (re-derived on install)
+**/.npm
+**/.pnpm-store
+**/.yarn
+
+# Editor / OS artefacts
+.history
+*.bak
+*~
+
+# Existing local migrations directory mirror (kept in apps/api/migrations as Knex SoT)
+apps/api/src/db/migrations/*.sql.bak
+
+# Already-archived audit logs
+docs/archive/auto-execute-logs

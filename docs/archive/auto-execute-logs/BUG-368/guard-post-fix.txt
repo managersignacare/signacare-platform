@@ -1,0 +1,1 @@
+check-query-has-clinic-id: no new violations (216 multi-tenant tables tracked, 36 allowlisted backlog entries deferred to BUG-430)

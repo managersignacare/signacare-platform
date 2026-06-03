@@ -1,0 +1,61 @@
+// AUTO-GENERATED scaffold by scripts/generate-types-from-migrations.ts
+// DO NOT EDIT MANUALLY. Hand-written Response must `extends` this
+// scaffold's Zod schema OR carry a `// @scaffold-divergence: <reason>`
+// annotation. The scaffold-extension guard (Phase 0b.1b) enforces this.
+
+import { z } from 'zod';
+
+export const ReferralsResponseScaffoldSchema = z.object({
+  id: z.string().uuid(),
+  clinicId: z.string().uuid(),
+  patientId: z.string().uuid(),
+  referralNumber: z.string().max(50),
+  referralDate: z.string(),
+  source: z.string().max(50),
+  fromService: z.string().max(200),
+  fromProviderName: z.string().max(200).nullable().optional(),
+  fromProviderPhone: z.string().max(30).nullable().optional(),
+  fromProviderEmail: z.string().max(255).nullable().optional(),
+  fromProviderPrescriberNo: z.string().max(30).nullable().optional(),
+  referringOrg: z.string().max(200).nullable().optional(),
+  reason: z.string(),
+  clinicalSummary: z.string().nullable().optional(),
+  currentMedications: z.string().nullable().optional(),
+  diagnosisInfo: z.string().nullable().optional(),
+  urgency: z.string().max(30),
+  status: z.string().max(30),
+  statusChangedAt: z.string().datetime().nullable().optional(),
+  receivedAt: z.string().datetime(),
+  assignedToStaffId: z.string().uuid().nullable().optional(),
+  linkedEpisodeId: z.string().uuid().nullable().optional(),
+  hasAttachment: z.boolean(),
+  ocrExtracted: z.unknown().nullable().optional(),
+  rejectionReason: z.string().nullable().optional(),
+  redirectTo: z.string().max(200).nullable().optional(),
+  slaDueDate: z.string().nullable().optional(),
+  slaBreached: z.boolean(),
+  internalNotes: z.string().nullable().optional(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+  deletedAt: z.string().datetime().nullable().optional(),
+  referralMode: z.string().max(20),
+  targetClinicianId: z.string().uuid().nullable().optional(),
+  distributionMode: z.string().max(30).nullable().optional(),
+  distributionSpeciality: z.string().max(100).nullable().optional(),
+  acceptedByStaffId: z.string().uuid().nullable().optional(),
+  broadcastAt: z.string().datetime().nullable().optional(),
+  reminderSentAt: z.string().datetime().nullable().optional(),
+  finalReminderSentAt: z.string().datetime().nullable().optional(),
+  autoCloseAt: z.string().datetime().nullable().optional(),
+  feedbackSentAt: z.string().datetime().nullable().optional(),
+  clarificationNotes: z.string().nullable().optional(),
+  createdByStaffId: z.string().uuid().nullable().optional(),
+  targetSpecialtyCode: z.string().max(40),
+  serviceRequestStatus: z.string().max(20),
+  taskStatus: z.string().max(20),
+  coordinatorId: z.string().uuid().nullable().optional(),
+  triagedAt: z.string().datetime().nullable().optional(),
+  triagedBy: z.string().uuid().nullable().optional(),
+});
+
+export type ReferralsResponseScaffold = z.infer<typeof ReferralsResponseScaffoldSchema>;

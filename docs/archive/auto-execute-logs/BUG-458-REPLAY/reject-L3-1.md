@@ -1,0 +1,2 @@
+Absorb-1 reject log
+L3 REJECT-1 (2026-04-25): list-fragility precedent imported in name only — appointmentService.list() would 500 entire calendar on one bad row. Fix: split mapDbToResponse into strict + toResponseListSafe (per-row safeParse + warn-log + skip), wire list() to safe variant, add AI-6 calendar-blackout integration test, add R-FIX-BUG-458-LIST-FRAGILITY-RESISTANT registry anchor. 6/6 GREEN ×3 after absorb.

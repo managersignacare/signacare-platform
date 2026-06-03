@@ -1,0 +1,62 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "workspaces": {
+    "apps/api": {
+      "entry": [
+        "src/server.ts",
+        "src/index.ts",
+        "scripts/migrate.ts",
+        "tests/**/*.test.ts",
+        "tests/setup.ts",
+        "src/jobs/bootstrap.ts!"
+      ],
+      "project": [
+        "src/**/*.ts",
+        "scripts/**/*.ts",
+        "tests/**/*.ts",
+        "migrations/**/*.ts"
+      ],
+      "ignore": [
+        "src/seed-*.ts",
+        "src/reset-patient-data.ts",
+        "src/**/*.d.ts",
+        "dist/**"
+      ]
+    },
+    "apps/web": {
+      "entry": [
+        "src/main.tsx",
+        "src/App.tsx",
+        "vite.config.ts"
+      ],
+      "project": ["src/**/*.{ts,tsx}", "vite.config.ts"],
+      "ignore": ["src/**/*.d.ts", "dist/**"]
+    },
+    "packages/shared": {
+      "entry": ["src/index.ts"],
+      "project": ["src/**/*.ts"],
+      "ignore": ["src/**/*.test.ts", "dist/**"]
+    },
+    "packages/ui-components": {
+      "entry": ["src/index.ts"],
+      "project": ["src/**/*.{ts,tsx}"],
+      "ignore": ["src/**/*.d.ts", "dist/**"]
+    }
+  },
+  "ignoreDependencies": [
+    "ts-node",
+    "ts-node-dev",
+    "tsconfig-paths",
+    "tsc-alias",
+    "dotenv",
+    "pm2",
+    "concurrently",
+    "@playwright/test",
+    "vitest",
+    "supertest",
+    "@types/.*",
+    "eslint.*",
+    "prettier"
+  ],
+  "ignoreBinaries": ["psql", "k6", "trivy", "snyk"]
+}

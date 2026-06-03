@@ -1,0 +1,31 @@
+# scripts/guards/check-bugs-remaining-uniqueness.allowlist
+#
+# Phase R1 PR-R1-6 — pre-existing BUG-IDs with multiple rows in
+# `docs/quality/bugs-remaining.md`. Each entry is a BUG-ID + the
+# EXACT expected occurrence count. Drift in either direction
+# (consolidation OR regression) fails the merge-gate.
+#
+# Format (cycle-2 absorb of L3 finding A5):
+#   <BUG-ID> expected=<N>  # comment
+#
+# IMPORTANT (cycle-2 absorb of L3 finding A4):
+# - This allowlist is a TRANSIENT SHIM for the BUG-633/634b
+#   split-state class that pre-dates this guard.
+# - The guard hard-caps allowlist size at MAX_ALLOWLIST_SIZE = 5.
+#   Growth beyond the cap requires deliberate code change to the
+#   constant + cascade-BUG documentation. NEW split-states CANNOT
+#   be added as a workaround — they must be resolved at the
+#   catalogue level.
+# - Drain plan: BUG-PR-R1-6-CASCADE-CATALOGUE-CLEANUP.
+# Expiry-policy: per-entry (added 2026-05-03 cycle Phase 0a.7)
+# Each non-comment line carries an `| expires: <YYYY-MM-DD> (cascade: <BUG>)`
+# OR `| permanent: <reason>` annotation. Entries past their expiry date
+# fail the merge gate via `scripts/guards/check-allowlist-expiry.ts`.
+# Renewal: when a target close-by date passes, EITHER drain the entry
+# (preferred) OR explicitly extend the date with operator authorization.
+
+BUG-368 expected=2  # PR-R1-6 baseline — duplicate row in audit-2026-04-24 summary table; consolidation deferred to BUG-PR-R1-6-CASCADE-CATALOGUE-CLEANUP | expires: 2026-12-31 (cascade: BUG-PR-R1-6-CASCADE-CATALOGUE-CLEANUP)
+BUG-369 expected=2  # PR-R1-6 baseline — same shape as BUG-368 | expires: 2026-12-31 (cascade: PR-R1-6)
+BUG-489 expected=2  # PR-R1-6 baseline — real ID collision (two distinct bugs share the ID); rename one in BUG-PR-R1-6-CASCADE-CATALOGUE-CLEANUP | expires: 2026-12-31 (cascade: BUG-PR-R1-6-CASCADE-CATALOGUE-CLEANUP)
+BUG-547 expected=2  # PR-R1-6 baseline — open + fixed split (line 156 stale, line 297 authoritative); consolidate in BUG-PR-R1-6-CASCADE-CATALOGUE-CLEANUP | expires: 2026-12-31 (cascade: BUG-PR-R1-6-CASCADE-CATALOGUE-CLEANUP)
+BUG-548 expected=2  # PR-R1-6 baseline — same shape as BUG-547 | expires: 2026-12-31 (cascade: PR-R1-6)

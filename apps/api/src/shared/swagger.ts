@@ -1,0 +1,336 @@
+// apps/api/src/shared/swagger.ts
+//
+// OpenAPI 3.0 specification for Signacare EMR API
+// Serves interactive Swagger UI at /api/docs
+
+import swaggerJsdoc from 'swagger-jsdoc';
+
+const options: swaggerJsdoc.Options = {
+  definition: {
+    openapi: '3.0.3',
+    info: {
+      title: 'Signacare EMR API',
+      version: '1.0.0',
+      description: `
+Enterprise mental health Electronic Medical Record API.
+
+## Authentication
+All endpoints (except /fhir/metadata and /auth/login) require JWT authentication via HttpOnly cookies.
+Login via POST /api/v1/auth/login to receive cookies.
+
+## Multi-Tenancy
+All data is scoped to the authenticated user's clinic via PostgreSQL Row-Level Security.
+
+## Rate Limiting
+- General API: 1000 requests/minute
+- Authentication: 30 attempts/15 minutes
+- AI/LLM: 50 requests/minute
+      `,
+      contact: { name: 'Signacare Support', email: 'support@signacare.com.au' },
+      license: { name: 'Proprietary', url: 'https://signacare.com.au/license' },
+    },
+    servers: [
+      { url: '/api/v1', description: 'API v1' },
+    ],
+    components: {
+      securitySchemes: {
+        cookieAuth: {
+          type: 'apiKey',
+          in: 'cookie',
+          name: 'signacare_access',
+          description: 'JWT access token in HttpOnly cookie',
+        },
+        bearerAuth: {
+          type: 'http',
+          scheme: 'bearer',
+          bearerFormat: 'JWT',
+          description: 'JWT token for mobile/API clients',
+        },
+        csrfToken: {
+          type: 'apiKey',
+          in: 'header',
+          name: 'X-CSRF-Token',
+          description: 'CSRF protection token',
+        },
+      },
+      schemas: {
+        Error: {
+          type: 'object',
+          properties: {
+            error: { type: 'string' },
+            code: { type: 'string' },
+            details: { type: 'object' },
+          },
+        },
+        Patient: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            clinicId: { type: 'string', format: 'uuid' },
+            emrNumber: { type: 'string' },
+            givenName: { type: 'string' },
+            familyName: { type: 'string' },
+            dateOfBirth: { type: 'string', format: 'date' },
+            gender: { type: 'string', enum: ['male', 'female', 'other', 'unknown'] },
+            phoneMobile: { type: 'string' },
+            medicareNumber: { type: 'string', description: 'Encrypted at rest (AES-256-GCM)' },
+          },
+        },
+        ClinicalNote: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            patientId: { type: 'string', format: 'uuid' },
+            episodeId: { type: 'string', format: 'uuid' },
+            noteType: { type: 'string', enum: ['progress', 'assessment', 'discharge', 'review', 'letter'] },
+            content: { type: 'string' },
+            status: { type: 'string', enum: ['draft', 'signed'] },
+            authorId: { type: 'string', format: 'uuid' },
+            contentHash: { type: 'string', description: 'SHA-256 integrity hash' },
+          },
+        },
+        NursingAssessment: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            patientId: { type: 'string', format: 'uuid' },
+            assessmentType: {
+              type: 'string',
+              enum: ['news2', 'fluid_balance', 'falls_risk', 'wound_care', 'physical_health',
+                     'outcome_measure', 'ect_course', 'ect_session', 'tms_course', 'tms_session'],
+            },
+            data: { type: 'object' },
+            totalScore: { type: 'number' },
+          },
+        },
+        Medication: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            patientId: { type: 'string', format: 'uuid' },
+            medicationName: { type: 'string' },
+            dose: { type: 'string' },
+            frequency: { type: 'string' },
+            route: { type: 'string' },
+            status: { type: 'string', enum: ['active', 'ceased', 'suspended'] },
+          },
+        },
+        Appointment: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            patientId: { type: 'string', format: 'uuid' },
+            clinicianId: { type: 'string', format: 'uuid' },
+            startTime: { type: 'string', format: 'date-time' },
+            endTime: { type: 'string', format: 'date-time' },
+            type: { type: 'string', enum: ['initial', 'follow_up', 'assessment', 'telehealth', 'group'] },
+            status: { type: 'string', enum: ['scheduled', 'checked_in', 'in_progress', 'completed', 'cancelled'] },
+          },
+        },
+        Task: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            title: { type: 'string' },
+            priority: { type: 'string', enum: ['low', 'medium', 'high', 'urgent'] },
+            status: { type: 'string', enum: ['todo', 'in_progress', 'completed', 'cancelled'] },
+            patientId: { type: 'string', format: 'uuid' },
+            assignedToId: { type: 'string', format: 'uuid' },
+          },
+        },
+        RiskAssessment: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            patientId: { type: 'string', format: 'uuid' },
+            overallRiskLevel: { type: 'string', enum: ['low', 'medium', 'high', 'very_high'] },
+            suicideRisk: { type: 'boolean' },
+            selfHarmRisk: { type: 'boolean' },
+            assessmentDate: { type: 'string', format: 'date' },
+          },
+        },
+        FHIRCapabilityStatement: {
+          type: 'object',
+          properties: {
+            resourceType: { type: 'string', example: 'CapabilityStatement' },
+            status: { type: 'string' },
+            fhirVersion: { type: 'string', example: '4.0.1' },
+          },
+        },
+      },
+    },
+    security: [{ cookieAuth: [] }, { csrfToken: [] }],
+    tags: [
+      { name: 'Authentication', description: 'Login, MFA, sessions, break-glass access' },
+      { name: 'Patients', description: 'Patient registration, demographics, search' },
+      { name: 'Clinical Notes', description: 'Progress notes, assessments, letters' },
+      { name: 'Nursing', description: 'NEWS2, fluid balance, falls risk, observations' },
+      { name: 'Medications', description: 'Prescribing, MAR chart, LAI, clozapine' },
+      { name: 'Risk & Safety', description: 'Risk assessments, safety plans, alerts' },
+      { name: 'Episodes', description: 'Episode management, care coordination' },
+      { name: 'Appointments', description: 'Scheduling, check-in, waitlist' },
+      { name: 'Referrals', description: 'Internal/external referrals, eReferrals' },
+      { name: 'Tasks', description: 'Clinical tasks, assignments' },
+      { name: 'Messages', description: 'Internal messaging, threads' },
+      { name: 'ECT/TMS', description: 'Electroconvulsive therapy, transcranial magnetic stimulation' },
+      { name: 'Beds', description: 'Bed board, admissions, discharges' },
+      { name: 'Reports', description: 'Clinical and administrative reports' },
+      { name: 'FHIR', description: 'HL7 FHIR R4 interoperability endpoints' },
+      { name: 'Privacy', description: 'Data export, anonymisation, consent, breach management' },
+      { name: 'Admin', description: 'Staff, settings, audit, backup' },
+    ],
+    paths: {
+      '/auth/login': {
+        post: {
+          tags: ['Authentication'], summary: 'Login', operationId: 'login',
+          security: [],
+          requestBody: { content: { 'application/json': { schema: { type: 'object', required: ['email', 'password'], properties: { email: { type: 'string' }, password: { type: 'string' } } } } } },
+          responses: { '200': { description: 'Login successful' }, '401': { description: 'Invalid credentials' } },
+        },
+      },
+      '/auth/break-glass': {
+        post: {
+          tags: ['Authentication'], summary: 'Emergency break-glass access (HIPAA)', operationId: 'breakGlass',
+          security: [],
+          requestBody: { content: { 'application/json': { schema: { type: 'object', required: ['email', 'password', 'reason'], properties: { email: { type: 'string' }, password: { type: 'string' }, mfaCode: { type: 'string' }, reason: { type: 'string', minLength: 10 } } } } } },
+          responses: { '200': { description: '30-minute emergency token issued' }, '401': { description: 'Invalid credentials' } },
+        },
+      },
+      '/patients': {
+        get: {
+          tags: ['Patients'], summary: 'List patients', operationId: 'listPatients',
+          parameters: [
+            { name: 'search', in: 'query', schema: { type: 'string' } },
+            { name: 'limit', in: 'query', schema: { type: 'integer', default: 50 } },
+            { name: 'cursor', in: 'query', schema: { type: 'string' } },
+          ],
+          responses: { '200': { description: 'Patient list', content: { 'application/json': { schema: { type: 'object', properties: { data: { type: 'array', items: { $ref: '#/components/schemas/Patient' } } } } } } } },
+        },
+        post: {
+          tags: ['Patients'], summary: 'Register patient', operationId: 'createPatient',
+          requestBody: { content: { 'application/json': { schema: { $ref: '#/components/schemas/Patient' } } } },
+          responses: { '201': { description: 'Patient created' }, '409': { description: 'Duplicate patient detected' } },
+        },
+      },
+      '/patients/{patientId}': {
+        get: {
+          tags: ['Patients'], summary: 'Get patient details', operationId: 'getPatient',
+          parameters: [{ name: 'patientId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+          responses: { '200': { description: 'Patient details' }, '404': { description: 'Not found' } },
+        },
+      },
+      '/patients/{patientId}/notes': {
+        get: {
+          tags: ['Clinical Notes'], summary: 'List clinical notes', operationId: 'listNotes',
+          parameters: [
+            { name: 'patientId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+            { name: 'episodeId', in: 'query', schema: { type: 'string', format: 'uuid' } },
+          ],
+          responses: { '200': { description: 'Notes list' } },
+        },
+        post: {
+          tags: ['Clinical Notes'], summary: 'Create clinical note', operationId: 'createNote',
+          parameters: [{ name: 'patientId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+          requestBody: { content: { 'application/json': { schema: { $ref: '#/components/schemas/ClinicalNote' } } } },
+          responses: { '201': { description: 'Note created' } },
+        },
+      },
+      '/nursing-assessments': {
+        get: {
+          tags: ['Nursing'], summary: 'List nursing assessments', operationId: 'listAssessments',
+          parameters: [{ name: 'patientId', in: 'query', schema: { type: 'string', format: 'uuid' } }],
+          responses: { '200': { description: 'Assessment list' } },
+        },
+        post: {
+          tags: ['Nursing'], summary: 'Create nursing assessment (NEWS2, falls risk, etc)', operationId: 'createAssessment',
+          requestBody: { content: { 'application/json': { schema: { $ref: '#/components/schemas/NursingAssessment' } } } },
+          responses: { '201': { description: 'Assessment created' } },
+        },
+      },
+      '/medications/patients/{patientId}/medications': {
+        get: {
+          tags: ['Medications'], summary: 'List patient medications', operationId: 'listMedications',
+          parameters: [{ name: 'patientId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+          responses: { '200': { description: 'Medication list' } },
+        },
+      },
+      '/medications': {
+        post: {
+          tags: ['Medications'], summary: 'Prescribe medication', operationId: 'prescribeMedication',
+          requestBody: { content: { 'application/json': { schema: { $ref: '#/components/schemas/Medication' } } } },
+          responses: { '201': { description: 'Medication prescribed' } },
+        },
+      },
+      '/patients/{patientId}/risk-assessments': {
+        get: {
+          tags: ['Risk & Safety'], summary: 'List risk assessments', operationId: 'listRiskAssessments',
+          parameters: [{ name: 'patientId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+          responses: { '200': { description: 'Risk assessment list' } },
+        },
+      },
+      '/risk-assessments': {
+        post: {
+          tags: ['Risk & Safety'], summary: 'Create risk assessment', operationId: 'createRiskAssessment',
+          requestBody: { content: { 'application/json': { schema: { $ref: '#/components/schemas/RiskAssessment' } } } },
+          responses: { '201': { description: 'Risk assessment created' } },
+        },
+      },
+      '/appointments': {
+        get: {
+          tags: ['Appointments'], summary: 'List appointments', operationId: 'listAppointments',
+          parameters: [{ name: 'date', in: 'query', schema: { type: 'string', format: 'date' } }],
+          responses: { '200': { description: 'Appointment list' } },
+        },
+        post: {
+          tags: ['Appointments'], summary: 'Book appointment', operationId: 'createAppointment',
+          requestBody: { content: { 'application/json': { schema: { $ref: '#/components/schemas/Appointment' } } } },
+          responses: { '201': { description: 'Appointment booked' }, '409': { description: 'Clinician already booked' } },
+        },
+      },
+      '/tasks': {
+        get: { tags: ['Tasks'], summary: 'List tasks', operationId: 'listTasks', responses: { '200': { description: 'Task list' } } },
+        post: {
+          tags: ['Tasks'], summary: 'Create task', operationId: 'createTask',
+          requestBody: { content: { 'application/json': { schema: { $ref: '#/components/schemas/Task' } } } },
+          responses: { '201': { description: 'Task created' } },
+        },
+      },
+      '/fhir/metadata': {
+        get: {
+          tags: ['FHIR'], summary: 'FHIR CapabilityStatement (public)', operationId: 'fhirMetadata',
+          security: [],
+          responses: { '200': { description: 'FHIR R4 CapabilityStatement', content: { 'application/json': { schema: { $ref: '#/components/schemas/FHIRCapabilityStatement' } } } } },
+        },
+      },
+      '/fhir/Patient': {
+        get: {
+          tags: ['FHIR'], summary: 'Search FHIR Patients', operationId: 'fhirSearchPatients',
+          parameters: [{ name: 'family', in: 'query', schema: { type: 'string' } }, { name: 'given', in: 'query', schema: { type: 'string' } }],
+          responses: { '200': { description: 'FHIR Bundle' } },
+        },
+        post: {
+          tags: ['FHIR'], summary: 'Create FHIR Patient', operationId: 'fhirCreatePatient',
+          requestBody: { content: { 'application/json': { schema: { type: 'object' } } } },
+          responses: { '201': { description: 'FHIR Patient created' } },
+        },
+      },
+      '/fhir/$export': {
+        get: {
+          tags: ['FHIR'], summary: 'Bulk FHIR export (NDJSON)', operationId: 'fhirBulkExport',
+          parameters: [{ name: '_type', in: 'query', schema: { type: 'string', default: 'Patient' } }],
+          responses: { '200': { description: 'NDJSON stream', content: { 'application/fhir+ndjson': { schema: { type: 'string' } } } } },
+        },
+      },
+      '/privacy/patient/{patientId}/export': {
+        get: {
+          tags: ['Privacy'], summary: 'Export all patient data (portability)', operationId: 'exportPatientData',
+          parameters: [{ name: 'patientId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+          responses: { '200': { description: 'Complete patient data export' } },
+        },
+      },
+    },
+  },
+  apis: [], // We define paths inline above instead of scanning files
+};
+
+export const swaggerSpec = swaggerJsdoc(options);

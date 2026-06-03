@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "targets": [
+    {
+      "id": "appointments-booked",
+      "file": "apps/api/src/features/appointments/appointmentLifecycleSupport.ts",
+      "requiredPatterns": [
+        "emitClinicalSignal\\(",
+        "signalKey:\\s*'appointment-booked'"
+      ]
+    },
+    {
+      "id": "referrals-offer",
+      "file": "apps/api/src/features/referrals/strategies/teamStrategy.ts",
+      "requiredPatterns": [
+        "emitClinicalSignal\\(",
+        "signalKey:\\s*'referral-offer'"
+      ]
+    },
+    {
+      "id": "messaging-new-message",
+      "file": "apps/api/src/features/messaging/messageRepository.ts",
+      "requiredPatterns": [
+        "emitClinicalSignal\\(",
+        "signalKey:\\s*'new-message'"
+      ]
+    },
+    {
+      "id": "outcomes-risk-trigger",
+      "file": "apps/api/src/features/outcomes/outcomeRoutes.ts",
+      "requiredPatterns": [
+        "emitClinicalSignal\\(",
+        "signalKey:\\s*'outcome_phq9_suicide_risk'"
+      ]
+    },
+    {
+      "id": "patient-app-risk-trigger",
+      "file": "apps/api/src/features/patient-app/patientAppRoutes.internal.ts",
+      "requiredPatterns": [
+        "emitClinicalSignal\\(",
+        "signalKey:\\s*'patient_app_phq9_suicide_risk'"
+      ]
+    },
+    {
+      "id": "prescription-dispense",
+      "file": "apps/api/src/features/prescriptions/prescriptionService.ts",
+      "requiredPatterns": [
+        "emitClinicalSignal\\(",
+        "signalKey:\\s*'prescription_dispensed'"
+      ]
+    },
+    {
+      "id": "scheduler-adapter",
+      "file": "apps/api/src/jobs/schedulers/schedulerSignalEmitter.ts",
+      "requiredPatterns": [
+        "emitClinicalSignal\\(",
+        "conn:\\s*dbAdmin"
+      ]
+    },
+    {
+      "id": "integration-drift-signal",
+      "file": "apps/api/src/shared/perClinicIntegrationConfigDrift.ts",
+      "requiredPatterns": [
+        "emitClinicalSignal\\(",
+        "signalKey:\\s*'integration-config-drift'"
+      ]
+    }
+  ]
+}

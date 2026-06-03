@@ -1,0 +1,145 @@
+=== Q1: patient detail lookup (hot path)
+                                                  QUERY PLAN                                                  
+--------------------------------------------------------------------------------------------------------------
+ Limit  (cost=0.00..0.16 rows=1 width=7661) (actual time=0.022..0.023 rows=1 loops=1)
+   Buffers: shared hit=2
+   ->  Seq Scan on patients  (cost=0.00..77.57 rows=486 width=7661) (actual time=0.017..0.017 rows=1 loops=1)
+         Filter: (deleted_at IS NULL)
+         Buffers: shared hit=2
+ Planning:
+   Buffers: shared hit=532
+ Planning Time: 4.208 ms
+ Execution Time: 0.100 ms
+(9 rows)
+
+=== Q2: clinical_notes by patient (hot path)
+                                                          QUERY PLAN                                                           
+-------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=251.08..251.13 rows=20 width=1124) (actual time=1.900..1.903 rows=20 loops=1)
+   Buffers: shared hit=188
+   ->  Sort  (cost=251.08..255.59 rows=1805 width=1124) (actual time=1.900..1.901 rows=20 loops=1)
+         Sort Key: created_at DESC
+         Sort Method: top-N heapsort  Memory: 53kB
+         Buffers: shared hit=188
+         ->  Seq Scan on clinical_notes  (cost=0.00..203.05 rows=1805 width=1124) (actual time=0.015..1.385 rows=1843 loops=1)
+               Filter: (deleted_at IS NULL)
+               Buffers: shared hit=185
+ Planning:
+   Buffers: shared hit=388
+ Planning Time: 2.740 ms
+ Execution Time: 1.930 ms
+(13 rows)
+
+=== Q3: audit_log recent by clinic (partition-pressure candidate)
+                                                         QUERY PLAN                                                          
+-----------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=1736.38..1736.63 rows=100 width=2328) (actual time=9.577..9.589 rows=100 loops=1)
+   Buffers: shared hit=887
+   ->  Sort  (cost=1736.38..1780.42 rows=17615 width=2328) (actual time=9.576..9.582 rows=100 loops=1)
+         Sort Key: created_at DESC
+         Sort Method: top-N heapsort  Memory: 155kB
+         Buffers: shared hit=887
+         ->  Seq Scan on audit_log  (cost=0.00..1063.15 rows=17615 width=2328) (actual time=0.009..5.993 rows=17925 loops=1)
+               Buffers: shared hit=887
+ Planning:
+   Buffers: shared hit=176
+ Planning Time: 1.730 ms
+ Execution Time: 9.607 ms
+(12 rows)
+
+=== Q4: patient_medications for a patient (prescription-list hot path)
+                                                           QUERY PLAN                                                           
+--------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=25.52..25.65 rows=50 width=639) (actual time=0.179..0.184 rows=50 loops=1)
+   Buffers: shared hit=11
+   ->  Sort  (cost=25.52..26.36 rows=336 width=639) (actual time=0.179..0.181 rows=50 loops=1)
+         Sort Key: created_at DESC
+         Sort Method: top-N heapsort  Memory: 59kB
+         Buffers: shared hit=11
+         ->  Seq Scan on patient_medications  (cost=0.00..14.36 rows=336 width=639) (actual time=0.007..0.108 rows=336 loops=1)
+               Filter: (deleted_at IS NULL)
+               Buffers: shared hit=11
+ Planning:
+   Buffers: shared hit=271
+ Planning Time: 1.698 ms
+ Execution Time: 0.196 ms
+(13 rows)
+
+=== Q5: appointments in a date range (calendar-view hot path)
+                                                    QUERY PLAN                                                     
+-------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=0.00..1.00 rows=1 width=3993) (actual time=0.007..0.008 rows=0 loops=1)
+   Buffers: shared hit=1
+   ->  Seq Scan on appointments  (cost=0.00..1.00 rows=1 width=3993) (actual time=0.007..0.007 rows=0 loops=1)
+         Filter: ((start_time >= (now() - '30 days'::interval)) AND (start_time <= (now() + '30 days'::interval)))
+         Buffers: shared hit=1
+ Planning:
+   Buffers: shared hit=313
+ Planning Time: 1.716 ms
+ Execution Time: 0.019 ms
+(9 rows)
+
+=== Q6: pathology_orders by status
+                                                                       QUERY PLAN                                                                       
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=0.14..4.16 rows=1 width=346) (actual time=0.062..0.062 rows=0 loops=1)
+   Buffers: shared hit=6 dirtied=2
+   ->  Index Scan using pathology_orders_status_index on pathology_orders  (cost=0.14..4.16 rows=1 width=346) (actual time=0.062..0.062 rows=0 loops=1)
+         Index Cond: ((status)::text = 'sent'::text)
+         Buffers: shared hit=6 dirtied=2
+ Planning:
+   Buffers: shared hit=202
+ Planning Time: 1.193 ms
+ Execution Time: 0.072 ms
+(9 rows)
+
+=== Q7: sessions lookup for active sessions (auth hot path)
+                                                      QUERY PLAN                                                      
+----------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=0.00..371.77 rows=100 width=536) (actual time=0.009..2.394 rows=100 loops=1)
+   Buffers: shared hit=354
+   ->  Seq Scan on staff_sessions  (cost=0.00..420.10 rows=113 width=536) (actual time=0.009..2.389 rows=100 loops=1)
+         Filter: (revoked_at IS NULL)
+         Rows Removed by Filter: 5675
+         Buffers: shared hit=354
+ Planning:
+   Buffers: shared hit=108
+ Planning Time: 0.903 ms
+ Execution Time: 2.402 ms
+(10 rows)
+
+=== Q8: llm_interactions recent (AI audit)
+                                                          QUERY PLAN                                                          
+------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=62.68..62.81 rows=50 width=1421) (actual time=0.365..0.368 rows=50 loops=1)
+   Buffers: shared hit=24 dirtied=2
+   ->  Sort  (cost=62.68..64.92 rows=895 width=1421) (actual time=0.364..0.366 rows=50 loops=1)
+         Sort Key: created_at DESC
+         Sort Method: top-N heapsort  Memory: 52kB
+         Buffers: shared hit=24 dirtied=2
+         ->  Seq Scan on llm_interactions  (cost=0.00..32.95 rows=895 width=1421) (actual time=0.005..0.154 rows=874 loops=1)
+               Buffers: shared hit=24 dirtied=2
+ Planning:
+   Buffers: shared hit=191
+ Planning Time: 3.296 ms
+ Execution Time: 0.380 ms
+(12 rows)
+
+=== Q9: patient_alerts active
+                                                   QUERY PLAN                                                    
+-----------------------------------------------------------------------------------------------------------------
+ Limit  (cost=0.00..11.00 rows=1 width=764) (actual time=0.015..0.016 rows=2 loops=1)
+   Buffers: shared hit=1 dirtied=1
+   ->  Seq Scan on patient_alerts  (cost=0.00..11.00 rows=1 width=764) (actual time=0.015..0.016 rows=2 loops=1)
+         Filter: (resolved_at IS NULL)
+         Buffers: shared hit=1 dirtied=1
+ Planning:
+   Buffers: shared hit=119
+ Planning Time: 0.892 ms
+ Execution Time: 0.019 ms
+(9 rows)
+
+=== Q10: index size audit (where planner could use indexes)
+psql:/tmp/query-plans-probe.sql:29: ERROR:  column "tablename" does not exist
+LINE 1: SELECT schemaname, tablename, indexname, idx_scan, idx_tup_r...
+                           ^

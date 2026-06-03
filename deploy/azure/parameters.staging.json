@@ -1,0 +1,15 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "namePrefix":            { "value": "signacare" },
+    "environment":           { "value": "staging" },
+    "location":              { "value": "australiaeast" },
+    "appServicePlanSku":     { "value": "S1" },
+    "postgresSku":           { "value": "Standard_D2ds_v4" },
+    "redisSku":              { "value": "Standard" },
+    "postgresHaMode":        { "value": "Disabled" },
+    "customDomain":          { "value": "" },
+    "keyVaultAdminObjectId": { "value": "2d4d774e-4e3d-461d-9c5d-ac7e3be03cc3" }
+  }
+}

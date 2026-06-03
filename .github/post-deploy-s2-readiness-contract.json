@@ -1,0 +1,63 @@
+{
+  "version": 1,
+  "targets": [
+    {
+      "id": "shared-post-deploy-hardening-schemas",
+      "file": "packages/shared/src/postDeployHardening.schemas.ts",
+      "requiredPatterns": [
+        "ClinicalIntelligenceCalibrationSignalSchema",
+        "ScribeReadabilitySignalSchema",
+        "AlertCalibrationFeedbackSignalSchema",
+        "ScribeSpeakerAttributionContractSchema"
+      ]
+    },
+    {
+      "id": "shared-feature-flags-for-deferred-ga",
+      "file": "packages/shared/src/featureFlag.constants.ts",
+      "requiredPatterns": [
+        "SCRIBE_MULTISPEAKER_MDT_GA_FLAG",
+        "AI_EDIT_TRACKING_FLAG"
+      ]
+    },
+    {
+      "id": "api-post-deploy-telemetry-helper",
+      "file": "apps/api/src/shared/postDeployTelemetry.ts",
+      "requiredPatterns": [
+        "recordClinicalIntelligenceSummarySignal",
+        "recordScribeReadabilitySignal",
+        "recordAlertCalibrationFeedback",
+        "toDiagnosisProgramBucket",
+        "toServiceProgramBucket"
+      ]
+    },
+    {
+      "id": "patient-summary-calibration-context",
+      "file": "apps/api/src/features/patients/patientRoutes.ts",
+      "requiredPatterns": [
+        "recordClinicalIntelligenceSummarySignal\\(",
+        "calibrationContext",
+        "toDiagnosisProgramBucket\\(",
+        "toServiceProgramBucket\\("
+      ]
+    },
+    {
+      "id": "llm-alert-feedback-and-multispeaker-gate",
+      "file": "apps/api/src/features/llm/llmRoutes.ts",
+      "requiredPatterns": [
+        "/telemetry/alert-feedback",
+        "recordAlertCalibrationFeedback\\(",
+        "multiSpeakerMode",
+        "SCRIBE_MULTISPEAKER_MDT_GA_FLAG",
+        "isFeatureEnabled\\("
+      ]
+    },
+    {
+      "id": "scribe-summary-readability-signal",
+      "file": "apps/api/src/features/llm/scribeRoutes.ts",
+      "requiredPatterns": [
+        "recordScribeReadabilitySignal\\(",
+        "feature: 'scribe-patient-summary'"
+      ]
+    }
+  ]
+}

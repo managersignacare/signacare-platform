@@ -1,0 +1,98 @@
+# scripts/guards/check-no-band-aid-annotations.allowlist
+#
+# Phase 0a.9 — companion guard to gold-standard-enforcer.
+#
+# Format (one entry per line):
+#   <fingerprint>  # <description> | <annotation>
+#
+# Separator is "  # " (double-space-hash-space) since fingerprints may contain `#`.
+#
+# Annotation MUST be one of:
+#   | expires: YYYY-MM-DD (cascade: BUG-XXX)
+#   | permanent: <reason>
+#
+# Per Phase 0a.7 expiry retrofit policy + `feedback_no_silent_out_of_scope.md`.
+#
+# Expiry-policy: per-entry (Phase 0a.7 retrofit)
+# Each non-comment line carries an `| expires: <YYYY-MM-DD> (cascade: <BUG>)`
+# OR `| permanent: <reason>` annotation. Entries past their expiry date
+# fail the merge gate via `scripts/guards/check-allowlist-expiry.ts`.
+# Renewal: when a target close-by date passes, EITHER drain the entry
+# (preferred) OR explicitly extend the date with operator authorization.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# Categories of legitimate exemptions:
+#
+# 1. doc-meta-self-referential — the file DOCUMENTS the band-aid rule (e.g.
+#    CLAUDE.md describing what a guard's scope IS NOT, fix-build-rules.md
+#    section heading naming the rule). The text is a META description of
+#    the pattern, not a violation. permanent.
+#
+# 2. doc-meta-historical — fix-registry rows pinning historical fix patterns
+#    where "Out of scope" was the trigger string the fix is anchored on.
+#    permanent (the fix stays anchored even though the registry row mentions
+#    the pattern).
+#
+# 3. doc-meta-cascade-row — bugs-remaining.md cascade-drain rows that
+#    LITERALLY DESCRIBE the cascade (out of scope of original PR but tracked
+#    via cascade BUG-XXX-CASCADE-DRAIN-N row). The cascade BUG row IS the
+#    follow-up citation; the row text describing it gets the permanent
+#    annotation here. permanent.
+#
+# 4. doc-meta-template-language — DoD template + verification procedure
+#    docs that describe legitimate transient states (e.g. "complete-but-
+#    unpushed" is a legitimate intermediate state, not a band-aid).
+#    permanent.
+#
+# 5. doc-meta-plan-scope-section — plan files documenting their own scope
+#    boundary in an "Out of scope" section header. Per
+#    `feedback_no_silent_out_of_scope.md`, legitimate scope documentation
+#    IS allowed; what's prohibited is hiding work behind the fence WITHOUT
+#    documenting what the work IS or why it's out. Each plan file's section
+#    body enumerates concrete BUG-XXX rows for each out-of-scope item.
+#    permanent. Added Phase 0a.9 cycle-2 absorb after extending SCAN_GLOBS
+#    to docs/plans/.
+#
+# Baseline as of Phase 0a.9 cycle-2 absorb — 14 entries total across 5
+# categories (10 cycle-1: 4 doc-meta-self-referential + 2 doc-meta-historical
+# + 2 doc-meta-cascade-row + 2 doc-meta-template-language; 4 cycle-2:
+# doc-meta-plan-scope-section). NEW violations cannot regress without
+# explicit allowlist addition with structural rationale.
+# ─────────────────────────────────────────────────────────────────────────────
+
+docs/quality/bug-447-child-template.md::# Temporarily remove target from allowlist  # bug-447 verification step | permanent: doc-meta-template-language — describes verification procedure step (operator removes from allowlist, runs guard, sees fire, restores). Not a deferral.
+
+docs/quality/bugs-remaining.md::| BUG-PR-R1-24-CASCADE-DRAIN-TIMER-TRY-CATCH | S2 | (PR-R1-24 implementation cascade; surfaced 2026-05-01; preventive — baseline is 0 violations) UMBRELLA CASCADE (currently EMPTY): both known async t  # cascade row text | permanent: doc-meta-cascade-row — the row IS the cascade BUG citation; "out of scope" inside the row text is descriptive metadata.
+
+docs/quality/bugs-remaining.md::| BUG-PR-R1-14-CASCADE-DRAIN-SOFT-DELETE | **S1** | (PR-R1-14 implementation cascade; surfaced 2026-05-01) UMBRELLA CASCADE: 154 pre-existing SELECT chains in `apps/api/src/{features,mcp,integrations,  # cascade row text | permanent: doc-meta-cascade-row — the row IS the cascade BUG citation; "out of scope" inside the row text is descriptive metadata.
+
+docs/quality/deliverable-dod-template.md::If push auth is NOT given, the DoD line is unchecked → deliverable is "complete-but-unpushed". Acceptable interim state. Push happens AFTER auth received.  # DoD template language | permanent: doc-meta-template-language — DoD template documents a legitimate transient state (complete-but-unpushed), not a band-aid deferral.
+
+docs/quality/fix-build-rules.md::## 3. No silent deferral — no "Out of scope" fence  # rule heading | permanent: doc-meta-self-referential — section heading naming the rule itself; the file IS the canonical statement of the rule, not a violation.
+
+docs/quality/fix-build-rules.md::Plans must not hide legitimate future work behind an "Out of scope" section. If an item is real work that will eventually need doing, it belongs in the execution sequence as an explicit step — even if  # rule statement | permanent: doc-meta-self-referential — text states the rule prohibiting "Out of scope" sections; the file IS the canonical statement of the rule, not a violation.
+
+docs/quality/fix-registry.md::| QKEY-GUARD-SHARED-SCOPE | .github/scripts/check-query-key-factories.sh | present | `SHARED_DIR="apps/web/src/shared"` | Audit M3 (2026-04-16): the Phase 0.7 PR2 query-key-factory CI guard previously  # historical fix anchor | permanent: doc-meta-historical — fix-registry row pinning a historical fix; "out of scope" appears inside the rationale describing what the fix DID (closed an out-of-scope gap), not a current deferral.
+
+docs/quality/fix-registry.md::| R-FIX-PHASE-R1-PR5-CYCLE2-SCOPE-DOC | scripts/guards/check-trx-not-db-inside-transaction.ts | present | `Out of scope` | Phase R1 PR-R1-5 cycle-2 absorb (L3 finding #4 P1). Cycle-1 guard header didn  # historical fix anchor | permanent: doc-meta-historical — fix-registry row anchors on the literal "Out of scope" string inside the guard's header (intentional documentation of what the guard does NOT cover); the registry row mentioning the anchor target is not a deferral.
+
+CLAUDE.md::- **Phase R1 PR-R1-14** `check-soft-delete-filter.ts` catches the FALSE-ABSENCE half — SELECT chains on the 61 tables WITH `deleted_at` that lack `.whereNull('deleted_at')` / `.whereRaw('deleted_at IS  # guard scope description | permanent: doc-meta-self-referential — CLAUDE.md describes what a guard's scope IS NOT (UPDATE/DELETE/INSERT chains "out of scope" for this guard); documenting guard scope is not a deferral.
+
+CLAUDE.md::**Out of scope (intentional, documented in the guard's header):**  # guard scope heading | permanent: doc-meta-self-referential — CLAUDE.md heading describing intentional scope boundary of a guard; documenting guard scope is not a deferral.
+
+# ─── Plan-file scope-section headings (Phase 0a.9 cycle-2 absorb after extending SCAN_GLOBS to docs/plans/) ───
+# Each plan file legitimately documents its own scope boundary in a "Out of scope" section.
+# This is doc-meta-plan-scope-section: the section IS the scope-boundary statement for that plan,
+# not a band-aid deferral of work. Per `feedback_no_silent_out_of_scope.md`: legitimate scope
+# documentation IS allowed; what's prohibited is hiding work behind the fence WITHOUT documenting
+# what the work IS or why it's out. Scope-section headings without follow-up BUG citations get
+# permanent annotation only if the BODY of the section enumerates concrete BUG-XXX rows for each
+# out-of-scope item (which these 4 plans do — verified by reading the section bodies).
+
+docs/plans/azure-staging-deployment.md::## 6. Out of scope for this plan  # plan scope-section heading | permanent: doc-meta-plan-scope-section — plan documents its own scope boundary; section body enumerates concrete BUGs/items per `feedback_no_silent_out_of_scope.md` requirement.
+
+docs/plans/bug-187-264-366b-db-pool-timeouts.md::## 6. Out of scope  # plan scope-section heading | permanent: doc-meta-plan-scope-section — plan documents its own scope boundary; section body enumerates concrete BUGs/items per `feedback_no_silent_out_of_scope.md` requirement.
+
+docs/plans/bug-262-oru-r01-ingestion.md::## Out of scope for this commit (explicit, with location)  # plan scope-section heading | permanent: doc-meta-plan-scope-section — plan documents its own scope boundary; section body enumerates concrete BUGs/items per `feedback_no_silent_out_of_scope.md` requirement.
+
+docs/plans/master-plan-20260418.md::## §6. What's explicitly out of scope for this plan  # plan scope-section heading | permanent: doc-meta-plan-scope-section — plan documents its own scope boundary; section body enumerates concrete BUGs/items per `feedback_no_silent_out_of_scope.md` requirement.

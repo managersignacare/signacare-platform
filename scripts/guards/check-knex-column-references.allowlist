@@ -1,0 +1,25 @@
+# Allowlist for check-knex-column-references.ts (PR-R1-13)
+#
+# Format (fingerprint, line-shift-resilient):
+#   <file> <8-hex-fingerprint>  # <preview> | BUG-XXX — <reason>
+#
+# Each entry grants amnesty for the specific line-content fingerprint.
+# Multiplicity-aware: N entries with the same fingerprint allow up to N
+# occurrences of that line in the file. Adding an N+1th identical line
+# causes the guard to FAIL (over-count rejection per PR-R1-1.5 cycle-2).
+#
+# To add a new entry: run scripts/guards/lib/seed-knex-column-references-allowlist.ts
+# (or compute fingerprint manually: sha256(trimmed-line-content) → first 8 hex chars).
+#
+# To remove an entry: delete the line; the guard will then enforce on that file.
+#
+# Cascade-tracking: every entry should cite a BUG-ID so the drain plan is
+# visible. Phase R3 baseline drain tracked under BUG-NEW-S1-CASCADE-DRAIN-KNEX-COLUMN-REFS.
+# Expiry-policy: per-entry (added 2026-05-03 cycle Phase 0a.7)
+# Each non-comment line carries an `| expires: <YYYY-MM-DD> (cascade: <BUG>)`
+# OR `| permanent: <reason>` annotation. Entries past their expiry date
+# fail the merge gate via `scripts/guards/check-allowlist-expiry.ts`.
+# Renewal: when a target close-by date passes, EITHER drain the entry
+# (preferred) OR explicitly extend the date with operator authorization.
+apps/api/src/mcp/server/mcpServer.ts b7f4f4a5  # BUG-PR-R1-13-FOLLOWUP-CLONE-CHAIN-FP — confirmed guard FALSE POSITIVE: q is correctly bound to risk_assessments (which HAS overall_risk_level) at line 506 const q = db('risk_assessments')... but the variable-binding tracker is misled by the q.whereIn('patient_id', db('episodes')...) subquery on line 507 and resolves the .select() at line 509 against episodes (which lacks the column). Code is CORRECT; cycle-3 absorb planned to teach the resolver about .clone() semantics. | expires: 2026-12-31 (cascade: BUG-PR-R1-13-FOLLOWUP-CLONE-CHAIN-FP)
+

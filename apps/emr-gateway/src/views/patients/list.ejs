@@ -1,0 +1,69 @@
+<% const body = ` %>
+<div class="mb-6 flex items-center justify-between flex-wrap gap-3">
+  <h2 class="text-xl font-bold text-gray-800">Patients</h2>
+  <form method="get" class="flex gap-2">
+    <input type="hidden" name="apiKey" value="<%= apiKey %>">
+    <input type="text" name="search" value="<%= search ?? '' %>" placeholder="Search name, phone, email..."
+      class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm w-64 focus:outline-none focus:border-orange-400">
+    <button type="submit" class="bg-orange-500 text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-orange-600">Search</button>
+  </form>
+</div>
+
+<div class="overflow-x-auto rounded-lg border border-gray-200">
+  <table class="w-full text-sm">
+    <thead class="bg-gray-50">
+      <tr>
+        <th class="text-left px-4 py-2 font-semibold text-gray-600">Name</th>
+        <th class="text-left px-4 py-2 font-semibold text-gray-600">DOB</th>
+        <th class="text-left px-4 py-2 font-semibold text-gray-600">Age</th>
+        <th class="text-left px-4 py-2 font-semibold text-gray-600">Gender</th>
+        <th class="text-left px-4 py-2 font-semibold text-gray-600">Phone</th>
+        <th class="text-left px-4 py-2 font-semibold text-gray-600">Doctor</th>
+        <th class="text-left px-4 py-2 font-semibold text-gray-600">Team</th>
+        <th class="text-left px-4 py-2 font-semibold text-gray-600">Campaign</th>
+        <th class="text-left px-4 py-2 font-semibold text-gray-600"></th>
+      </tr>
+    </thead>
+    <tbody>
+      <% if (patients.length === 0) { %>
+        <tr><td colspan="9" class="text-center py-8 text-gray-400">No patients found</td></tr>
+      <% } %>
+      <% patients.forEach(function(p) { %>
+        <% const dob = p.dateOfBirth ? new Date(p.dateOfBirth).toLocaleDateString('en-AU') : '—'; %>
+        <% const age = p.dateOfBirth ? Math.floor((Date.now() - new Date(p.dateOfBirth).getTime()) / 31557600000) : p.age ?? '—'; %>
+        <% const phone = p.phone ? (p.phone.countryCode ?? '') + ' ' + (p.phone.number ?? '') : '—'; %>
+        <% const status = p.campaignDetails?.status ?? 'none'; %>
+        <% const statusClass = status === 'active' ? 'badge-green' : status === 'paused' ? 'badge-yellow' : status === 'ended' || status === 'completed' ? 'badge-red' : 'badge-grey'; %>
+        <tr class="border-t border-gray-100 hover:bg-gray-50">
+          <td class="px-4 py-2 font-medium"><%= p.firstName %> <%= p.lastName %></td>
+          <td class="px-4 py-2 text-gray-500"><%= dob %></td>
+          <td class="px-4 py-2"><%= age %></td>
+          <td class="px-4 py-2 capitalize"><%= p.gender ?? '—' %></td>
+          <td class="px-4 py-2 text-gray-500"><%= phone.trim() || '—' %></td>
+          <td class="px-4 py-2"><%= p.assignedDoctorName ?? '—' %></td>
+          <td class="px-4 py-2"><%= p.teamName ?? '—' %></td>
+          <td class="px-4 py-2"><span class="badge <%= statusClass %>"><%= status %></span></td>
+          <td class="px-4 py-2">
+            <a href="/emr/view/patients/<%= p._id %>?apiKey=<%= apiKey %>" class="text-orange-500 hover:underline text-xs font-medium">View</a>
+          </td>
+        </tr>
+      <% }); %>
+    </tbody>
+  </table>
+</div>
+
+<% if (meta) { %>
+  <div class="flex items-center justify-between mt-4 text-sm text-gray-500">
+    <span>Showing page <%= meta.page %> of <%= meta.totalPages %> (<%= meta.totalRecords %> patients)</span>
+    <div class="flex gap-2">
+      <% if (meta.hasPrevPage) { %>
+        <a href="?apiKey=<%= apiKey %>&page=<%= meta.page - 1 %>&search=<%= search ?? '' %>" class="border px-3 py-1 rounded hover:bg-gray-50">Previous</a>
+      <% } %>
+      <% if (meta.hasNextPage) { %>
+        <a href="?apiKey=<%= apiKey %>&page=<%= meta.page + 1 %>&search=<%= search ?? '' %>" class="border px-3 py-1 rounded hover:bg-gray-50">Next</a>
+      <% } %>
+    </div>
+  </div>
+<% } %>
+<% `; %>
+<%- include('../layout', { title: 'Patients — Zitavi', body, apiKey }) %>

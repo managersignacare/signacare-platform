@@ -1,0 +1,28 @@
+// AUTO-GENERATED scaffold by scripts/generate-types-from-migrations.ts
+// DO NOT EDIT MANUALLY. Hand-written Response must `extends` this
+// scaffold's Zod schema OR carry a `// @scaffold-divergence: <reason>`
+// annotation. The scaffold-extension guard (Phase 0b.1b) enforces this.
+
+import { z } from 'zod';
+
+export const ClinicSettingsResponseScaffoldSchema = z.object({
+  clinicId: z.string().uuid(),
+  scribeConsentMode: z.string(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+  aiChatClassifierMode: z.string(),
+  scribeAudioRetention: z.string(),
+  sharepointSiteId: z.string().max(255).nullable().optional(),
+  letterheadHtml: z.string().nullable().optional(),
+  letterheadLogoUrl: z.string().max(500).nullable().optional(),
+  defaultLetterLanguage: z.string().max(5),
+  defaultGuidelines: z.unknown().nullable().optional(),
+  trainingOptIn: z.boolean(),
+  trainingOptInChangedBy: z.string().max(100).nullable().optional(),
+  trainingOptInChangedAt: z.string().datetime().nullable().optional(),
+  emailSenderMode: z.string(),
+  clinicSenderEmail: z.string().max(255).nullable().optional(),
+  clinicSenderName: z.string().max(120).nullable().optional(),
+});
+
+export type ClinicSettingsResponseScaffold = z.infer<typeof ClinicSettingsResponseScaffoldSchema>;

@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en-AU">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/signacare-logo.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <!-- S7.3 — PWA metadata for the Mobile Scribe (/m/scribe).
+         Installing the PWA on a phone gives the clinician a home-screen
+         launcher that opens straight to the scribe, with no browser
+         chrome eating vertical space. scope=/m/ limits the installed
+         app to the mobile routes — clinicians who tap a regular
+         signacare.io link still open it in a normal browser tab. -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Scribe" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="theme-color" content="#3D484B" />
+    <!-- Local font bundle is the runtime source of truth in all profiles.
+         It now includes CJK (SC/JP/KR) in addition to Latin/Greek/Cyrillic,
+         Arabic, Indic, Hebrew, and Thai, so the app has no Google Fonts
+         runtime dependency. Keep this in sync with FONT_STACKS in
+         apps/web/src/shared/theme/palettes.ts (guard:font-coverage). -->
+    <link rel="stylesheet" href="/fonts.css" />
+    <title>Signacare</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

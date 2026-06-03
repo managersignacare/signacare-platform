@@ -1,0 +1,7 @@
+# Dart API URL allowlist
+#
+# Format:
+#   <METHOD> <url>
+#   <url>
+#
+# Keep this empty by default; every entry must have a rationale in review.

@@ -1,0 +1,167 @@
+{
+  "version": 1,
+  "generatedAt": "2026-05-11",
+  "sourceCommand": "npx playwright test --project=chromium e2e/accessibility/ --reporter=line",
+  "entries": [
+    {
+      "surface": "/login",
+      "impact": "serious",
+      "ruleId": "color-contrast",
+      "bugId": "BUG-450",
+      "expiresOn": "2026-06-30",
+      "reason": "Known WCAG contrast debt while C3-1 gate truthfulness is enforced."
+    },
+    {
+      "surface": "/patients",
+      "impact": "serious",
+      "ruleId": "aria-input-field-name",
+      "bugId": "BUG-450",
+      "expiresOn": "2026-06-30",
+      "reason": "Known patient-list ARIA naming debt tracked under live a11y gate rollout."
+    },
+    {
+      "surface": "/patients",
+      "impact": "serious",
+      "ruleId": "color-contrast",
+      "bugId": "BUG-450",
+      "expiresOn": "2026-06-30",
+      "reason": "Known patient-list WCAG contrast debt tracked under live a11y gate rollout."
+    },
+    {
+      "surface": "/patients",
+      "impact": "serious",
+      "ruleId": "list",
+      "bugId": "BUG-450",
+      "expiresOn": "2026-06-30",
+      "reason": "Known patient-list semantic list-structure debt tracked under live a11y gate rollout."
+    },
+    {
+      "surface": "/dashboard",
+      "impact": "serious",
+      "ruleId": "aria-input-field-name",
+      "bugId": "BUG-450",
+      "expiresOn": "2026-06-30",
+      "reason": "Known dashboard ARIA naming debt tracked under live a11y gate rollout."
+    },
+    {
+      "surface": "/dashboard",
+      "impact": "serious",
+      "ruleId": "color-contrast",
+      "bugId": "BUG-450",
+      "expiresOn": "2026-06-30",
+      "reason": "Known dashboard WCAG contrast debt tracked under live a11y gate rollout."
+    },
+    {
+      "surface": "/dashboard",
+      "impact": "serious",
+      "ruleId": "list",
+      "bugId": "BUG-450",
+      "expiresOn": "2026-06-30",
+      "reason": "Known dashboard semantic list-structure debt tracked under live a11y gate rollout."
+    },
+    {
+      "surface": "/handover",
+      "impact": "serious",
+      "ruleId": "color-contrast",
+      "bugId": "BUG-450",
+      "expiresOn": "2026-06-30",
+      "reason": "Known handover WCAG contrast debt tracked under live a11y gate rollout."
+    },
+    {
+      "surface": "/handover",
+      "impact": "serious",
+      "ruleId": "list",
+      "bugId": "BUG-450",
+      "expiresOn": "2026-06-30",
+      "reason": "Known handover semantic list-structure debt tracked under live a11y gate rollout."
+    },
+    {
+      "surface": "/reports",
+      "impact": "serious",
+      "ruleId": "aria-input-field-name",
+      "bugId": "BUG-450",
+      "expiresOn": "2026-06-30",
+      "reason": "Known reports ARIA naming debt tracked under live a11y gate rollout."
+    },
+    {
+      "surface": "/reports",
+      "impact": "serious",
+      "ruleId": "color-contrast",
+      "bugId": "BUG-450",
+      "expiresOn": "2026-06-30",
+      "reason": "Known reports WCAG contrast debt tracked under live a11y gate rollout."
+    },
+    {
+      "surface": "/reports",
+      "impact": "serious",
+      "ruleId": "list",
+      "bugId": "BUG-450",
+      "expiresOn": "2026-06-30",
+      "reason": "Known reports semantic list-structure debt tracked under live a11y gate rollout."
+    },
+    {
+      "surface": "/patients/:id (Summary)",
+      "impact": "serious",
+      "ruleId": "color-contrast",
+      "bugId": "BUG-450",
+      "expiresOn": "2026-06-30",
+      "reason": "Known patient-detail summary WCAG contrast debt tracked under live a11y gate rollout."
+    },
+    {
+      "surface": "/patients/:id (Summary)",
+      "impact": "serious",
+      "ruleId": "list",
+      "bugId": "BUG-450",
+      "expiresOn": "2026-06-30",
+      "reason": "Known patient-detail summary semantic list-structure debt tracked under live a11y gate rollout."
+    },
+    {
+      "surface": "/patients/:id (Information Exchange)",
+      "impact": "serious",
+      "ruleId": "color-contrast",
+      "bugId": "BUG-450",
+      "expiresOn": "2026-06-30",
+      "reason": "Known patient-detail information-exchange WCAG contrast debt tracked under live a11y gate rollout."
+    },
+    {
+      "surface": "/patients/:id (Information Exchange)",
+      "impact": "serious",
+      "ruleId": "list",
+      "bugId": "BUG-450",
+      "expiresOn": "2026-06-30",
+      "reason": "Known patient-detail information-exchange semantic list-structure debt tracked under live a11y gate rollout."
+    },
+    {
+      "surface": "/patients/:id (Medications)",
+      "impact": "serious",
+      "ruleId": "color-contrast",
+      "bugId": "BUG-450",
+      "expiresOn": "2026-06-30",
+      "reason": "Known patient-detail medications WCAG contrast debt tracked under live a11y gate rollout."
+    },
+    {
+      "surface": "/patients/:id (Medications)",
+      "impact": "serious",
+      "ruleId": "list",
+      "bugId": "BUG-450",
+      "expiresOn": "2026-06-30",
+      "reason": "Known patient-detail medications semantic list-structure debt tracked under live a11y gate rollout."
+    },
+    {
+      "surface": "/patients/:id (Episodes)",
+      "impact": "serious",
+      "ruleId": "color-contrast",
+      "bugId": "BUG-450",
+      "expiresOn": "2026-06-30",
+      "reason": "Known patient-detail episodes WCAG contrast debt tracked under live a11y gate rollout."
+    },
+    {
+      "surface": "/patients/:id (Episodes)",
+      "impact": "serious",
+      "ruleId": "list",
+      "bugId": "BUG-450",
+      "expiresOn": "2026-06-30",
+      "reason": "Known patient-detail episodes semantic list-structure debt tracked under live a11y gate rollout."
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= title ?? 'Zitavi Patient Records' %></title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    .tab-active { border-bottom: 2px solid #f0852c; color: #f0852c; font-weight: 600; }
+    .vital-card { transition: all 0.15s; }
+    .vital-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+    .badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: 600; }
+    .badge-green { background: #E8F5E9; color: #2E7D32; }
+    .badge-red { background: #FFEBEE; color: #C62828; }
+    .badge-yellow { background: #FFF8E1; color: #F57F17; }
+    .badge-blue { background: #E3F2FD; color: #1565C0; }
+    .badge-grey { background: #F5F5F5; color: #616161; }
+    .badge-purple { background: #F3E5F5; color: #7B1FA2; }
+  </style>
+</head>
+<body class="bg-white text-gray-800">
+  <header class="bg-gradient-to-r from-slate-700 to-slate-800 text-white px-6 py-3 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <div class="w-8 h-8 bg-orange-500 rounded-lg flex items-center justify-center text-sm font-bold">Z</div>
+      <div>
+        <h1 class="text-sm font-bold">Zitavi Patient Records</h1>
+        <p class="text-xs text-slate-300">Read-only EMR Integration</p>
+      </div>
+    </div>
+    <a href="/emr/view/patients?apiKey=<%= apiKey %>" class="text-xs text-slate-300 hover:text-white">Patient List</a>
+  </header>
+  <main class="max-w-7xl mx-auto px-4 py-6">
+    <%- body %>
+  </main>
+</body>
+</html>

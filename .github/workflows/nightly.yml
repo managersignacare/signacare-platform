@@ -1,0 +1,196 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Signacare EMR — Nightly
+# ──────────────────────────────────────────────────────────────────────────────
+#
+# Category 11 — the slow / expensive tests that shouldn't run on every PR:
+#
+#   - k6 baseline scenario (5 min) against staging → SLA regression check
+#   - k6 soak scenario (10 min in CI; 2h on a dedicated runner)
+#   - DR restore drill against the staging DB — proves backups recoverable
+#   - Trivy full filesystem scan — catches CVEs in the dev dependency tree
+#
+# Runs on a cron schedule (02:00 UTC daily = 13:00 AEST) and can be triggered
+# manually via workflow_dispatch. Failures page the on-call rotation via
+# Slack — ops must investigate before the next morning's clinician logins.
+#
+# Infrastructure notes:
+#   - k6 and DR drill jobs need STAGING_URL + DB secrets. They run in
+#     dry-run mode until the staging env is provisioned.
+#   - The nightly workflow intentionally has NO ci-gate — each job emits a
+#     Slack alert on its own so one noisy failure doesn't mute the others.
+#
+# Standard satisfied: ISO 27001 A.12.3 (backup management testing),
+#                     ISO 25010 Reliability (regression monitoring),
+#                     Australian Privacy Act 1988 APP 11.2 (erasure +
+#                     recoverability).
+# ──────────────────────────────────────────────────────────────────────────────
+
+name: Nightly
+
+on:
+  schedule:
+    - cron: '0 2 * * *'  # 02:00 UTC daily
+  workflow_dispatch: {}
+
+env:
+  DRY_RUN: 'true'  # flip to false when staging is provisioned
+
+jobs:
+  # ── k6 baseline against staging ─────────────────────────────────────────────
+  k6-baseline:
+    name: k6 baseline (SLA regression check)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install k6
+        run: |
+          sudo gpg -k
+          sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg \
+            --keyserver hkp://keyserver.ubuntu.com:80 \
+            --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" \
+            | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update && sudo apt-get install k6
+      - name: Run baseline scenario
+        run: |
+          if [ "${DRY_RUN}" = "true" ]; then
+            echo "[dry-run] k6 run --summary-export=baseline.json scripts/k6/baseline.js"
+            echo "{}" > baseline.json
+          else
+            STAGING_URL=https://staging.signacare.au \
+              k6 run --summary-export=baseline.json scripts/k6/baseline.js
+          fi
+      - name: Upload baseline summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: k6-baseline-${{ github.run_id }}
+          path: baseline.json
+          retention-days: 90
+      - name: Notify Slack on failure
+        if: failure()
+        run: |
+          if [ "${DRY_RUN}" = "true" ]; then
+            echo "[dry-run] slack: k6 baseline regression"
+          else
+            curl -X POST -H 'Content-type: application/json' \
+              --data "{\"text\":\":rotating_light: Nightly k6 baseline SLA regression. Run: ${{ github.run_id }}\"}" \
+              ${{ secrets.SLACK_WEBHOOK_OPS }}
+          fi
+
+  # ── DR restore drill against staging ───────────────────────────────────────
+  restore-drill:
+    name: DR restore drill
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Run restore drill
+        run: |
+          if [ "${DRY_RUN}" = "true" ]; then
+            echo "[dry-run] DB_HOST=staging-db.signacare.au bash scripts/dr/restore-drill.sh"
+          else
+            DB_HOST=${{ secrets.STAGING_DB_HOST }} \
+            DB_USER=${{ secrets.STAGING_DB_DRILL_USER }} \
+            DB_PASSWORD=${{ secrets.STAGING_DB_DRILL_PASSWORD }} \
+            DB_NAME=${{ secrets.STAGING_DB_NAME }} \
+              bash scripts/dr/restore-drill.sh
+          fi
+      - name: Notify Slack on failure
+        if: failure()
+        run: |
+          if [ "${DRY_RUN}" = "true" ]; then
+            echo "[dry-run] slack: DR restore drill FAILED — backups not proven recoverable"
+          else
+            curl -X POST -H 'Content-type: application/json' \
+              --data "{\"text\":\":rotating_light::fire: DR restore drill FAILED. Backups are NOT proven recoverable. On-call: investigate IMMEDIATELY.\"}" \
+              ${{ secrets.SLACK_WEBHOOK_OPS }}
+          fi
+
+  # ── OWASP ZAP DAST baseline scan ──────────────────────────────────────────
+  # GAP-03 residual closure (2026-04-11).
+  #
+  # The ZAP baseline spider + passive scan runs against the staging URL and
+  # fails on HIGH severity findings. This is the dynamic half of our security
+  # coverage — the static half lives in Category 5 of ci.yml (OWASP
+  # A02/A05/A07/A08 rules + security headers).
+  #
+  # In dry-run mode (STAGING_URL not yet provisioned) the job echoes the
+  # command it would run and exits 0, matching the other nightly jobs.
+  # When staging is live, flip DRY_RUN to 'false' at the env block.
+  #
+  # Tuning:
+  #   - rules_file_name lives in scripts/zap/rules.tsv and documents which
+  #     rules are downgraded to WARN (usually cookie flags the reverse proxy
+  #     sets rather than the app).
+  #   - cmd_options '-a' runs ACTIVE scan too once staging is mature; for now
+  #     we stay on baseline/passive to avoid hitting a real DB.
+  #
+  # Standards satisfied: OWASP ASVS V10.2, ACSC Essential Eight #2,
+  #                      ISO 27001 A.8.8.
+  zap-baseline:
+    name: OWASP ZAP DAST baseline
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run ZAP baseline scan
+        id: zap
+        run: |
+          if [ "${DRY_RUN}" = "true" ]; then
+            echo "[dry-run] docker run --rm -v \$(pwd):/zap/wrk/:rw -t ghcr.io/zaproxy/zaproxy:stable \\"
+            echo "           zap-baseline.py -t https://staging.signacare.au \\"
+            echo "           -r zap-baseline-report.html -J zap-baseline-report.json \\"
+            echo "           -I -l WARN"
+            echo '{"site":[{"@host":"staging.signacare.au","alerts":[]}]}' > zap-baseline-report.json
+            echo "<html><body><h1>Dry run</h1></body></html>" > zap-baseline-report.html
+          else
+            docker run --rm -v $(pwd):/zap/wrk/:rw \
+              -t ghcr.io/zaproxy/zaproxy:stable zap-baseline.py \
+              -t ${{ secrets.STAGING_URL }} \
+              -r zap-baseline-report.html \
+              -J zap-baseline-report.json \
+              -I -l WARN
+          fi
+      - name: Upload ZAP report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-baseline-${{ github.run_id }}
+          path: |
+            zap-baseline-report.html
+            zap-baseline-report.json
+          retention-days: 90
+      - name: Notify Slack on failure
+        if: failure()
+        run: |
+          if [ "${DRY_RUN}" = "true" ]; then
+            echo "[dry-run] slack: ZAP baseline failed"
+          else
+            curl -X POST -H 'Content-type: application/json' \
+              --data "{\"text\":\":rotating_light: Nightly ZAP baseline detected HIGH severity findings. Run: ${{ github.run_id }}\"}" \
+              ${{ secrets.SLACK_WEBHOOK_SECURITY }}
+          fi
+
+  # ── Trivy filesystem scan ─────────────────────────────────────────────────
+  trivy-fs:
+    name: Trivy filesystem scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Trivy filesystem scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-fs.sarif'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '0'  # don't fail the job — report only
+      - name: Upload SARIF
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-fs-${{ github.run_id }}
+          path: trivy-fs.sarif
+          retention-days: 90

@@ -1,0 +1,21 @@
+# Allowlist for check-controller-repo-write-bypass.ts (PR-R1-19)
+#
+# Format (fingerprint, line-shift-resilient):
+#   <file> <8-hex-fingerprint>  # <preview> | BUG-XXX — <reason>
+#
+# Cascade-tracking: PR-R1-19 baseline drain tracked under
+# BUG-PR-R1-19-CASCADE-DRAIN-CONTROLLER-WRITE-BYPASS.
+# Expiry-policy: per-entry (added 2026-05-03 cycle Phase 0a.7)
+# Each non-comment line carries an `| expires: <YYYY-MM-DD> (cascade: <BUG>)`
+# OR `| permanent: <reason>` annotation. Entries past their expiry date
+# fail the merge gate via `scripts/guards/check-allowlist-expiry.ts`.
+# Renewal: when a target close-by date passes, EITHER drain the entry
+# (preferred) OR explicitly extend the date with operator authorization.
+apps/api/src/features/appointments/appointmentController.ts c170b2b2  # PR-R1-19 baseline original-lineno:212 call=appointmentAttendeeRepository.addAttendee | BUG-PR-R1-19-CASCADE-DRAIN-CONTROLLER-WRITE-BYPASS — pre-existing controller-side repo-write call; refactor to service-layer call accepting AuthContext per CLAUDE.md §13 | expires: 2026-09-30 (cascade: BUG-PR-R1-19-CASCADE-DRAIN-CONTROLLER-WRITE-BYPASS)
+apps/api/src/features/appointments/appointmentController.ts 33b45956  # PR-R1-19 baseline original-lineno:237 call=appointmentAttendeeRepository.updateAttendee | BUG-PR-R1-19-CASCADE-DRAIN-CONTROLLER-WRITE-BYPASS — pre-existing controller-side repo-write call; refactor to service-layer call accepting AuthContext per CLAUDE.md §13 | expires: 2026-09-30 (cascade: BUG-PR-R1-19-CASCADE-DRAIN-CONTROLLER-WRITE-BYPASS)
+apps/api/src/features/auth/authRoutes.ts 66bb57ed  # PR-R1-19 baseline original-lineno:93 call=staffRepository.setMfaSecret | BUG-PR-R1-19-CASCADE-DRAIN-CONTROLLER-WRITE-BYPASS — pre-existing controller-side repo-write call; refactor to service-layer call accepting AuthContext per CLAUDE.md §13 | expires: 2026-09-30 (cascade: BUG-PR-R1-19-CASCADE-DRAIN-CONTROLLER-WRITE-BYPASS)
+apps/api/src/features/auth/authRoutes.ts 0422d6c8  # PR-R1-19 baseline original-lineno:99 call=staffRepository.setRecoveryCodes | BUG-PR-R1-19-CASCADE-DRAIN-CONTROLLER-WRITE-BYPASS — pre-existing controller-side repo-write call; refactor to service-layer call accepting AuthContext per CLAUDE.md §13 | expires: 2026-09-30 (cascade: BUG-PR-R1-19-CASCADE-DRAIN-CONTROLLER-WRITE-BYPASS)
+apps/api/src/features/auth/authRoutes.ts 88952a8a  # PR-R1-19 baseline original-lineno:122 call=staffRepository.enableMfa | BUG-PR-R1-19-CASCADE-DRAIN-CONTROLLER-WRITE-BYPASS — pre-existing controller-side repo-write call; refactor to service-layer call accepting AuthContext per CLAUDE.md §13 | expires: 2026-09-30 (cascade: BUG-PR-R1-19-CASCADE-DRAIN-CONTROLLER-WRITE-BYPASS)
+apps/api/src/features/auth/authRoutes.ts 30a39f61  # PR-R1-19 baseline original-lineno:128 call=staffRepository.disableMfa | BUG-PR-R1-19-CASCADE-DRAIN-CONTROLLER-WRITE-BYPASS — pre-existing controller-side repo-write call; refactor to service-layer call accepting AuthContext per CLAUDE.md §13 | expires: 2026-09-30 (cascade: BUG-PR-R1-19-CASCADE-DRAIN-CONTROLLER-WRITE-BYPASS)
+apps/api/src/features/notifications/notificationRoutes.ts b21d9032  # PR-R1-19 baseline original-lineno:113 call=notificationRepository.softDeleteTargeted | BUG-PR-R1-19-CASCADE-DRAIN-CONTROLLER-WRITE-BYPASS — pre-existing controller-side repo-write call; refactor to service-layer call accepting AuthContext per CLAUDE.md §13 | expires: 2026-09-30 (cascade: BUG-PR-R1-19-CASCADE-DRAIN-CONTROLLER-WRITE-BYPASS)
+apps/api/src/features/staff/staffRoutes.ts 54c2e304  # PR-R1-19 baseline original-lineno:143 call=staffRepository.replaceSpecialtiesForStaff | BUG-PR-R1-19-CASCADE-DRAIN-CONTROLLER-WRITE-BYPASS — pre-existing controller-side repo-write call; refactor to service-layer call accepting AuthContext per CLAUDE.md §13 | expires: 2026-09-30 (cascade: BUG-PR-R1-19-CASCADE-DRAIN-CONTROLLER-WRITE-BYPASS)

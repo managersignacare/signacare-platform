@@ -1,0 +1,102 @@
+// apps/web/src/features/appointments/components/AppointmentCalendar.tsx
+import { Alert, Box, Chip, Grid, Paper, Stack, Typography } from '@mui/material';
+import type { Appointment } from '../types/appointmentTypes';
+import { getAppointmentStatusMeta } from '../types/appointmentTypes';
+
+interface Props {
+  appointments: Appointment[];
+  month: Date;
+  onSelectAppointment?: (appointment: Appointment) => void;
+}
+
+const getMonthGrid = (month: Date): Date[] => {
+  const first = new Date(month.getFullYear(), month.getMonth(), 1);
+  const start = new Date(first);
+  start.setDate(first.getDate() - first.getDay());
+  return Array.from({ length: 42 }, (_, index) => {
+    const day = new Date(start);
+    day.setDate(start.getDate() + index);
+    return day;
+  });
+};
+
+const isSameDay = (left: Date, right: Date): boolean =>
+  left.getFullYear() === right.getFullYear() &&
+  left.getMonth() === right.getMonth() &&
+  left.getDate() === right.getDate();
+
+export const AppointmentCalendar = ({
+  appointments,
+  month,
+  onSelectAppointment,
+}: Props) => {
+  const days = getMonthGrid(month);
+
+  if (!appointments) return <Alert severity="info">No appointments to display.</Alert>;
+
+  return (
+    <Box>
+      <Grid container spacing={1}>
+        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((label) => (
+          <Grid size={12 / 7} key={label}>
+            <Typography
+              align="center"
+              variant="body2"
+              sx={{ fontWeight: 700, color: '#3D484B', py: 1 }}
+            >
+              {label}
+            </Typography>
+          </Grid>
+        ))}
+      </Grid>
+      <Grid container spacing={1}>
+        {days.map((day) => {
+          const dayAppointments = appointments.filter((appointment) =>
+            isSameDay(new Date(appointment.startTime), day),
+          );
+          const isCurrentMonth = day.getMonth() === month.getMonth();
+          return (
+            <Grid size={12 / 7} key={day.toISOString()}>
+              <Paper
+                variant="outlined"
+                sx={{
+                  minHeight: 132,
+                  p: 1,
+                  borderRadius: 2,
+                  backgroundColor: isCurrentMonth ? '#FFFFFF' : '#FBF8F5',
+                }}
+              >
+                <Typography variant="caption" sx={{ fontWeight: 700 }}>
+                  {day.getDate()}
+                </Typography>
+                <Stack spacing={0.75} mt={1}>
+                  {dayAppointments.slice(0, 3).map((appointment) => {
+                    const meta = getAppointmentStatusMeta(appointment.status);
+                    return (
+                      <Chip
+                        key={appointment.id}
+                        size="small"
+                        label={`${new Date(appointment.startTime).toLocaleTimeString([], {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })} ${appointment.type}`}
+                        color={meta.color}
+                        onClick={() => onSelectAppointment?.(appointment)}
+                        sx={{ justifyContent: 'flex-start' }}
+                      />
+                    );
+                  })}
+                  {dayAppointments.length > 3 ? (
+                    <Typography variant="caption" color="text.secondary">
+                      +{dayAppointments.length - 3} more
+                    </Typography>
+                  ) : null}
+                </Stack>
+              </Paper>
+            </Grid>
+          );
+        })}
+      </Grid>
+    </Box>
+  );
+};

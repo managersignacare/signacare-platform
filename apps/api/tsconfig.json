@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // This config is type-check-only (`tsc --noEmit -p tsconfig.json`).
+    // Actual production emit uses tsconfig.build.json which sets rootDir
+    // explicitly. noEmit: true here prevents TS 6 from computing an
+    // implicit rootDir from the @signacare/shared paths (which would otherwise
+    // trip the TS6059 "file not under rootDir" error).
+    "noEmit": true,
+    "declaration": false,
+    "allowImportingTsExtensions": false
+  },
+  "include": ["src", "migrations/**/*.ts"]
+}

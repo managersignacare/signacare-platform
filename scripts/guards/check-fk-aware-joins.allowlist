@@ -1,0 +1,32 @@
+# BUG-637 — FK-aware-join lint allowlist.
+#
+# Each non-empty / non-comment line is a `<file>:<lineNo>` signature
+# permitting a non-canonical-FK join. Use sparingly — every entry is a
+# documented exception to CLAUDE.md §1.1 + §1.2 (column / table existence
+# + FK semantics).
+#
+# Format: `<relative-file-path>:<lineNo>  # reason`
+#
+# Prefer the inline `// @fk-join-exempt: <reason>` annotation on the line
+# directly above the join — that keeps the exception co-located with the
+# code that needs it. Use this allowlist file for cases where the inline
+# annotation is impractical (e.g. generated code).
+# Expiry-policy: per-entry (added 2026-05-03 cycle Phase 0a.7)
+# Each non-comment line carries an `| expires: <YYYY-MM-DD> (cascade: <BUG>)`
+# OR `| permanent: <reason>` annotation. Entries past their expiry date
+# fail the merge gate via `scripts/guards/check-allowlist-expiry.ts`.
+# Renewal: when a target close-by date passes, EITHER drain the entry
+# (preferred) OR explicitly extend the date with operator authorization.
+
+# Pre-existing non-FK joins where the DB column has no FK constraint but
+# the JOIN is conventional (column-name aligns with target table's PK).
+# Each entry is paired with a cascade BUG to add the missing FK.
+apps/api/src/features/audit/auditReplayRoutes.ts b783869e  # original-lineno:32 | BUG-637-CASCADE-AUDIT-FK — audit_log.user_id has no FK to staff.id (column-name alignment only). Cascade-fix: ALTER TABLE audit_log ADD CONSTRAINT FK (user_id) REFERENCES staff(id) ON DELETE SET NULL — preserves audit trail per AHPRA append-only. | expires: 2026-12-31 (cascade: BUG-637-CASCADE-AUDIT-FK)
+apps/api/src/features/audit/auditReplayRoutes.ts b783869e  # original-lineno:63 | BUG-637-CASCADE-AUDIT-FK — sibling of line 32; same audit_log.user_id non-FK column. | expires: 2026-12-31 (cascade: BUG-637-CASCADE-AUDIT-FK)
+apps/api/src/integrations/cmi/cmiDataExtractor.ts d425546f  # original-lineno:80 | BUG-637-CASCADE-LEGAL-ORDER-CONFIGS-FK — patient_legal_orders.order_type_id has no FK to legal_order_type_configs.id (verified live: target IS legal_order_type_configs not legal_order_types). Cascade-fix: ALTER TABLE patient_legal_orders ADD CONSTRAINT FK (order_type_id) REFERENCES legal_order_type_configs(id) ON DELETE RESTRICT. | expires: 2026-12-31 (cascade: BUG-637-CASCADE-LEGAL-ORDER-CONFIGS-FK)
+apps/api/src/features/patients/patientRoutes.ts 2373bde5  # original-lineno:814 | BUG-637-CASCADE-LEGAL-ORDER-CONFIGS-FK — sibling of cmi:80; same missing FK on patient_legal_orders.order_type_id. | expires: 2026-12-31 (cascade: BUG-637-CASCADE-LEGAL-ORDER-CONFIGS-FK)
+apps/api/src/mcp/aiEnhancer.ts 8a0bbb84  # original-lineno:97 | BUG-637-CASCADE-LEGAL-ORDER-CONFIGS-FK — sibling of cmi:80 + patientRoutes:814; same missing FK. | expires: 2026-12-31 (cascade: BUG-637-CASCADE-LEGAL-ORDER-CONFIGS-FK)
+apps/api/src/mcp/server/mcpServer.ts 5f528a80  # original-lineno:382 | BUG-637-CASCADE-LEGAL-ORDER-CONFIGS-FK — sibling of cmi:80 + patientRoutes:814 + aiEnhancer:97; same missing FK on patient_legal_orders.order_type_id. | expires: 2026-12-31 (cascade: BUG-637-CASCADE-LEGAL-ORDER-CONFIGS-FK)
+apps/api/src/features/dashboard/dashboardRepository.ts 9a703393  # original-lineno:147 | BUG-637-CASCADE-PATHOLOGY-RESULTS-FK — pathology_results.order_id has no FK to pathology_orders.id (column-name alignment only). Cascade-fix: ALTER TABLE pathology_results ADD CONSTRAINT FK (order_id) REFERENCES pathology_orders(id) ON DELETE CASCADE — pathology results are children of orders; cascade delete is appropriate. | expires: 2026-12-31 (cascade: BUG-637-CASCADE-PATHOLOGY-RESULTS-FK)
+apps/api/src/features/reports/reportsRoutes.ts b345eb8c  # original-lineno:326 | BUG-637-CASCADE-MESSAGES-RECIPIENT-FK — messages.recipient_id has no FK to staff.id (column-name alignment only). Cascade-fix: ALTER TABLE messages ADD CONSTRAINT FK (recipient_id) REFERENCES staff(id) ON DELETE SET NULL — historical messages survive staff deletion. | expires: 2026-12-31 (cascade: BUG-637-CASCADE-MESSAGES-RECIPIENT-FK)
+apps/api/src/features/reports/reportsRoutes.ts 6df7c6aa  # original-lineno:418 | BUG-637-CASCADE-EPISODES-TEAM-FK — episodes.team_id has no FK to org_units.id (column-name alignment only). Cascade-fix: ALTER TABLE episodes ADD CONSTRAINT FK (team_id) REFERENCES org_units(id) ON DELETE RESTRICT — clinical record discipline; team referenced by active episodes cannot be deleted. | expires: 2026-12-31 (cascade: BUG-637-CASCADE-EPISODES-TEAM-FK)

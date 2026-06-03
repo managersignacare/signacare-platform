@@ -1,0 +1,24 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    "ignoreDeprecations": "6.0",
+    "allowImportingTsExtensions": false,
+    "noEmit": true,
+    "baseUrl": "../../",
+    "paths": {
+      "@signacare/shared": ["packages/shared/src"],
+      "@signacare/shared/*": ["packages/shared/src/*"]
+    }
+  },
+  // ts-node by default only transpiles files reachable from the entry
+  // point and skips the project's `include` glob — which silently breaks
+  // ambient .d.ts files like src/types/express.d.ts that augment the
+  // global Express namespace with req.user / req.clinicId / req.requestId.
+  // Setting files=true makes ts-node honour the parent tsconfig's
+  // include/files arrays so the augmentation is loaded at boot.
+  "ts-node": {
+    "files": true
+  }
+}

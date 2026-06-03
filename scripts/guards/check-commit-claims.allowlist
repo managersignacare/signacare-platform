@@ -1,0 +1,36 @@
+# scripts/guards/check-commit-claims.allowlist
+#
+# Phase 0a.12 — companion to check-commit-claims.ts (claim-discipline guard).
+#
+# Format (one entry per line):
+#   <fingerprint>  # <description> | <annotation>
+#
+# Separator is "  # " (double-space-hash-space) since fingerprints may contain `#`.
+#
+# Annotation MUST be one of:
+#   | expires: YYYY-MM-DD (cascade: BUG-XXX)
+#   | permanent: <reason>
+#
+# Per Phase 0a.7 expiry retrofit policy.
+#
+# Expiry-policy: per-entry (Phase 0a.7 retrofit)
+# Each non-comment line carries an `| expires: <YYYY-MM-DD> (cascade: <BUG>)`
+# OR `| permanent: <reason>` annotation. Entries past their expiry date
+# fail the merge gate via `scripts/guards/check-allowlist-expiry.ts`.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# Categories of legitimate exemptions (when added):
+#
+# 1. doc-meta-rubric-quote — commit messages that QUOTE a banned phrase
+#    as part of describing the rubric itself (e.g., "shortcut-detector
+#    cycle-1 caught 'should work' phrase"). The quote is documenting the
+#    rule, not violating it.
+#
+# 2. doc-meta-historical-anchor — commit messages quoting a historical
+#    fix-registry anchor that itself contains a banned-phrase string as
+#    its anchor pattern (rare; most anchors avoid this).
+#
+# Pre-existing baseline as of Phase 0a.12 landing — 0 entries.
+# Local commit-msg hook is the primary enforcement; CI merge-gate is
+# secondary via `gh pr view --json body`. Allowlist exists for both.
+# ─────────────────────────────────────────────────────────────────────────────

@@ -1,0 +1,33 @@
+# scripts/guards/check-no-hardcoded-plan-path.allowlist
+#
+# Phase 0a.11 — companion guard to active-plan pointer.
+#
+# Format (one entry per line):
+#   <fingerprint>  # <description> | <annotation>
+#
+# Separator is "  # " (double-space-hash-space) since fingerprints may contain `#`.
+#
+# Annotation MUST be one of:
+#   | expires: YYYY-MM-DD (cascade: BUG-XXX)
+#   | permanent: <reason>
+#
+# Per Phase 0a.7 expiry retrofit policy.
+#
+# Expiry-policy: per-entry (Phase 0a.7 retrofit)
+# Each non-comment line carries an `| expires: <YYYY-MM-DD> (cascade: <BUG>)`
+# OR `| permanent: <reason>` annotation. Entries past their expiry date
+# fail the merge gate via `scripts/guards/check-allowlist-expiry.ts`.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# Categories of legitimate exemptions (when added):
+#
+# 1. doc-meta-historical-reference — memory entries documenting WHERE a rule
+#    was first articulated (the rule's history) rather than runtime lookup.
+#    The path-shaped reference is documentary, not load-bearing.
+#
+# Pre-existing baseline as of Phase 0a.11 landing — 0 entries (the agent
+# files were updated in this commit to read from active-plan.md instead of
+# hardcoded path; the only remaining mention is `feedback_explicit_push_authorization.md`
+# referring to the plan FILENAME without the path prefix, which is outside
+# the guard's regex scope by design — see active-plan.md exception list).
+# ─────────────────────────────────────────────────────────────────────────────

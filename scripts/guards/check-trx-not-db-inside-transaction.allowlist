@@ -1,0 +1,23 @@
+# scripts/guards/check-trx-not-db-inside-transaction.allowlist
+#
+# Phase R1 PR-R1-5 — `db(...)` / `db.raw(...)` calls inside a
+# `db.transaction()` callback that are deliberately retained (e.g.,
+# the connection-pool semantics are isolated for read-side queries).
+# Each entry grants amnesty for the EXACT line content + filename
+# combination.
+#
+# Format: <file> <fingerprint>  # comment
+#   - <file>         = relative path to the source file
+#   - <fingerprint>  = first 8 hex chars of sha256(trimmed line content)
+#                      computed by scripts/guards/lib/allowlist-fingerprint.ts
+#   - <comment>      = cascade BUG citation + reason (after #)
+#
+# Multiplicity-aware: if a fingerprint appears N times in the file,
+# add N entries.
+# Expiry-policy: per-entry (added 2026-05-03 cycle Phase 0a.7)
+# Each non-comment line carries an `| expires: <YYYY-MM-DD> (cascade: <BUG>)`
+# OR `| permanent: <reason>` annotation. Entries past their expiry date
+# fail the merge gate via `scripts/guards/check-allowlist-expiry.ts`.
+# Renewal: when a target close-by date passes, EITHER drain the entry
+# (preferred) OR explicitly extend the date with operator authorization.
+

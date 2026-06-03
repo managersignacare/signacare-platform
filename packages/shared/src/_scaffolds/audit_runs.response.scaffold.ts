@@ -1,0 +1,23 @@
+// AUTO-GENERATED scaffold by scripts/generate-types-from-migrations.ts
+// DO NOT EDIT MANUALLY. Hand-written Response must `extends` this
+// scaffold's Zod schema OR carry a `// @scaffold-divergence: <reason>`
+// annotation. The scaffold-extension guard (Phase 0b.1b) enforces this.
+
+import { z } from 'zod';
+
+export const AuditRunsResponseScaffoldSchema = z.object({
+  id: z.string().uuid(),
+  clinicId: z.string().uuid(),
+  templateId: z.string().uuid(),
+  teamId: z.string().uuid().nullable().optional(),
+  clinicianId: z.string().uuid().nullable().optional(),
+  sampleSize: z.number().int(),
+  status: z.string().max(30),
+  selectedNoteIds: z.unknown(),
+  results: z.unknown().nullable().optional(),
+  createdById: z.string().uuid().nullable().optional(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+
+export type AuditRunsResponseScaffold = z.infer<typeof AuditRunsResponseScaffoldSchema>;

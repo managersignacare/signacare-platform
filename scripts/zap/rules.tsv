@@ -1,0 +1,16 @@
+# OWASP ZAP baseline rule overrides for Signacare EMR.
+#
+# Format: RULE_ID<TAB>ACTION<TAB>URL<TAB>REASON
+# ACTION is one of: IGNORE | WARN | FAIL
+#
+# Every override MUST have a REASON explaining why the rule is downgraded.
+# Never add an IGNORE without a reference to the control that mitigates the
+# finding elsewhere (e.g. "set by nginx, not the app").
+#
+# This file is consumed by scripts/zap/zap-baseline.sh and by the
+# zap-baseline job in .github/workflows/nightly.yml.
+
+10049	WARN	*	Cache-control headers are set per-route by CDN rules (feat s2.6); passive baseline cannot see them.
+10020	WARN	*	X-Frame-Options is set by Helmet at the app layer; baseline scanner sometimes misses it on streaming endpoints (/api/v1/events/stream).
+10038	WARN	*	CSP header is delivered by nginx in production — passive scan runs against the app-origin proxy so it may report missing header.
+10202	WARN	*	Absence of anti-CSRF tokens on GET endpoints is expected — CSRF is enforced on mutations only via X-CSRF-Token middleware.

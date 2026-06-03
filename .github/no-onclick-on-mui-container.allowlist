@@ -1,0 +1,73 @@
+# BUG-447-CASCADE-1 — files exempt from the
+# `signacare-rules/no-onclick-on-mui-container` rule during the BUG-447
+# campaign. Each child commit (BUG-447-medications through BUG-447-misc-
+# residual; run order 1..15) removes its file(s) as the violations are
+# fixed.
+#
+# *** CAMPAIGN CLOSED 2026-04-29 *** — child 15/15 (BUG-447-misc-
+# residual) was the final cycle. All 15 children + 7 cascade follow-ups
+# closed. The cascade-1 ESLint rule now fires across the entire
+# `apps/web/src/**` tree without exemption. This file is preserved as
+# the historical record of the campaign sequence; any new path entry
+# triggers `R-FIX-BUG-447-PARENT-CLOSE-ALLOWLIST-EMPTY` to fail CI.
+#
+# When this file is empty (apart from comments), BUG-447 is structurally
+# complete: the rule fires across the entire `apps/web/src/**` tree
+# without exemption.
+#
+# Format: one path per line (relative to repo root). Paths ending with
+# `/` are directory prefixes (any descendant matches). Other paths are
+# exact matches. `#` lines and blank lines are ignored.
+#
+# Initial population: enumerated by AST scan on 2026-04-27 — the exact
+# 40 files (71 violations) that contain `<Box|Paper|Card|Typography
+# onClick>` violations as detected by the rule itself running against
+# the live tree. The AST-accurate count supersedes the original
+# catalogue claim of 36/67.
+#
+# Per-child mapping (which child removes which file):
+
+# BUG-447-medications (run 1) — closed; allowlist entry removed.
+
+# BUG-447-patient-detail-shell (run 2)
+
+# BUG-447-clinical-tabs-mha-legal (run 3) — closed; AST scan confirmed
+# AlertsPlansTab.tsx was the sole file with violations (4 sites).
+# LegalTab/AdvanceDirectivesTab/NinetyOneDayReviewTab/SafetyPlanTab
+# named in the catalogue had ZERO BUG-447 violations (all use
+# Button/IconButton consistently). Allowlist entry removed.
+
+# BUG-447-ect-tms (run 4) — closed as verification-only; AST scan
+# confirmed zero BUG-447 violations in EctTab.tsx + TmsTab.tsx. All
+# 14 candidate onClick sites surfaced by the Plan agent's broad grep
+# are on native MUI keyboard-accessible primitives (Button at
+# EctTab:846 + TmsTab:273; IconButton at EctTab:883; Chip at
+# EctTab:531 + TmsTab:327). The cascade-1 ESLint rule already fires
+# on these two files unconditionally (they were never allowlisted),
+# so any future Box/Paper/Card/Typography onClick addition would
+# fail CI. No allowlist entry needed; this comment IS the
+# verification record. Sites manually reviewed 2026-04-28.
+
+# BUG-447-clinical-notes-scribe (run 5) — closed; 3 violations fixed
+# (NoteCard.tsx Shape B trio + NotesList.tsx redundant-handler removal
+# closing 2 violations structurally).
+
+# BUG-447-correspondence-letters (run 6)
+
+# BUG-447-pathology (run 7)
+
+# BUG-447-appointments (run 8)
+
+# BUG-447-episodes (run 9)
+
+# BUG-447-referrals (run 10)
+
+# BUG-447-dashboards-lists (run 11)
+
+# BUG-447-shared-ui-shell (run 12)
+
+# BUG-447-admin-settings-power (run 13)
+
+# BUG-447-receptionist-tasks-drafts (run 14)
+
+# BUG-447-misc-residual (run 15)

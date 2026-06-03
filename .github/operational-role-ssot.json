@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "lane": "A2",
+  "bugId": "BUG-355",
+  "updatedAt": "2026-05-12",
+  "tsSourcePath": "packages/shared/src/permissions.ts",
+  "tsExportName": "OPERATIONAL_ONLY",
+  "trackedSqlFiles": [
+    "apps/api/migrations/20260423000005_access_admin_slot_integrity_trigger.ts",
+    "apps/api/migrations/20260423000007_access_admin_trigger_audit_log.ts",
+    "apps/api/migrations/20260423000008_reconcile_stale_admin_slots.ts"
+  ],
+  "roleListPattern": "role\\s+IN\\s*\\(([^)]*)\\)"
+}

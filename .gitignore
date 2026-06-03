@@ -1,0 +1,108 @@
+# Environment variables — NEVER commit
+.env
+.env.*
+!.env.example
+!.env.production.template
+
+# Runtime PHI stores — NEVER commit. These are patient attachment and
+# audio-recording upload targets in dev; real PHI at runtime in prod.
+# `uploads/logos/` is retained in git as tenant customization assets
+# (clinic logos uploaded via admin UI; non-PHI).
+apps/api/uploads/attachments/
+apps/api/uploads/audio/
+
+# Claude Code scratch worktrees — ephemeral subagent copies of the
+# repo. Never commit. Was accidentally swept in by `git add -A` in
+# d30fda1 and cleaned up in the follow-up commit.
+.claude/worktrees/
+# Local Claude settings are machine-specific and may contain secrets.
+# Keep per-user config out of git.
+.claude/settings.local.json
+
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+
+# Local deployment artifact bundles generated during VM bootstrap/build experiments
+/artifacts/
+/api-*.zip
+/signacare-api-*.zip
+/staging-api-*.zip
+/web-*.zip
+/webapp_logs.zip
+/apiLogs.zip
+/deploy/azure/modules/*.json
+
+# Vite
+.vite/
+
+# Playwright — report artifacts (HTML + webm + screenshots).
+# These are test output, not source. Previously ~400 binary files
+# were tracked by mistake; they're removed in this commit and
+# future runs won't be re-committed.
+playwright-report/
+test-results/
+!playwright-report/.gitkeep
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Runtime
+pids/
+*.pid
+apps/api/db.sqlite
+apps/web/vim/
+
+# Test
+coverage/
+
+# Installer build output
+installer/build/
+
+# Credentials (never commit)
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+
+# Database dumps
+*.sql.gz
+*.dump
+
+# Category 12 — audit report outputs
+audit-reports/
+
+# S8.2 — Mobile app release signing secrets. The upload keystore and
+# the key.properties file that references it MUST never be committed.
+# See docs/mobile/*/SUBMISSION_CHECKLIST.md for key management.
+apps/mobile/android/key.properties
+apps/patient-app/android/key.properties
+**/android/key.properties
+*.jks
+*.keystore
+# App Store Connect API auth key — .p8 private key from the Apple
+# developer portal. Also never committed.
+AuthKey_*.p8
+
+# BUG-032 — Playwright storageState files produced by e2e/fixtures/global-setup.ts.
+# Contain live session cookies for seeded test users; regenerated on every
+# `playwright test` invocation, must not be committed.
+e2e/.auth/

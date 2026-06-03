@@ -1,0 +1,44 @@
+title = "Signacare gitleaks configuration"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Local runtime and generated artifacts outside source-of-truth scanning"
+paths = [
+  '''^apps/mobile/\.dart_tool/''',
+  '''^apps/patient-app/\.dart_tool/''',
+  '''^e2e/\.auth/''',
+  '''^apps/api/dist/''',
+  '''^\.claude/worktrees/''',
+  '''^\.claude/settings\.local\.json$''',
+  '''^\.claude/settings\.json$'''
+]
+
+[[allowlists]]
+description = "Seed pipeline step identifiers are non-secret literals"
+paths = [
+  '''^apps/api/src/seed-good-health/index\.ts$''',
+  '''^apps/api/dist/src/seed-good-health/index\.js$'''
+]
+regexes = [
+  "key:\\s*'(?:01b_reference_data|02_executive_staff|03_department_heads|04_clinic_staff|05_master_login_table|06_patients|07_episodes|08_clinical_notes|09_medications|10_pathology|11_risk_assessments)'"
+]
+
+[[allowlists]]
+description = "Explicit non-production fixture credentials"
+paths = [
+  '''^\.github/workflows/ci\.yml$''',
+  '''^docs/guides/integration-guide\.md$''',
+  '''^apps/api/tests/auth\.test\.ts$''',
+  '''^apps/api/tests/integration/patientAppAuth\.test\.ts$''',
+  '''^apps/api/tests/integration/prescriptionCancelWithReason\.int\.test\.ts$'''
+]
+regexes = [
+  '''ci-test-[a-z0-9-]+''',
+  '''dev-key-1''',
+  '''prod-key-abc123''',
+  '''BUG553-TKN-FAIL''',
+  '''WRONG_SIGNATURE''',
+  '''eyJhbGciOiJIUzI1NiJ9\.eyJpZCI6ImZha2UiLCJleHAiOjF9\.x'''
+]

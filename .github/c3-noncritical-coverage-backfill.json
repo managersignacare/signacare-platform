@@ -1,0 +1,133 @@
+{
+  "version": 1,
+  "bugId": "BUG-453",
+  "inventoryStatus": "ready_for_closure",
+  "policy": {
+    "maxRoutesPerBatchPr": 5,
+    "minCoveredRoutesDelta": 3,
+    "minCoverageGainPercent": 2,
+    "maxBatchesBeforeRetriage": 4
+  },
+  "batches": [
+    {
+      "batchId": "C3-4-B1-2026-05-11",
+      "date": "2026-05-11",
+      "prRef": "LOCAL-C3-4-B1-2026-05-11",
+      "owner": "qa-platform",
+      "routesAdded": [
+        {
+          "method": "GET",
+          "route": "/api/v1/feature-flags"
+        },
+        {
+          "method": "GET",
+          "route": "/api/v1/org-settings/units/tree"
+        },
+        {
+          "method": "GET",
+          "route": "/api/v1/waitlist"
+        }
+      ],
+      "coveredRoutesDelta": 3,
+      "coverageGainPercent": 7.0,
+      "nonCriticalUncoveredAfter": 40
+    },
+    {
+      "batchId": "C3-4-B2-2026-05-11",
+      "date": "2026-05-11",
+      "prRef": "LOCAL-C3-4-B2-2026-05-11",
+      "owner": "qa-platform",
+      "routesAdded": [
+        {
+          "method": "GET",
+          "route": "/api/v1/templates"
+        },
+        {
+          "method": "GET",
+          "route": "/api/v1/settings/thresholds"
+        },
+        {
+          "method": "GET",
+          "route": "/api/v1/org-settings/programs"
+        }
+      ],
+      "coveredRoutesDelta": 3,
+      "coverageGainPercent": 7.5,
+      "nonCriticalUncoveredAfter": 37
+    },
+    {
+      "batchId": "C3-4-B3-2026-05-11",
+      "date": "2026-05-11",
+      "prRef": "LOCAL-C3-4-B3-2026-05-11",
+      "owner": "qa-platform",
+      "routesAdded": [
+        {
+          "method": "GET",
+          "route": "/api/v1/reports"
+        },
+        {
+          "method": "GET",
+          "route": "/api/v1/feature-flags/:name"
+        },
+        {
+          "method": "GET",
+          "route": "/api/v1/org-settings/units"
+        }
+      ],
+      "coveredRoutesDelta": 3,
+      "coverageGainPercent": 8.0,
+      "nonCriticalUncoveredAfter": 34
+    },
+    {
+      "batchId": "C3-4-B4-2026-05-11",
+      "date": "2026-05-11",
+      "prRef": "LOCAL-C3-4-B4-2026-05-11",
+      "owner": "qa-platform",
+      "routesAdded": [
+        {
+          "method": "GET",
+          "route": "/api/v1/reports/admin-overview"
+        },
+        {
+          "method": "GET",
+          "route": "/api/v1/feature-flags-admin"
+        },
+        {
+          "method": "GET",
+          "route": "/api/v1/org-settings/level-labels"
+        }
+      ],
+      "coveredRoutesDelta": 3,
+      "coverageGainPercent": 8.2,
+      "nonCriticalUncoveredAfter": 31
+    }
+  ],
+  "residualInventory": {
+    "agreedThreshold": 34,
+    "currentUncoveredCount": 31,
+    "routes": [
+      {
+        "method": "GET",
+        "route": "/api/v1/templates/:id",
+        "owner": "documentation-runtime",
+        "deadline": "2026-05-24",
+        "note": "Template detail read-path coverage remains pending."
+      }
+    ]
+  },
+  "retriage": {
+    "requiredAfterBatch": 4,
+    "performed": true,
+    "evidenceRef": "docs/quality/remediation/active-slice.md#post-batch-4-retriage-evidence-2026-05-11"
+  },
+  "notes": [
+    "Initial measured non-critical inventory baseline follows the BUG-453 audit finding (43 at-0%-coverage feature routes as the starting set).",
+    "Batch 1 is constrained to three non-safety-critical GET routes and records 40 residual non-critical uncovered routes after execution.",
+    "Batch 2 adds three additional non-safety-critical GET routes and updates residual inventory to 37.",
+    "Batch 3 adds three non-safety-critical GET routes and updates residual inventory to 34.",
+    "Batch 4 adds three additional non-safety-critical GET routes and updates residual inventory to 31.",
+    "Four-batch hard stop is now reached; post-Batch-4 re-triage evidence is now recorded and linked via retriage.evidenceRef.",
+    "Residual non-critical uncovered count is now below agreedThreshold and remaining listed residual routes retain owner+deadline metadata.",
+    "Re-triage decision: no Batch 5 is authorized in the current cycle; further expansion requires a fresh plan-refresh artifact and owner signoff."
+  ]
+}

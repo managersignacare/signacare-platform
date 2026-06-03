@@ -1,0 +1,35 @@
+# scripts/guards/check-pr-template-compliance.allowlist
+#
+# Phase 0a.13 — companion to check-pr-template-compliance.ts.
+#
+# Format (one entry per line):
+#   <fingerprint>  # <description> | <annotation>
+#
+# Separator is "  # " (double-space-hash-space) since fingerprints may contain `#`.
+#
+# Annotation MUST be one of:
+#   | expires: YYYY-MM-DD (cascade: BUG-XXX)
+#   | permanent: <reason>
+#
+# Per Phase 0a.7 expiry retrofit policy.
+#
+# Expiry-policy: per-entry (Phase 0a.7 retrofit)
+# Each non-comment line carries an `| expires: <YYYY-MM-DD> (cascade: <BUG>)`
+# OR `| permanent: <reason>` annotation. Entries past their expiry date
+# fail the merge gate via `scripts/guards/check-allowlist-expiry.ts`.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# Categories of legitimate exemptions (when added):
+#
+# 1. dependabot-bump-pr — auto-generated dependency bump PRs from automated
+#    tools (Dependabot, Renovate). These don't need the 5 mandatory sections
+#    because they don't carry deliverable-specific work. Allowlist by
+#    fingerprint of the PR body's first line (e.g., "Bumps [foo] from X to Y").
+#
+# 2. typo-only-pr — single-character or single-line documentation typo fixes
+#    where DoD framework is overkill. PREFERRED: use inline opt-out
+#    `<!-- @pr-template-exempt: typo-fix in <file> -->` instead of allowlisting.
+#
+# Pre-existing baseline as of Phase 0a.13 landing — 0 entries.
+# Inline opt-out is the primary escape hatch for trivial PRs.
+# ─────────────────────────────────────────────────────────────────────────────

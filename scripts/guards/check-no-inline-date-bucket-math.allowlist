@@ -1,0 +1,21 @@
+# check-no-inline-date-bucket-math allowlist
+# Expiry-policy: per-entry
+#
+# Plan PART 6, DoD#5: this allowlist is INTENTIONALLY EMPTY.
+#
+# The lists feature (apps/web/src/features/lists/**) must contain ZERO
+# inline day-ms date math. All due-date bucketing and the 91-day review
+# cadence are single-source-of-truth in:
+#   - apps/web/src/shared/utils/dueDateBuckets.ts
+#   - apps/web/src/shared/utils/reviewCycle.ts
+# (both OUTSIDE this guard's scope, so they need no allowlist entry).
+#
+# An entry here would mean re-introducing inline bucket/cadence math —
+# the exact drift class this guard exists to prevent. Before adding one:
+#   1. Prefer extending the SSoT util instead.
+#   2. If genuinely unavoidable, the entry MUST carry a # rationale and
+#      an explicit operator authorization reference, and a follow-up
+#      BUG-ID to remove it (no permanent allowlist debt — see CLAUDE.md
+#      §15 / the M3 allowlist-as-architecture anti-pattern).
+#
+# Format: "<relpath>:<line>" (specific) or "<relpath>" (whole file).

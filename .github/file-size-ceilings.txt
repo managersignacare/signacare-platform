@@ -1,0 +1,105 @@
+# .github/file-size-ceilings.txt — BUG-528 LOC ratchet
+#
+# Format: <path>=<ceiling> (one per line; # for comments).
+#
+# Each path is grandfathered at the LOC value captured at this commit
+# (2026-04-25, BUG-528 implementation). Guard: scripts/guards/check-file-size.ts
+#
+#   current > ceiling + 50  → CI FAIL (LOC ratchet violation; split or refactor)
+#   current < ceiling - 200 → CI emits NOTICE; manually edit this file
+#                              to lock in the lower ceiling.
+#
+# Files NOT in this list:
+#   <= 1000 LOC → no constraint
+#   >  1000 LOC → CI FAIL (architectural BLOCK threshold; split, OR
+#                 add to this file with BUG-cite if grandfathering).
+#
+# To add a new entry mid-feature: include the line in the same PR
+# that creates the file, with a BUG-ID comment justifying the size.
+#
+# Closes god-file growth class (BUG-420 / BUG-524). The ratchet runs
+# NOW; the actual MedicationsTab split is BUG-524's job.
+#
+# 47 entries grandfathered at BUG-528 introduction.
+
+# ── apps/api/src ─────────────────────────────────────────────────────
+apps/api/src/features/appointments/appointmentService.ts=687
+apps/api/src/features/llm/llmRoutes.ts=1037
+apps/api/src/features/llm/scribeRoutes.ts=363
+# BUG-SA-116 (post-deploy modular split): patient-app now carries
+# expanded two-way exchange + digital care routes; split into bounded
+# route modules is tracked as a follow-up architecture slice.
+# 2026-05-31 bump: activation hardening + wearable/digital care route wiring
+# landed in same file; keep ratchet strict on future growth.
+apps/api/src/features/patient-app/patientAppRoutes.internal.ts=2263
+# BUG-SA-112 (post-deploy split): clinical-intelligence summary +
+# related safety wiring increased patientRoutes LOC in this release.
+apps/api/src/features/patients/patientRoutes.ts=1698
+apps/api/src/features/referrals/referralRepository.ts=683
+apps/api/src/features/referrals/referralService.ts=689
+apps/api/src/features/reports/reportsRoutes.ts=602
+# 2026-05-31 bump: chart/MAR safety and pathway-linked nursing route updates.
+apps/api/src/features/roles/nurseFeatureRoutes.ts=824
+apps/api/src/features/staff-settings/staffSettingsRoutes.ts=1111
+apps/api/src/integrations/fhir/fhirRoutes.ts=668
+apps/api/src/integrations/fhir/smartAuth.ts=615
+apps/api/src/mcp/ambientProcessor.ts=1245
+apps/api/src/mcp/medicalScribe.ts=907
+apps/api/src/mcp/scribeEnhancements.ts=1211
+apps/api/src/mcp/scribeStreaming.ts=727
+apps/api/src/seed-ai-training.ts=703
+apps/api/src/seed-demo-comprehensive.ts=1695
+apps/api/src/server.ts=1235
+apps/api/src/mcp/server/mcpServer.ts=1060
+
+# ── apps/web/src ─────────────────────────────────────────────────────
+# BUG-607 closure: ClozapinePanel.tsx structurally split — 8 inner-tab
+# panels + the NIMC clinical-safety constants extracted to a sibling
+# `clozapine/` folder. Composer drops from 1116 LOC (post-BUG-605/618
+# grandfather) to 665 LOC. Under the 1000-LOC architectural BLOCK
+# threshold. Ceiling auto-drop NOTICE fires per BUG-528.
+apps/web/src/features/medications/components/ClozapinePanel.tsx=665
+apps/web/src/features/ai-agent/pages/AiAgentPage.tsx=1054
+apps/web/src/features/dashboard/pages/DashboardPage.tsx=1162
+apps/web/src/features/exports/pages/ExportsPage.internal.tsx=648
+apps/web/src/features/nursing/pages/NursingPage.tsx=784
+apps/web/src/features/oncology/tabs/OncologyTab.tsx=995
+apps/web/src/features/patients/components/detail/PatientDetailLayout.tsx=858
+apps/web/src/features/patients/components/detail/tabs/AlertsPlansTab.internal.tsx=909
+apps/web/src/features/patients/components/detail/tabs/AppointmentsTab.tsx=976
+# 2026-05-31 bump: episode-scoped assessment linkage + clinician feedback UX.
+apps/web/src/features/patients/components/detail/tabs/AssessmentsTab.tsx=737
+# BUG-SA-113 (post-deploy split): correspondence history/readability
+# uplift and message rendering fixes increased LOC.
+apps/web/src/features/patients/components/detail/tabs/CorrespondenceTab.tsx=1400
+apps/web/src/features/patients/components/detail/tabs/EctTab.tsx=1197
+# BUG-466 B1 explicit-any tranches (Tracking/Inpatient/Episodes/Correspondence) increased
+# local typed payload and safety-normalization scaffolding; ceilings bumped
+# to current LOC snapshot so future growth still fails at +50.
+# BUG-SA-114 (post-deploy split): episode lifecycle + MDT work added
+# structural logic pending extraction into bounded sections.
+apps/web/src/features/patients/components/detail/tabs/EpisodesTab.tsx=1562
+apps/web/src/features/patients/components/detail/tabs/InpatientCareTab.tsx=1334
+apps/web/src/features/patients/components/detail/tabs/MedicationsTab.tsx=100
+# 2026-05-31 bump: diagnosis/summary rendering fixes and contract alignment.
+apps/web/src/features/patients/components/detail/tabs/SummaryTab.tsx=1760
+apps/web/src/features/patients/components/detail/tabs/TrackingTab.tsx=849
+apps/web/src/features/patients/components/detail/tabs/VivaTab.tsx=1725
+# BUG-SA-115 (post-deploy split): new life-chart schema domain model
+# exceeds 1000 LOC block threshold until modularized.
+apps/web/src/features/patients/components/detail/tabs/lifeChartSchemaDomain.ts=26
+apps/web/src/features/patients/components/notes/AddNoteDialog.tsx=925
+apps/web/src/features/patients/components/notes/AmbientAiRecorder.tsx=1528
+apps/web/src/features/patients/components/registration/EditPatientWizard.tsx=439
+apps/web/src/features/patients/pages/PatientsPage.tsx=798
+apps/web/src/features/power-settings/pages/PowerSettingsPage.tsx=859
+apps/web/src/features/receptionist/pages/ReceptionistPage.tsx=646
+apps/web/src/features/referrals/pages/ReferralCoordinatorQueue.tsx=659
+apps/web/src/features/referrals/pages/ReferralsPage.tsx=880
+apps/web/src/features/reports/pages/ReportsPage.tsx=1321
+# BUG-SA-117 (post-deploy modular split): treatment pathways page now
+# includes digital interventions + step-care + wearable panels; split
+# into section components is tracked as follow-up architecture work.
+apps/web/src/features/treatment-pathways/pages/PathwaysPage.tsx=1052
+apps/web/src/features/settings/pages/SettingsPage.tsx=1601
+apps/web/src/features/staff-settings/pages/StaffAssignmentsPage.tsx=783

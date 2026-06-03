@@ -1,0 +1,22 @@
+Org hierarchy
+	State _VIC
+	Network_NAHS
+	Health service-NH
+	Division/department
+	subspeciality
+	Unit
+	Clinic
+	Program
+	Teams
+	POD	
+
+
+
+    in making these changes, work with dicipline 10/10, gold standard build. follow all build rules. no short cuts or. quick fixes. do all checks like l1-l5. ensure you have removed all stale items. Make sure you have built all required. gold standard regression proof gurds.
+
+
+
+work on templates
+ai training
+build modular tablet based used
+phone based interventions

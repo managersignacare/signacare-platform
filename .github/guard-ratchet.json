@@ -1,0 +1,5 @@
+{
+  "minGuardScripts": 77,
+  "baselineDate": "2026-05-13",
+  "notes": "Counts all package.json guard:* scripts except seed/retrofit helper scripts."
+}

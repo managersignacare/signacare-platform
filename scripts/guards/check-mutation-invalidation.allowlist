@@ -1,0 +1,12 @@
+# Allowlist for check-mutation-invalidation.ts (PR-R1-22)
+# Format: <file> <fp>  # <preview> | BUG-XXX — <reason>
+# Cascade: BUG-PR-R1-22-CASCADE-DRAIN-MUTATION-INVALIDATION
+# Expiry-policy: per-entry (added 2026-05-03 cycle Phase 0a.7)
+# Each non-comment line carries an `| expires: <YYYY-MM-DD> (cascade: <BUG>)`
+# OR `| permanent: <reason>` annotation. Entries past their expiry date
+# fail the merge gate via `scripts/guards/check-allowlist-expiry.ts`.
+# Renewal: when a target close-by date passes, EITHER drain the entry
+# (preferred) OR explicitly extend the date with operator authorization.
+# Drained 2026-05-12 under BUG-419 closure slice (B5): entries moved to
+# either explicit invalidation handlers or inline @no-invalidate-needed
+# annotations with rationale in source.

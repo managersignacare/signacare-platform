@@ -1,0 +1,118 @@
+#!/usr/bin/env sh
+# Phase R1 PR-R1-1 — Pre-commit guards
+#
+# Wires the FASTEST guards (< 60s total budget) into pre-commit so
+# violations are caught on `git commit` instead of failing CI 5-10 min
+# later. Heavier guards (full test suite, 28 guard sweep, integration
+# tests, E2E) still run in CI per `.github/workflows/ci.yml`.
+#
+# Why these specific guards: each prevents a high-frequency class of
+# bug seen in the BUG-622/623/630/632/634/637/638/634b cluster:
+#
+#   - guard:file-size            BUG-528 LOC ratchet (god-files prevention)
+#   - guard:fk-aware-joins       BUG-637 wrong-table joins (BUG-623/632 class)
+#   - guard:response-shape-validated  BUG-638 raw-row leak (CLAUDE.md §5.2)
+#   - guard:service-auth-context PR-R1-2 / CLAUDE.md §13 enforcement
+#   - guard:migration-rollback-discipline PR-R1-3 / CLAUDE.md §12.4
+#   - guard:jsonb-extraction      PR-R1-4 / CLAUDE.md §1.7
+#   - guard:trx-not-db-inside-transaction PR-R1-5 / CLAUDE.md §2.1
+#   - guard:bugs-remaining-uniqueness PR-R1-6 / CLAUDE.md §9.5
+#   - guard:mapper-naming         PR-R1-10 / CLAUDE.md §5.2
+#   - guard:zod-schema-parity     PR-R1-11 / CLAUDE.md §5.1 + §15
+#   - guard:opt-locking-new-tables PR-R1-12 / CLAUDE.md §1.6
+#   - check-naming-conventions   /api/v1/ prefix, parseInt radix, etc
+#   - check-no-silent-catches    BUG-441/445/548 lie-about-success class
+#   - check-fix-registry         registry anchor verification
+#   - tsc apps/api               compile-time correctness on the hottest workspace
+#
+# Bypass for emergencies: `git commit --no-verify` (use sparingly; CI
+# will still gate the full guard suite on PR).
+#
+# Total measured budget: ~10-15s on a clean checkout (variance from
+# disk cache + machine speed; Mac M2 measured 11.7s; HDD-backed CI
+# may be 20-30s). Slow > 60s = revisit guard set or extract to pre-push.
+
+set -e
+
+echo "→ Pre-commit guards (Phase R1 PR-R1-1)"
+
+# 0. Secret leakage guard (Class G1) — staged diff only.
+# Fails commit immediately if any newly staged secret-like material is present.
+npm run security:gitleaks:staged --silent
+
+# 1. File-size ratchet — fastest (< 1s)
+npm run guard:file-size --silent
+
+# 2. FK-aware joins — wrong-table-join class (BUG-637)
+npm run guard:fk-aware-joins --silent
+
+# 3. Response-shape Zod validation — raw-row leak class (BUG-638)
+npm run guard:response-shape-validated --silent
+
+# 3b. Service AuthContext propagation — CLAUDE.md §13 (PR-R1-2)
+npm run guard:service-auth-context --silent
+
+# 3c. Migration rollback discipline — CLAUDE.md §12.4 (PR-R1-3)
+npm run guard:migration-rollback-discipline --silent
+
+# 3d. JSONB extraction in GET responses — CLAUDE.md §1.7 (PR-R1-4)
+npm run guard:jsonb-extraction --silent
+
+# 3e. Transaction boundary trx-not-db — CLAUDE.md §2.1 (PR-R1-5)
+npm run guard:trx-not-db-inside-transaction --silent
+
+# 3f. bugs-remaining catalogue uniqueness — CLAUDE.md §9.5 (PR-R1-6)
+npm run guard:bugs-remaining-uniqueness --silent
+
+# 3g. Mapper naming canonicalisation — CLAUDE.md §5.2 (PR-R1-10)
+npm run guard:mapper-naming --silent
+
+# 3h. Zod schema convention parity — CLAUDE.md §5.1 + §15 (PR-R1-11)
+npm run guard:zod-schema-parity --silent
+
+# 3i. Optimistic-locking new-table linter — CLAUDE.md §1.6 (PR-R1-12)
+npm run guard:opt-locking-new-tables --silent
+
+# 3j. Claude Layer 0a discipline bundle — agents + memory + matrix + guard
+npm run guard:claude-discipline --silent
+
+# 3k. Trigger-aware elevated mechanical set (BUG-PRECOMMIT-REVIEW-CHAIN-FOR-S1
+# D2). When the staged diff touches apps/api/migrations/, run the migration-
+# quality 4-guard set (rls-policy + index-discipline + rollback-discipline
+# was already covered above as PR-R1-3, so the elevated set is the OTHER 3:
+# rls-policy + index-discipline + convention). The cf3f567 cycle-2 L5 review
+# observed that guard:claude-discipline does NOT include these 3 — they ARE
+# in CI but not pre-commit. This block closes that gap.
+#
+# Trigger detection delegates to the shared TS module so the same logic
+# fires in commit-msg (D4). Migration touch is the cheapest trigger to
+# detect via shell + only one we mechanically escalate against in phase 1.
+# features-3plus and bug-closure-s012 triggers fire commit-msg-attestation
+# only (per operator-authorized phase-1 design 2026-05-06).
+STAGED_FILES_FOR_TRIGGER=$(git diff --cached --name-only --diff-filter=ACMR)
+if echo "$STAGED_FILES_FOR_TRIGGER" | grep -qE '^apps/api/migrations/[^/]+\.ts$'; then
+  echo "→ trigger-commit detected (migrations) — running migration-quality elevated set"
+  npm run guard:migration-rls-policy --silent
+  npm run guard:migration-index-discipline --silent
+  npm run guard:migration-convention --silent
+  # NOTE: guard:migration-rollback-discipline is already in step 3c above.
+fi
+
+# 4. Naming conventions — /api/v1/ prefix, parseInt radix, knex aliases
+bash .github/scripts/check-naming-conventions.sh
+
+# 5. No silent catches — BUG-441/445/548 lie-about-success class
+bash .github/scripts/check-no-silent-catches.sh
+
+# 6. Fix-registry — every documented fix verifiably still in place
+bash .github/scripts/check-fix-registry.sh
+
+# NOTE: tsc compile is intentionally NOT in pre-commit. tsc requires
+# the workspace-level typescript install (devDep "typescript": "^6.0.2"
+# in apps/api/package.json + packages/shared/package.json) which can be
+# stale on developer machines and adds ~30s to commit time. tsc is the
+# CI backstop in `.github/workflows/ci.yml` (typecheck job; required
+# merge-gate). The 6 guards above catch the high-frequency violation
+# classes; tsc catches type-correctness which is rarer in practice.
+
+echo "✓ Pre-commit guards passed"
