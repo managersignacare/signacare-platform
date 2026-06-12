@@ -235,6 +235,7 @@ function invalidateForEvent(qc: QueryClient, type: string, data: StreamEventPayl
     case 'ai-job-complete':
       // Specific invalidation based on the AI action
       if (data.action === 'formulation') qc.invalidateQueries({ queryKey: patientsKeys.notesAll() });
+      if (data.action === 'ambient' || data.action === 'ambient-audio') qc.invalidateQueries({ queryKey: patientsKeys.notesAll() });
       if (data.action === 'admin-report') qc.invalidateQueries({ queryKey: sharedSseEventKeys.adminOverview() });
       break;
   }

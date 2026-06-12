@@ -29,51 +29,32 @@ import { authorizeAiRequest, type AiDecisionToken } from '../ai/policy/aiPolicy'
 import { guardAiTextEgress } from '../ai/egress/responseGuard';
 import { verifyRecordingConsent } from '../../shared/recordingConsent';
 import {
+  ambientAudioMaxBytes,
+  ambientHttpTimeoutMs,
+} from '../../shared/ambientScribeConfig';
+import { ambientUploadSemaphore } from '../../utils/semaphore';
+import { resolveLlmHttpTimeoutMs } from '../../shared/llmHttpTimeout';
+import {
   recordAlertCalibrationFeedback,
   recordScribeReadabilitySignal,
 } from '../../shared/postDeployTelemetry';
+import {
+  buildAmbientAudioTooLargeResponse,
+  buildAmbientProcessingTimeoutResponse,
+} from './ambientNoteResponses';
+import { AmbientNoteRequestSchema } from './ambientNoteSchemas';
+import { registerAmbientNoteAsyncJobRoute } from './ambientNoteAsyncJobRoute';
+import { assertSyncClinicalAiRouteAllowed } from './asyncClinicalAiGuard';
 import {
   recordInteraction,
   getClinicUsage,
   getUserUsage,
   suggest,
 } from './llmController';
+import { probeWhisperHealth } from './whisperHealthProbe';
 
-const AMBIENT_NOTE_FORMATS = [
-  'soap',
-  'mse',
-  'progress',
-  'intake',
-  'ward_round',
-  'review',
-  'collateral',
-  'phone',
-  'home_visit',
-  'case_conference',
-  'group',
-  'incident',
-  'physical_health',
-  'lai',
-  'clozapine',
-  'all',
-] as const;
-
-const AmbientNoteRequestSchema = z.object({
-  patientId: z.string().uuid(
-    'patientId must be a valid UUID — required for recording-consent verification (BUG-035)',
-  ),
-  consentId: z.string().uuid(
-    'consentId must be a valid UUID — capture via POST /api/v1/scribe/consent before recording (BUG-035)',
-  ),
-  format: z.enum(AMBIENT_NOTE_FORMATS).optional(),
-  model: z.string().max(128).optional(),
-  interpreterUsed: z.union([z.boolean(), z.string()]).optional(),
-  interpreterLanguage: z.string().max(64).optional(),
-  multiSpeakerMode: z.union([z.boolean(), z.string()]).optional(),
-});
 const ClinicalAiResponseSchema = z.object({ result: z.string(), action: z.string(), model: z.string().optional(), disclaimer: z.string() });
 const ClinicalAiEnhancedResponseSchema = ClinicalAiResponseSchema.extend({ enriched: z.unknown().optional(), sections: z.unknown().optional() });
-
 if (typeof verifyRecordingConsent !== 'function') {
   throw new Error(
     '[BUG-035] verifyRecordingConsent not exported from shared/recordingConsent — ' +
@@ -83,6 +64,7 @@ if (typeof verifyRecordingConsent !== 'function') {
 }
 const router = Router();
 router.use(authMiddleware);
+registerAmbientNoteAsyncJobRoute(router);
 async function applyLetterDraftSafetyForClinicalAi(params: {
   req: Request;
   action: string;
@@ -143,8 +125,9 @@ router.post(
     allowedPurposes: ['clinical', 'operational'],
   }),
   async (req: Request, res: Response, next: NextFunction) => {
-    req.setTimeout(180_000);
-    res.setTimeout(180_000);
+    const llmHttpTimeoutMs = resolveLlmHttpTimeoutMs();
+    req.setTimeout(llmHttpTimeoutMs);
+    res.setTimeout(llmHttpTimeoutMs);
     try {
       const { ClinicalAiSchema } = await import('@signacare/shared');
       ClinicalAiSchema.parse(req.body);
@@ -216,6 +199,8 @@ router.post(
         }
       }
 
+      assertSyncClinicalAiRouteAllowed(action, patientId);
+
       if (enhance !== false && patientId) {
         const { enhancedGenerate } = await import('../../mcp/aiEnhancer');
         const output = await enhancedGenerate({
@@ -259,34 +244,16 @@ router.post(
         return;
       }
 
-      const { clinicalAi } = await import('../../mcp/localLlmAgent');
-      let result = '';
-      switch (action) {
-        case 'maudsley': result = await clinicalAi.generateMaudsleySummary(data, model); break;
-        case 'isbar': result = await clinicalAi.generateISBAR(data, model); break;
-        case 'formulation': result = await clinicalAi.generateFormulation(data, model); break;
-        case '91day': result = await clinicalAi.generate91DayReview(data, model); break;
-        case 'letter': result = await clinicalAi.generateLetter(data, req.body.templateType ?? 'GP letter', model); break;
-        case 'ambient': result = await clinicalAi.processAmbientNotes(data, model); break;
-        case 'admin-report': result = await clinicalAi.generateAdminReport(data, model); break;
-        case 'register-summary': result = await clinicalAi.generateRegistrationSummary(data, model); break;
-        case 'discharge': result = await clinicalAi.generateDischargeSummary(data, model); break;
-        case 'med-summary': result = await clinicalAi.generateMedSummary(data, model); break;
-        case 'classify': result = await clinicalAi.classifyText(data); break;
-        case 'mhrt-report': result = await clinicalAi.generateMaudsleySummary(data, model); break;
-        case 'risk-summary': result = await clinicalAi.generateFormulation(data, model); break;
-        case 'report-insight':
-        case 'handover-summary':
-        case 'medication-adherence':
-        case 'ect-summary':
-        case '5p-formulation':
-          result = await clinicalAi.generateAdminReport(
-            `Context: ${action}\n\nAnalyse the following data and provide actionable clinical insights:\n\n${typeof data === 'string' ? data : JSON.stringify(data, null, 2)}`,
-            model
-          );
-          break;
-        default: res.status(400).json({ error: `Unknown action: ${action}` }); return;
-      }
+      const { generateClinicalAction } = await import('./modelRouter/modelRouter');
+      const normalizedData = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+      const routed = await generateClinicalAction({
+        clinicId: req.clinicId,
+        action: action as Parameters<typeof generateClinicalAction>[0]['action'],
+        data: normalizedData,
+        templateType: req.body.templateType,
+        requestedModel: model,
+      });
+      const result = routed.text;
       const cleanResult = result
         .replace(/\*\*(.*?)\*\*/g, '$1')     // **bold** → bold
         .replace(/__(.*?)__/g, '$1')          // __underline__ → underline
@@ -325,7 +292,12 @@ router.post(
         feature: `clinical-ai:${action}`,
         text: egressChecked.safeText,
       });
-      res.json(ClinicalAiResponseSchema.parse({ result: egressChecked.safeText, action, model: model ?? 'default', disclaimer: CLINICAL_AI_DISCLAIMER }));
+      res.json(ClinicalAiResponseSchema.parse({
+        result: egressChecked.safeText,
+        action,
+        model: routed.execution.modelName,
+        disclaimer: CLINICAL_AI_DISCLAIMER,
+      }));
     } catch (err) {
       next(err);
     }
@@ -572,12 +544,22 @@ router.post(
   requireModuleRead(MODULE_KEYS.MEDICAL_SCRIBE),
   requireClinicModuleEnabled(MODULE_KEYS.MEDICAL_SCRIBE),
   async (req: Request, res: Response, next: NextFunction) => {
-    req.setTimeout(300_000);
-    res.setTimeout(300_000);
+    let ambientUploadSlotAcquired = false;
+    const ambientTimeoutMs = ambientHttpTimeoutMs();
+    req.setTimeout(ambientTimeoutMs);
+    res.setTimeout(ambientTimeoutMs);
 
     try {
+      ambientUploadSlotAcquired = ambientUploadSemaphore.tryAcquire();
+      if (!ambientUploadSlotAcquired) {
+        throw new AppError(
+          'Ambient scribe is already processing another recording. Please wait and retry.',
+          429,
+          'AMBIENT_UPLOAD_CAPACITY_EXHAUSTED',
+        );
+      }
       const multer = (await import('multer')).default;
-      const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
+      const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: ambientAudioMaxBytes() } });
 
       await new Promise<void>((resolve, reject) => {
         upload.single('audio')(req, res, (err: unknown) => err ? reject(err) : resolve());
@@ -608,13 +590,10 @@ router.post(
 
       const audioFile = req.file;
       if (!audioFile) {
-        res.status(400).json({ error: 'No audio file provided' });
-        return;
+        throw new AppError('No audio file provided', 400, 'AUDIO_UPLOAD_MISSING');
       }
-
       if (audioFile.size < 1000) {
-        res.status(400).json({ error: 'Audio file too small. Please record at least a few seconds.' });
-        return;
+        throw new AppError('Audio file too small. Please record at least a few seconds.', 400, 'AUDIO_UPLOAD_TOO_SMALL');
       }
 
       const { randomUUID } = await import('crypto');
@@ -625,7 +604,13 @@ router.post(
       const mm = String(now.getUTCMonth() + 1).padStart(2, '0');
       const audioFilename = `${randomUUID()}${ext}`;
       const audioStorageKey = `audio/${yyyy}/${mm}/${audioFilename}`;
-      const audioPut = await blobStorage.put(audioStorageKey, audioFile.buffer, audioFile.mimetype || 'audio/webm');
+      const audioBuffer = Buffer.isBuffer(audioFile.buffer)
+        ? audioFile.buffer
+        : Buffer.alloc(0);
+      if (audioBuffer.length === 0) {
+        throw new AppError('Audio upload was not retained for processing', 400, 'AUDIO_UPLOAD_EMPTY');
+      }
+      const audioPut = await blobStorage.put(audioStorageKey, audioBuffer, audioFile.mimetype || 'audio/webm');
 
       const assertConsentStillActive = async (checkpoint: 'post_upload_pre_processing' | 'post_processing_pre_save') => {
         try {
@@ -657,16 +642,16 @@ router.post(
               );
             }
             logger.warn(
-                {
-                  clinicId: req.clinicId,
-                  patientId: dto.patientId,
-                  consentId: dto.consentId,
-                  checkpoint,
-                  consentCode,
-                },
-                '[BUG-WF51-CONSENT-REVOKE-RACE] consent became inactive during ambient-note processing',
-              );
-            }
+              {
+                clinicId: req.clinicId,
+                patientId: dto.patientId,
+                consentId: dto.consentId,
+                checkpoint,
+                consentCode,
+              },
+              '[BUG-WF51-CONSENT-REVOKE-RACE] consent became inactive during ambient-note processing',
+            );
+          }
           throw err;
         }
       };
@@ -690,9 +675,11 @@ router.post(
         saveError?: string;
         codeSaveError?: string;
         mseStructured?: ReturnType<typeof buildMseStructuredContract>;
-      } = await processAmbientAudio(audioFile.buffer, audioFile.mimetype, {
+      } = await processAmbientAudio(audioBuffer, audioFile.mimetype, {
         clinicId: req.clinicId,
         staffId: req.user!.id,
+        patientId: dto.patientId,
+        auth,
         consentId: dto.consentId,
         model: dto.model,
         outputFormat: dto.format ?? 'soap',
@@ -712,7 +699,10 @@ router.post(
       });
 
       const patientId = req.body?.patientId;
-      if (patientId && result.summary) {
+      const hasLlmFallbacks = Boolean(result.llmFallbacks?.pass1 || result.llmFallbacks?.pass3);
+      if (hasLlmFallbacks) {
+        result.saveError = 'AI output was generated in degraded review-only mode and was not auto-saved. Review the transcript and create a clinical note manually.';
+      } else if (patientId && result.summary) {
         try {
           const { db } = await import('../../db/db');
           const { withTenantContext } = await import('../../shared/tenantContext');
@@ -731,6 +721,7 @@ router.post(
               code: '',
             })),
             allergies: [],
+            noteText: result.summary ?? '',
           });
 
           if (!hallucinationCheck.ok) {
@@ -747,13 +738,16 @@ router.post(
               },
             });
 
-            res.status(422).json({
-              code: 'AI_HALLUCINATION_DETECTED',
-              message: 'Review required — potential hallucinations detected',
+            next(new AppError(
+              'Review required — potential hallucinations detected',
+              422,
+              'AI_HALLUCINATION_DETECTED',
+              {
               findings: hallucinationCheck.findings,
               summary: result.summary,
               structured,
-            });
+              },
+            ));
             return;
           }
 
@@ -826,6 +820,13 @@ router.post(
         next(err);
         return;
       }
+      if (err && typeof err === 'object' && (err as { code?: unknown }).code === 'LIMIT_FILE_SIZE') {
+        const response = buildAmbientAudioTooLargeResponse();
+        next(new AppError(response.error, 413, response.code, {
+          targetMinutes: response.targetMinutes,
+        }));
+        return;
+      }
       if (err && typeof err === 'object' && (err as { name?: string }).name === 'ZodError') {
         next(err);
         return;
@@ -838,16 +839,25 @@ router.post(
         } catch (_restartErr) {
           void _restartErr;
         }
-        res.status(503).json({ error: 'Whisper server was not running. It is now starting — please try again in 15-20 seconds.', code: 'WHISPER_RESTARTING' });
+        next(new AppError(
+          'Whisper server was not running. It is now starting — please try again in 15-20 seconds.',
+          503,
+          'WHISPER_RESTARTING',
+        ));
       } else if (msg.includes('timeout') || msg.includes('ETIMEDOUT')) {
-        res.status(504).json({ error: 'Processing timed out. The recording may be too long.', code: 'PROCESSING_TIMEOUT' });
+        const response = buildAmbientProcessingTimeoutResponse();
+        next(new AppError(response.error, 504, response.code, {
+          targetMinutes: response.targetMinutes,
+        }));
       } else if (msg.includes('No speech detected')) {
-        res.status(422).json({ error: msg, code: 'NO_SPEECH' });
+        next(new AppError(msg, 422, 'NO_SPEECH'));
       } else if (msg.includes('Ollama') || msg.includes('LLM')) {
-        res.status(503).json({ error: 'AI model is not available. Ensure Ollama is running.', code: 'LLM_UNAVAILABLE' });
+        next(new AppError('AI model is not available. Ensure Ollama is running.', 503, 'LLM_UNAVAILABLE'));
       } else {
         next(err);
       }
+    } finally {
+      if (ambientUploadSlotAcquired) ambientUploadSemaphore.release();
     }
   },
 );
@@ -939,15 +949,15 @@ router.post(
       const { runAgent } = await import('../../mcp/server/aiAgent');
       const startMs = Date.now();
       const result = await runAgent(query, agentAuth, model, aiPolicyDecision?.scope ?? scope);
-
+      const routedProvider = result.execution?.backend === 'azure_openai' ? 'azure_openai' : 'ollama', routedModelName = result.execution?.modelName ?? result.model, routedModelVersion = result.execution?.modelVersion ?? result.modelVersion;
       await recordLlmInteraction({
         clinicId: req.clinicId,
         userId: req.user!.id,
         patientId: patientId ?? null,
         feature: 'ai-agent',
-        modelName: result.model,
-        modelVersion: result.modelVersion,
-        modelProvider: 'ollama',
+        modelName: routedModelName,
+        modelVersion: routedModelVersion,
+        modelProvider: routedProvider,
         temperature: result.requestedTemperature,
         pipeline: [{
           stage: 'agent_run',
@@ -965,7 +975,17 @@ router.post(
         outputText: result.answer ?? '',
         consentId: null,
         metadata: {
-          versionSource: result.modelVersion && result.modelVersion !== result.model ? 'digest' : 'tag',
+          versionSource:
+            result.execution?.backend === 'azure_openai'
+              ? 'provider'
+              : result.modelVersion && result.modelVersion !== result.model
+                ? 'digest'
+                : 'tag',
+          routedAlias: result.execution?.alias ?? null,
+          routedBackend: result.execution?.backend ?? null,
+          routedDeployment: result.execution?.deployment ?? null,
+          localStyleAdapterModelName: result.execution?.localStyleAdapterModelName ?? null,
+          fallbackFromModelName: result.fallbackFromModelName ?? null,
         },
       });
 
@@ -1003,11 +1023,13 @@ router.post(
         msg.includes('ECONNREFUSED') ||
         msg.includes('connect ECONNREFUSED') ||
         msg.includes('Ollama') ||
-        msg.includes('LLM not available')
+        msg.includes('LLM not available') ||
+        msg.includes('AI_BACKEND_UNAVAILABLE') ||
+        msg.includes('AI_PROVIDER_ERROR')
       ) {
         return next(
           new AppError(
-            'AI model is not available. Ensure Ollama is running.',
+            'AI model is not available. Ensure the configured clinical AI backend is available.',
             503,
             'LLM_UNAVAILABLE',
           ),
@@ -1030,13 +1052,8 @@ router.post(
 
 router.get('/whisper/status', async (_req: Request, res: Response) => {
   try {
-    const http = await import('http');
     const url = process.env.WHISPER_API_URL ?? 'http://localhost:8080';
-    const healthy = await new Promise<boolean>((resolve) => {
-      const r = http.get(`${url}/health`, { timeout: 3000 }, (resp) => resolve(resp.statusCode === 200));
-      r.on('error', () => resolve(false));
-      r.on('timeout', () => { r.destroy(); resolve(false); });
-    });
+    const healthy = await probeWhisperHealth(url);
     res.json({ running: healthy, url });
   } catch {
     res.json({ running: false });
@@ -1048,13 +1065,8 @@ router.post('/whisper/start', async (_req: Request, res: Response, next: NextFun
     const { startWhisperServer } = await import('../../jobs/bootstrap');
     await startWhisperServer();
     await new Promise(r => setTimeout(r, 2000));
-    const http = await import('http');
     const url = process.env.WHISPER_API_URL ?? 'http://localhost:8080';
-    const healthy = await new Promise<boolean>((resolve) => {
-      const r = http.get(`${url}/health`, { timeout: 3000 }, (resp) => resolve(resp.statusCode === 200));
-      r.on('error', () => resolve(false));
-      r.on('timeout', () => { r.destroy(); resolve(false); });
-    });
+    const healthy = await probeWhisperHealth(url);
     res.json({ started: true, running: healthy, message: healthy ? 'Whisper server is running' : 'Whisper server is starting — may take 15-20 seconds for model loading' });
   } catch (err) {
     next(err);

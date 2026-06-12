@@ -43,12 +43,28 @@ const CONTRACTS: TemplateContract[] = [
       'JWT_REFRESH_SECRET',
       'PHI_ENCRYPTION_KEY',
       'BLIND_INDEX_KEY',
+      'PATIENT_APP_DEDUPE_PEPPER',
       'SESSION_SECRET',
+      'UPLOAD_BASE_DIR',
+      'BLOB_STORAGE_BACKEND',
+      'BLOB_AZURE_ACCOUNT_NAME',
+      'BLOB_AZURE_ACCOUNT_KEY',
+      'BLOB_AZURE_CONTAINER',
+      'BLOB_AZURE_ENDPOINT',
       'REDIS_URL',
       'CORS_ORIGIN',
       'API_BASE_URL',
       'MFA_ISSUER',
       'OLLAMA_BASE_URL',
+      'AZURE_OPENAI_ENDPOINT',
+      'AZURE_OPENAI_AUTH_MODE',
+      'AZURE_OPENAI_PRIVATE_NETWORK_ENFORCED',
+      'AZURE_OPENAI_API_KEY',
+      'AZURE_OPENAI_API_VERSION',
+      'AZURE_OPENAI_DEPLOYMENT_FAST_CLINICAL',
+      'AZURE_OPENAI_DEPLOYMENT_FAST_CLINICAL_VERSION',
+      'AZURE_OPENAI_DEPLOYMENT_BEST_CLINICAL',
+      'AZURE_OPENAI_DEPLOYMENT_BEST_CLINICAL_VERSION',
       'WHISPER_API_URL',
       'FCM_SERVICE_ACCOUNT_PATH',
       'ACS_CONNECTION_STRING',
@@ -78,12 +94,21 @@ const CONTRACTS: TemplateContract[] = [
       'JWT_REFRESH_SECRET',
       'PHI_ENCRYPTION_KEY',
       'BLIND_INDEX_KEY',
+      'PATIENT_APP_DEDUPE_PEPPER',
       'SESSION_SECRET',
       'REDIS_URL',
       'API_BASE_URL',
       'CORS_ORIGIN',
       'MFA_ISSUER',
       'OLLAMA_BASE_URL',
+      'AZURE_OPENAI_ENDPOINT',
+      'AZURE_OPENAI_AUTH_MODE',
+      'AZURE_OPENAI_PRIVATE_NETWORK_ENFORCED',
+      'AZURE_OPENAI_API_VERSION',
+      'AZURE_OPENAI_DEPLOYMENT_FAST_CLINICAL',
+      'AZURE_OPENAI_DEPLOYMENT_FAST_CLINICAL_VERSION',
+      'AZURE_OPENAI_DEPLOYMENT_BEST_CLINICAL',
+      'AZURE_OPENAI_DEPLOYMENT_BEST_CLINICAL_VERSION',
       'WHISPER_API_URL',
       'FCM_SERVICE_ACCOUNT_PATH',
       'ACS_CONNECTION_STRING',
@@ -93,6 +118,12 @@ const CONTRACTS: TemplateContract[] = [
       'SAFESCRIPT_CLIENT_SECRET',
       'NPDS_API_URL',
       'NPDS_PAYLOAD_SECURITY_MODE',
+      'UPLOAD_BASE_DIR',
+      'BLOB_STORAGE_BACKEND',
+      'BLOB_AZURE_ACCOUNT_NAME',
+      'BLOB_AZURE_ACCOUNT_KEY',
+      'BLOB_AZURE_CONTAINER',
+      'BLOB_AZURE_ENDPOINT',
     ],
   },
   {
@@ -127,6 +158,7 @@ function parseKeysFromTemplate(content: string): Set<string> {
 }
 
 const ENV_KEY_CATALOG_PATH = 'docs/operations/env-contract-catalog.md';
+const AZURE_APPSERVICE_BICEP_PATH = 'deploy/azure/modules/appservice.bicep';
 
 const SOURCE_ROOTS = [
   'apps/api/src',
@@ -147,6 +179,57 @@ function parseKeysFromCatalog(content: string): Set<string> {
     if (match?.[1]) keys.add(match[1]);
   }
   return keys;
+}
+
+function validateAzureBlobBicepContract(failures: string[]): void {
+  if (!existsSync(AZURE_APPSERVICE_BICEP_PATH)) {
+    failures.push(`${AZURE_APPSERVICE_BICEP_PATH}: missing Azure App Service module`);
+    return;
+  }
+
+  const bicep = readFileSync(AZURE_APPSERVICE_BICEP_PATH, 'utf8');
+  const requiredAzureKeys = [
+    'BLOB_STORAGE_BACKEND',
+    'BLOB_AZURE_ACCOUNT_NAME',
+    'BLOB_AZURE_ACCOUNT_KEY',
+    'BLOB_AZURE_CONTAINER',
+    'BLOB_AZURE_ENDPOINT',
+  ];
+
+  if (!/BLOB_STORAGE_BACKEND'[\s\S]{0,120}azure-blob/.test(bicep)) {
+    failures.push(`${AZURE_APPSERVICE_BICEP_PATH}: Azure deployment must select BLOB_STORAGE_BACKEND=azure-blob`);
+  }
+
+  const missingAzureKeys = requiredAzureKeys.filter((key) => !bicep.includes(key));
+  if (missingAzureKeys.length > 0) {
+    failures.push(`${AZURE_APPSERVICE_BICEP_PATH}: missing Azure Blob app settings -> ${missingAzureKeys.join(', ')}`);
+  }
+
+  if (/BLOB_S3_(BUCKET|REGION|ENDPOINT|ACCESS_KEY_ID|SECRET_ACCESS_KEY)/.test(bicep)) {
+    failures.push(`${AZURE_APPSERVICE_BICEP_PATH}: Azure deployment must not wire Azure Blob through BLOB_S3_* settings`);
+  }
+
+  if (!/var apiSlotAppSettings = (?:\[|concat\()/.test(bicep)) {
+    failures.push(`${AZURE_APPSERVICE_BICEP_PATH}: deployment slot must declare explicit app settings`);
+  }
+  if (!/resource apiSlot[\s\S]+identity:\s*\{[\s\S]+type: 'SystemAssigned'/.test(bicep)) {
+    failures.push(`${AZURE_APPSERVICE_BICEP_PATH}: deployment slot must have a system-assigned identity for Key Vault references`);
+  }
+  if (!/resource apiSlot[\s\S]+appSettings: apiSlotAppSettings/.test(bicep)) {
+    failures.push(`${AZURE_APPSERVICE_BICEP_PATH}: deployment slot must use Azure Blob app settings before smoke/swap`);
+  }
+  if (!/resource apiSlotKvRole[\s\S]+principalId: apiSlot!\.identity\.principalId/.test(bicep)) {
+    failures.push(`${AZURE_APPSERVICE_BICEP_PATH}: deployment slot identity must receive Key Vault Secrets User role`);
+  }
+  if (!/resource apiSlotAcrPullRole[\s\S]+principalId: apiSlot!\.identity\.principalId/.test(bicep)) {
+    failures.push(`${AZURE_APPSERVICE_BICEP_PATH}: API deployment slot identity must receive AcrPull role`);
+  }
+  if (!/resource webSlot[\s\S]+identity:\s*\{[\s\S]+type: 'SystemAssigned'/.test(bicep)) {
+    failures.push(`${AZURE_APPSERVICE_BICEP_PATH}: web deployment slot must have a system-assigned identity for managed ACR pulls`);
+  }
+  if (!/resource webSlotAcrPullRole[\s\S]+principalId: webSlot!\.identity\.principalId/.test(bicep)) {
+    failures.push(`${AZURE_APPSERVICE_BICEP_PATH}: web deployment slot identity must receive AcrPull role`);
+  }
 }
 
 function listSourceFiles(dir: string, out: string[] = []): string[] {
@@ -176,7 +259,35 @@ function collectRuntimeEnvKeys(filePath: string): Set<string> {
     if (/^[A-Z][A-Z0-9_]*$/.test(candidate)) keys.add(candidate);
   };
 
+  const collectEnvSchemaKeys = (node: ts.Node): void => {
+    if (!ts.isVariableDeclaration(node) || !ts.isIdentifier(node.name)) return;
+    if (!/envSchema$/i.test(node.name.text)) return;
+    if (!node.initializer || !ts.isCallExpression(node.initializer)) return;
+
+    const call = node.initializer;
+    if (
+      !ts.isPropertyAccessExpression(call.expression)
+      || !ts.isIdentifier(call.expression.expression)
+      || call.expression.expression.text !== 'z'
+      || call.expression.name.text !== 'object'
+    ) {
+      return;
+    }
+
+    const [firstArg] = call.arguments;
+    if (!firstArg || !ts.isObjectLiteralExpression(firstArg)) return;
+
+    for (const property of firstArg.properties) {
+      if (ts.isPropertyAssignment(property)) {
+        if (ts.isIdentifier(property.name)) add(property.name.text);
+        if (ts.isStringLiteral(property.name)) add(property.name.text);
+      }
+    }
+  };
+
   const visit = (node: ts.Node): void => {
+    collectEnvSchemaKeys(node);
+
     if (ts.isPropertyAccessExpression(node)) {
       // process.env.KEY
       if (
@@ -226,7 +337,11 @@ function collectRuntimeEnvKeys(filePath: string): Set<string> {
     if (
       ts.isCallExpression(node)
       && ts.isIdentifier(node.expression)
-      && (node.expression.text === 'requireEnv' || node.expression.text === 'optionalEnv')
+      && (
+        node.expression.text === 'requireEnv'
+        || node.expression.text === 'optionalEnv'
+        || node.expression.text === 'resolvePositiveIntEnv'
+      )
     ) {
       const arg = node.arguments[0];
       if (arg && ts.isStringLiteral(arg)) add(arg.text);
@@ -304,6 +419,8 @@ function main(): void {
   if (staleCatalog.length > 0) {
     failures.push(`${ENV_KEY_CATALOG_PATH}: stale keys not referenced at runtime -> ${staleCatalog.join(', ')}`);
   }
+
+  validateAzureBlobBicepContract(failures);
 
   if (failures.length > 0) {
     console.error(`✗ env template contract failed (${failures.length} issue(s))`);

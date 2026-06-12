@@ -60,9 +60,13 @@ export async function up(knex: Knex): Promise<void> {
     });
   }
 
-  // Normalize defaults for pre-existing runtime-created tables.
   await knex.schema.alterTable(TABLE, (t) => {
-    t.uuid('id').defaultTo(knex.raw('gen_random_uuid()')).alter();
+    // Normalize defaults for pre-existing runtime-created tables without
+    // altering the primary-key type or nullability.
+    t.uuid('id').defaultTo(knex.raw('gen_random_uuid()')).alter({
+      alterNullable: false,
+      alterType: false,
+    });
     t.boolean('is_enabled').notNullable().defaultTo(true).alter();
     t.timestamp('updated_at', { useTz: true }).notNullable().defaultTo(knex.fn.now()).alter();
   });

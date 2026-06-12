@@ -19,7 +19,20 @@ export const tasksKeys = {
       priority?: string;
       teamId?: string;
       teamScope?: 'mine';
+      dueBucket?: string;
+      ownership?: string;
     } = {},
   ) => [...tasksKeys.all, 'list', params] as const,
+  summary: (
+    params: {
+      assignedToId?: string;
+      teamId?: string;
+      teamScope?: 'mine';
+      status?: string;
+      priority?: string;
+      dueBucket?: string;
+      ownership?: string;
+    } = {},
+  ) => [...tasksKeys.all, 'summary', params] as const,
   detail: (id: string) => [...tasksKeys.all, 'detail', id] as const,
 } as const;

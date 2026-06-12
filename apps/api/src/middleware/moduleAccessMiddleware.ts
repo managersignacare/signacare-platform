@@ -36,6 +36,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import { db } from '../db/db';
 import { requiredPermissionsFor } from '../shared/moduleToPermission';
+import { AppError } from '../shared/errors';
 
 const BYPASS_ROLES = new Set(['superadmin', 'admin']);
 
@@ -130,6 +131,16 @@ export function requireModuleRead(module: string) {
       next(err);
     }
   };
+}
+
+export async function assertModuleRead(req: Request, module: string): Promise<void> {
+  if (!req.user || !req.clinicId) {
+    throw new AppError('Unauthenticated', 401, 'UNAUTHENTICATED');
+  }
+  const ok = await isAllowed(req, module, 'read');
+  if (!ok) {
+    throw new AppError(`Read access denied for module '${module}'`, 403, 'MODULE_READ_DENIED');
+  }
 }
 
 export function requireModuleWrite(module: string) {

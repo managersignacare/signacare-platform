@@ -1,9 +1,16 @@
 // apps/api/src/routes/health.ts
 import { Router } from 'express';
 import type { NextFunction, Request, Response } from 'express';
-import { db } from '../db/db';
+import { db, dbAdmin } from '../db/db';
 import { redis } from '../config/redis';
 import { logger } from '../utils/logger';
+import { createBullmqRedisConnection } from '../shared/bullmqRedisConnection';
+import { readReleaseMetadata, ReleaseMetadataSchema } from '../shared/releaseMetadata';
+import { config } from '../config';
+import {
+  buildAzureOpenAiHealthEntry,
+  buildAzureOpenAiHealthEntryFromConfig,
+} from '../features/llm/modelRouter/azureOpenAiRuntimeHealth';
 // Audit Tier 7.2 (MED-I2) — /health/integrations admin-gated view.
 import { authMiddleware } from '../middleware/authMiddleware';
 import { requireRoles } from '../middleware/rbacMiddleware';
@@ -12,13 +19,26 @@ import { isReady as gsIsReady } from '../shared/gracefulShutdown';
 
 const router = Router();
 
+export { buildAzureOpenAiHealthEntry };
+
 // GET /health — shallow liveness probe
 router.get('/health', (_req: Request, res: Response): void => {
+  const release = readReleaseMetadata();
   res.json({
     status: 'ok',
     service: 'signacare-api',
+    release: {
+      status: release.status,
+      commitSha: release.source.commitSha,
+      releaseManifestSha256: release.contracts.releaseManifestSha256,
+    },
     timestamp: new Date().toISOString(),
   });
+});
+
+// GET /version — immutable release proof for deployment gates.
+router.get('/version', (_req: Request, res: Response): void => {
+  res.json(ReleaseMetadataSchema.parse(readReleaseMetadata()));
 });
 
 // GET /ready — deep readiness probe
@@ -45,6 +65,37 @@ router.get(
       logger.warn(
         { err, check: 'postgres' },
         'Readiness check: postgres unavailable',
+      );
+    }
+
+    // Release/schema drift check. A pod is not truly ready if it is
+    // serving a release that expects newer migrations than the live DB.
+    try {
+      const expectedMigrationHead = readReleaseMetadata().contracts.migrationHead;
+      if (expectedMigrationHead && expectedMigrationHead !== 'unknown') {
+        const row = await dbAdmin('knex_migrations')
+          .max<{ migration_head: string | null }>('name as migration_head')
+          .first();
+        const actualMigrationHead = row?.migration_head ?? null;
+        if (actualMigrationHead === expectedMigrationHead) {
+          (checks as Record<string, string>).schema_migrations = 'ok';
+        } else {
+          (checks as Record<string, string>).schema_migrations = 'error';
+          httpStatus = 503;
+          logger.warn(
+            { expectedMigrationHead, actualMigrationHead, check: 'schema_migrations' },
+            'Readiness check: database migration head does not match deployed release',
+          );
+        }
+      } else {
+        (checks as Record<string, string>).schema_migrations = 'not_configured';
+      }
+    } catch (err) {
+      (checks as Record<string, string>).schema_migrations = 'error';
+      httpStatus = 503;
+      logger.warn(
+        { err, check: 'schema_migrations' },
+        'Readiness check: unable to verify database migration head',
       );
     }
 
@@ -101,15 +152,32 @@ interface IntegrationHealthEntry {
   error?: string;
 }
 
+const DEFAULT_OLLAMA_BASE_URL = 'http://localhost:11434';
+const DEFAULT_WHISPER_API_URL = 'http://localhost:8080';
+
+function trimTrailingSlash(value: string): string {
+  return value.replace(/\/+$/, '');
+}
+
+export function resolveOllamaHealthBaseUrl(env: NodeJS.ProcessEnv = process.env): string {
+  return trimTrailingSlash(env['OLLAMA_URL'] ?? env['OLLAMA_BASE_URL'] ?? DEFAULT_OLLAMA_BASE_URL);
+}
+
+export function resolveWhisperHealthUrl(env: NodeJS.ProcessEnv = process.env): string {
+  return `${trimTrailingSlash(env['WHISPER_API_URL'] ?? DEFAULT_WHISPER_API_URL)}/health`;
+}
+
 async function integrationHealthSnapshot(): Promise<Record<string, IntegrationHealthEntry>> {
   const now = new Date().toISOString();
   const out: Record<string, IntegrationHealthEntry> = {};
 
   // Pathology (HL7 MLLP outbound queue health — BullMQ queue state).
+  let pathologyConnection: ReturnType<typeof createBullmqRedisConnection> | null = null;
   try {
     const { Queue } = await import('bullmq');
+    pathologyConnection = createBullmqRedisConnection();
     const q = new Queue('hl7-outbound', {
-      connection: { host: process.env['REDIS_HOST'] ?? 'localhost', port: 6379 },
+      connection: pathologyConnection,
     });
     const [waiting, active, failed] = await Promise.all([
       q.getWaitingCount(),
@@ -117,6 +185,8 @@ async function integrationHealthSnapshot(): Promise<Record<string, IntegrationHe
       q.getFailedCount(),
     ]);
     await q.close();
+    await pathologyConnection.quit();
+    pathologyConnection = null;
     out.pathology = {
       status: failed > 10 ? 'ERROR' : 'OK',
       lastCheckedAt: now,
@@ -124,6 +194,9 @@ async function integrationHealthSnapshot(): Promise<Record<string, IntegrationHe
     };
     (out.pathology as IntegrationHealthEntry & { queue?: unknown }).queue = { waiting, active, failed };
   } catch (err) {
+    if (pathologyConnection) {
+      try { await pathologyConnection.quit(); } catch { /* best-effort */ }
+    }
     out.pathology = { status: 'ERROR', lastCheckedAt: now, error: err instanceof Error ? err.message : String(err) };
   }
 
@@ -179,7 +252,7 @@ async function integrationHealthSnapshot(): Promise<Record<string, IntegrationHe
 
   // Ollama (AI scribe / letters / chat).
   try {
-    const base = process.env['OLLAMA_URL'] ?? 'http://localhost:11434';
+    const base = resolveOllamaHealthBaseUrl();
     const res = await fetch(`${base}/api/tags`, { signal: AbortSignal.timeout(3000) });
     out.ollama = {
       status: res.ok ? 'OK' : 'UNREACHABLE',
@@ -192,8 +265,7 @@ async function integrationHealthSnapshot(): Promise<Record<string, IntegrationHe
 
   // Whisper (ambient scribe transcription).
   try {
-    const base = process.env['WHISPER_API_URL'] ?? 'http://localhost:8080';
-    const res = await fetch(`${base}/`, { signal: AbortSignal.timeout(3000) });
+    const res = await fetch(resolveWhisperHealthUrl(), { signal: AbortSignal.timeout(3000) });
     out.whisper = {
       status: res.ok ? 'OK' : 'UNREACHABLE',
       lastCheckedAt: now,
@@ -202,6 +274,8 @@ async function integrationHealthSnapshot(): Promise<Record<string, IntegrationHe
   } catch (err) {
     out.whisper = { status: 'UNREACHABLE', lastCheckedAt: now, error: err instanceof Error ? err.message : String(err) };
   }
+
+  out.azureOpenAi = buildAzureOpenAiHealthEntryFromConfig(config);
 
   // Audit Tier 8 — Major missing integration skeletons. Each client's
   // healthCheck() reports UNCONFIGURED until the clinic provisions

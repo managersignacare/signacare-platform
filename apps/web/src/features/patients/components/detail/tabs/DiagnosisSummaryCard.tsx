@@ -17,6 +17,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import PsychologyIcon from '@mui/icons-material/Psychology';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../../../../shared/services/apiClient';
+import { llmAiJobsApi } from '../../../../../shared/services/llmAiJobsApi';
 import { patientsKeys } from '../../../queryKeys';
 import {
   extractErrorMessage,
@@ -581,21 +582,17 @@ export function DiagnosisSummaryCard({
   };
 
   const generateDiagnosisSummary = async () => {
-    setDiagnosisLoading(true);
-    setDiagnosisError('');
-    try {
-      const payload = buildDiagnosisContext(patient, episodes, notes, derivedDiagnosisSummary);
-      const resp = await apiClient.instance.post<{ result: string }>(
-        'llm/clinical-ai',
-        {
+      setDiagnosisLoading(true);
+      setDiagnosisError('');
+      try {
+        const payload = buildDiagnosisContext(patient, episodes, notes, derivedDiagnosisSummary);
+        const result = await llmAiJobsApi.runClinicalAiJob({
           action: 'report-insight',
           data: payload,
           patientId,
           enhance: true,
-        },
-        { timeout: 180_000 },
-      );
-      const parsed = normalizeSummary(extractJsonFromText(resp.data.result));
+        });
+      const parsed = normalizeSummary(extractJsonFromText(result));
       if (!parsed) {
         throw new Error('AI response was not in the expected DSM schema JSON format.');
       }

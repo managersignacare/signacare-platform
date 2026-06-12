@@ -92,18 +92,10 @@ resource server 'Microsoft.DBforPostgreSQL/flexibleServers@2023-12-01-preview' =
   }
 }
 
-// Allow Azure services to reach the server (App Service egress IPs are
-// dynamic, so a CIDR allow-list would be fragile — Azure-services rule
-// covers App Service + Container Apps + Functions). For truly locked-
-// down prod, switch to VNet integration later.
-resource allowAzureServices 'Microsoft.DBforPostgreSQL/flexibleServers/firewallRules@2023-12-01-preview' = {
-  parent: server
-  name: 'allow-azure-services'
-  properties: {
-    startIpAddress: '0.0.0.0'
-    endIpAddress: '0.0.0.0' // Azure's special "allow all Azure services" sentinel
-  }
-}
+// NOTE: the Azure-services firewall rule is converged by deploy/azure/deploy.sh
+// after the main ARM deployment succeeds. Azure's control plane has been
+// observed to leave replayed firewall child deployments hanging indefinitely
+// even when the rule already exists, which blocks idempotent rollouts.
 
 // Required-extensions allow-list. Signacare migrations call CREATE
 // EXTENSION for pg_trgm, pgcrypto, uuid-ossp, and btree_gin; the

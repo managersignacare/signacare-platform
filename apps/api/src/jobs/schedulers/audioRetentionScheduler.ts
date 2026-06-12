@@ -4,7 +4,7 @@
 //
 // Deletes raw consultation audio older than AUDIO_RETENTION_DAYS
 // (default 30) so we don't carry indefinitely-growing PHI on disk
-// or in S3. Heidi documents a retention policy; Signacare now does too.
+// or in cloud blob storage. Heidi documents a retention policy; Signacare now does too.
 //
 // What this scheduler covers depends on the BLOB_STORAGE_BACKEND:
 //
@@ -12,13 +12,10 @@
 //            local filesystem and removes files whose mtime is older
 //            than the cutoff.
 //
-//   s3     — DOES NOT delete from S3 directly. The recommended
-//            production setup is an S3 bucket lifecycle policy that
-//            transitions audio/* objects to Glacier after N days and
-//            then expires them. The scheduler logs a one-line warning
-//            on each tick reminding ops that S3 lifecycle is the
-//            authoritative path. A future extension can list+delete
-//            via the S3 API for environments that can't use lifecycle.
+//   cloud  — deletes DB-tracked async scribe audio through the BlobStorage
+//            facade. Cloud lifecycle policies remain useful defence-in-depth,
+//            but application retention is the source of truth because each
+//            ai_job_runs row records the policy and deletion proof.
 //
 // The scheduler is intentionally a simple cron tick (default daily at
 // 03:00 local) — there's no need for sub-day precision on a 30-day
@@ -31,6 +28,8 @@ import cron from 'node-cron';
 import fs from 'fs';
 import path from 'path';
 import { logger } from '../../utils/logger';
+import { resolveUploadPath } from '../../shared/uploadPaths';
+import { purgeExpiredAsyncScribeAudioBlobs } from '../../mcp/scribeAudioRetention';
 
 interface PurgeStats {
   scanned: number;
@@ -109,21 +108,21 @@ async function tick(): Promise<void> {
     const days = getAudioRetentionDays();
     const backend = (process.env.BLOB_STORAGE_BACKEND ?? 'local').toLowerCase();
 
-    if (backend === 's3') {
-      // S3 path: defer to bucket lifecycle policy. Log a reminder so
-      // ops can verify the policy is in place.
+    const asyncStats = await purgeExpiredAsyncScribeAudioBlobs();
+
+    if (backend !== 'local') {
       logger.info(
-        { backend, days },
-        'audioRetentionScheduler: backend=s3 — purge handled by S3 lifecycle policy on the audio/ prefix. Verify the bucket has a lifecycle rule expiring audio/* after AUDIO_RETENTION_DAYS days.',
+        { backend, days, asyncStats },
+        'audioRetentionScheduler: cloud backend async scribe blob purge complete',
       );
       return;
     }
 
-    const audioRoot = path.join(process.cwd(), 'uploads', 'audio');
+    const audioRoot = resolveUploadPath('audio');
     const stats = purgeOldAudioFiles(audioRoot, days);
-    if (stats.scanned > 0 || stats.deleted > 0) {
+    if (stats.scanned > 0 || stats.deleted > 0 || asyncStats.scanned > 0 || asyncStats.deleted > 0) {
       logger.info(
-        { ...stats, days, root: audioRoot },
+        { ...stats, asyncStats, days, root: audioRoot },
         'audioRetentionScheduler: purge complete',
       );
     }

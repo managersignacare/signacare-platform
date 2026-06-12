@@ -32,7 +32,12 @@ import { runLegalOrdersStep } from './generators/13_legal_orders';
 // PR1..PR3. This entrypoint file is the stable shape — add new steps to
 // the `steps` array as generators land.
 
-const DB_NAME_ALLOWLIST = new Set(['signacaredb', 'signacaredb_test']);
+const DB_NAME_ALLOWLIST = new Set([
+  'signacaredb',
+  'signacaredb_test',
+  // Azure staging/dev-test database used for Linux deployment smoke tests.
+  'signacareemr',
+]);
 
 interface SeedStep {
   readonly key: string;

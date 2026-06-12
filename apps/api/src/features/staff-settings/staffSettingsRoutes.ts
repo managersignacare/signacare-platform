@@ -405,8 +405,9 @@ staffSettingsRoutes.get('/module-access/:staffId', admin, async (req, res, next)
   } catch (e) { next(e) }
 })
 
-// PUT /staff-settings/module-access/:staffId — replace the full grant
-// set for a staff member. Body: { modules: [{ module, accessLevel }] }.
+// PUT /staff-settings/module-access/:staffId — upsert one or more
+// explicit grants for a staff member. Body:
+// { modules: [{ module, accessLevel }] }.
 // Module keys validated against the canonical set; invalid keys or
 // invalid access_level values produce a 400. Tenant-checked.
 staffSettingsRoutes.put('/module-access/:staffId', adminWrite, async (req: Request, res: Response, next: NextFunction) => {
@@ -485,7 +486,7 @@ staffSettingsRoutes.put('/module-access/:staffId', adminWrite, async (req: Reque
             created_at: new Date(),
             updated_at: new Date(),
           })
-          .onConflict(['staff_id', 'module'])
+          .onConflict(['staff_id', 'clinic_id', 'module'])
           .merge({
             access_level: m.accessLevel,
             can_delegate_this: m.canDelegate,

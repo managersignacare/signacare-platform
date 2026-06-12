@@ -81,7 +81,7 @@ export function startSchedulers(): void {
   // BUG-EPISODE-WORKFLOW-EVENT-SILENT-CATCH — workflowOutboxDrainer
   // drains `workflow:event:outbox` and re-emits deferred events once
   // workflow listeners recover.
-  const schedulers = ['laiAlertScheduler', 'advanceDirectiveReviewScheduler', 'clozapineMonitoringWeekScheduler', 'ectConsentExpiryScheduler', 'suicidalIdeationAfterHoursScheduler', 'clozapineAlertScheduler', 'mhaReviewScheduler', 'referralSlaScheduler', 'appointmentReminderScheduler', 'pathologyCriticalScheduler', 'prescriptionRepeatScheduler', 'therapeuticLevelMonitoringScheduler', 'stepCareAutomationScheduler', 'digitalPhenotypingScheduler', 'dataRetentionScheduler', 'backupScheduler', 'matviewRefreshScheduler', 'audioRetentionScheduler', 'auditOutboxDrainer', 'workflowOutboxDrainer'];
+  const schedulers = ['laiAlertScheduler', 'advanceDirectiveReviewScheduler', 'clozapineMonitoringWeekScheduler', 'ectConsentExpiryScheduler', 'suicidalIdeationAfterHoursScheduler', 'clozapineAlertScheduler', 'mhaReviewScheduler', 'referralSlaScheduler', 'appointmentReminderScheduler', 'pathologyCriticalScheduler', 'prescriptionRepeatScheduler', 'therapeuticLevelMonitoringScheduler', 'stepCareAutomationScheduler', 'digitalPhenotypingScheduler', 'dataRetentionScheduler', 'backupScheduler', 'matviewRefreshScheduler', 'audioRetentionScheduler', 'auditOutboxDrainer', 'workflowOutboxDrainer', 'outlookCalendarSubscriptionScheduler'];
   for (const s of schedulers) {
     import(`./schedulers/${s}`).catch(err => logger.error({ err, scheduler: s }, `[Bootstrap] Failed to load scheduler: ${s}`));
   }

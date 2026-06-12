@@ -58,6 +58,9 @@ export function CommandPalette() {
   // Static navigation commands
   const navCommands: CommandItem[] = useMemo(() => [
     { id: 'nav-dashboard', label: 'Dashboard', icon: <DashboardIcon sx={{ fontSize: 18 }} />, action: () => navigate('/dashboard'), category: 'navigation' },
+    { id: 'nav-my-work-cockpit', label: 'My Work Cockpit', description: 'Today-first clinician work cockpit', icon: <DashboardIcon sx={{ fontSize: 18 }} />, action: () => navigate('/dashboards/my-work'), category: 'navigation' },
+    { id: 'nav-team-command-board', label: 'Team Command Board', description: 'Acuity and SLA weighted team dashboard', icon: <DashboardIcon sx={{ fontSize: 18 }} />, action: () => navigate('/dashboards/team-command'), category: 'navigation' },
+    { id: 'nav-manager-command-board', label: 'Manager Command Board', description: 'Service-level governance dashboard', icon: <DashboardIcon sx={{ fontSize: 18 }} />, action: () => navigate('/dashboards/manager-command'), category: 'navigation' },
     { id: 'nav-patients', label: 'Patient Directory', icon: <PersonIcon sx={{ fontSize: 18 }} />, action: () => navigate('/patients'), category: 'navigation' },
     { id: 'nav-tasks', label: 'Tasks', icon: <AssignmentIcon sx={{ fontSize: 18 }} />, action: () => navigate('/tasks'), category: 'navigation' },
     { id: 'nav-referrals', label: 'Referral Management', icon: <SwapHorizIcon sx={{ fontSize: 18 }} />, action: () => navigate('/referrals'), category: 'navigation' },

@@ -44,6 +44,7 @@
  */
 import type { Knex } from 'knex';
 import { db } from '../../db/db';
+import { roleHasManagerPrivileges } from '@signacare/shared';
 import { AppError } from '../../shared/errors';
 import auditLogService from '../../utils/audit';
 import logger from '../../utils/logger';
@@ -117,7 +118,7 @@ async function approverIsAuthorised(
     .where({ id: approverStaffId, clinic_id: clinicId })
     .select('role')
     .first() as { role?: string } | undefined;
-  if (staff?.role === 'manager' || staff?.role === 'admin' || staff?.role === 'superadmin') {
+  if (roleHasManagerPrivileges(staff?.role)) {
     return true;
   }
 

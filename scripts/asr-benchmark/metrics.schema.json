@@ -1,0 +1,104 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://signacare.dev/schemas/asr-benchmark-metrics-v1.json",
+  "title": "ASR benchmark metrics output (Phase 7)",
+  "description": "Schema for the JSON file emitted by scripts/asr-benchmark/run-benchmark.ts. The benchmark writes one of these per backend per run; the baseline.json file at docs/quality/asr-benchmark/baseline.json conforms to this schema as well.",
+  "type": "object",
+  "required": ["schemaVersion", "runId", "startedAt", "backend", "endpointUrl", "corpus", "perClip", "perDurationBucket", "summary"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": { "const": "1.0.0" },
+    "runId": { "type": "string", "minLength": 1, "description": "Operator-supplied or auto-generated run identifier (e.g. ISO timestamp + git SHA)." },
+    "startedAt": { "type": "string", "format": "date-time" },
+    "completedAt": { "type": "string", "format": "date-time" },
+    "backend": { "enum": ["whisper/cpu", "faster-whisper", "gpu-managed"] },
+    "endpointUrl": { "type": "string", "format": "uri" },
+    "modelName": { "type": "string", "description": "Whisper model tag the backend reports (e.g. large-v3-turbo)." },
+    "modelVersion": { "type": "string", "description": "Whisper model digest the backend reports, in the canonical name@sha256:digest form." },
+    "fellBackToDefault": { "type": "boolean" },
+    "fallbackReason": { "type": ["string", "null"] },
+    "corpus": {
+      "type": "object",
+      "required": ["manifestPath", "manifestSha256", "clipCount"],
+      "additionalProperties": false,
+      "properties": {
+        "manifestPath": { "type": "string" },
+        "manifestSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "corpusRoot": { "type": "string" },
+        "clipCount": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "perClip": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["clipId", "durationBucket", "outcome"],
+        "additionalProperties": false,
+        "properties": {
+          "clipId": { "type": "string" },
+          "durationBucket": { "enum": ["5m", "15m", "60m"] },
+          "outcome": { "enum": ["ok", "timeout", "clip-aborted", "decode-failed", "transport-error", "missing-fixture"] },
+          "latencyMs": { "type": ["number", "null"], "minimum": 0 },
+          "wer": { "type": ["number", "null"], "minimum": 0 },
+          "tokenOverlap": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+          "substitutions": { "type": ["integer", "null"], "minimum": 0 },
+          "deletions": { "type": ["integer", "null"], "minimum": 0 },
+          "insertions": { "type": ["integer", "null"], "minimum": 0 },
+          "referenceWordCount": { "type": ["integer", "null"], "minimum": 0 },
+          "hypothesisWordCount": { "type": ["integer", "null"], "minimum": 0 },
+          "memoryRssMb": { "type": ["number", "null"], "minimum": 0, "description": "Client-side process RSS at completion of this clip (MB)." },
+          "errorCode": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "perDurationBucket": {
+      "type": "object",
+      "patternProperties": {
+        "^(5m|15m|60m)$": {
+          "type": "object",
+          "required": ["clipCount", "medianLatencyMs", "p95LatencyMs", "medianWer", "timeoutCount", "abortCount"],
+          "additionalProperties": false,
+          "properties": {
+            "clipCount": { "type": "integer", "minimum": 0 },
+            "medianLatencyMs": { "type": ["number", "null"] },
+            "p95LatencyMs": { "type": ["number", "null"] },
+            "medianWer": { "type": ["number", "null"] },
+            "medianTokenOverlap": { "type": ["number", "null"] },
+            "timeoutCount": { "type": "integer", "minimum": 0 },
+            "abortCount": { "type": "integer", "minimum": 0 },
+            "memoryRssMbP95": { "type": ["number", "null"] }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "summary": {
+      "type": "object",
+      "required": ["clipCount", "okCount", "timeoutCount", "abortCount", "decodeFailedCount", "transportErrorCount"],
+      "additionalProperties": false,
+      "properties": {
+        "clipCount": { "type": "integer", "minimum": 0 },
+        "okCount": { "type": "integer", "minimum": 0 },
+        "timeoutCount": { "type": "integer", "minimum": 0 },
+        "abortCount": { "type": "integer", "minimum": 0 },
+        "decodeFailedCount": { "type": "integer", "minimum": 0 },
+        "transportErrorCount": { "type": "integer", "minimum": 0 },
+        "missingFixtureCount": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "goNoGoGate": {
+      "type": "object",
+      "description": "Computed comparison vs a baseline run (when --baseline-file is supplied). Absent in baseline runs.",
+      "required": ["baselineRunId", "medianLatencyDropPctByBucket", "werDeltaPctByBucket", "timeoutDeltaByBucket", "verdict"],
+      "additionalProperties": false,
+      "properties": {
+        "baselineRunId": { "type": "string" },
+        "medianLatencyDropPctByBucket": { "type": "object", "patternProperties": { "^(5m|15m|60m)$": { "type": "number" } }, "additionalProperties": false },
+        "werDeltaPctByBucket": { "type": "object", "patternProperties": { "^(5m|15m|60m)$": { "type": "number" } }, "additionalProperties": false },
+        "timeoutDeltaByBucket": { "type": "object", "patternProperties": { "^(5m|15m|60m)$": { "type": "integer" } }, "additionalProperties": false },
+        "verdict": { "enum": ["go", "no-go"] },
+        "noGoReasons": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}

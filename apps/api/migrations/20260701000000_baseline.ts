@@ -7203,9 +7203,9 @@ export async function up(knex: Knex): Promise<void> {
   await knex.schema.createTable('llm_interactions', (t) => {
     t.uuid('id').primary().defaultTo(knex.raw('gen_random_uuid()'));
     t.uuid('clinic_id').notNullable().references('id').inTable('clinics').onDelete('RESTRICT');
-    t.uuid('user_id').nullable().references('id').inTable('staff').onDelete('SET NULL');
-    t.uuid('patient_id').nullable().references('id').inTable('patients').onDelete('SET NULL');
-    t.uuid('episode_id').nullable().references('id').inTable('episodes').onDelete('SET NULL');
+    t.uuid('user_id').nullable().references('id').inTable('staff').onDelete('RESTRICT');
+    t.uuid('patient_id').nullable().references('id').inTable('patients').onDelete('RESTRICT');
+    t.uuid('episode_id').nullable().references('id').inTable('episodes').onDelete('RESTRICT');
     t.string('feature', 50).notNullable().defaultTo('other');
     t.string('model_name', 100).notNullable();
     t.string('model_provider', 50).nullable();
@@ -7233,9 +7233,6 @@ export async function up(knex: Knex): Promise<void> {
     CREATE POLICY rls_llm_interactions_tenant ON llm_interactions
       USING (clinic_id = NULLIF(current_setting('app.clinic_id', true), '')::uuid)
       WITH CHECK (clinic_id = NULLIF(current_setting('app.clinic_id', true), '')::uuid);
-    CREATE TRIGGER trg_llm_interactions_updated_at
-      BEFORE UPDATE ON llm_interactions
-      FOR EACH ROW EXECUTE FUNCTION set_updated_at();
   `);
 
   // ── ai_training_feedback (clinician feedback on llm_interactions) ──

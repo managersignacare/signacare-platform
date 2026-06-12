@@ -46,6 +46,8 @@ export const dashboardKeys = {
   ) => ['dashboard', clinicScopeToken(clinicScope), 'team', period, scopeType, scopeId] as const,
   teamScopes: (clinicScope: DashboardClinicScope) =>
     ['dashboard', clinicScopeToken(clinicScope), 'team-scopes'] as const,
+  preferences: (clinicScope: DashboardClinicScope, staffId: string | undefined) =>
+    ['dashboard', clinicScopeToken(clinicScope), 'preferences', staffId ?? 'session'] as const,
 
   // Namespace 2: ['dash', ...] — per-card keys on DashboardPage.
   dashAll: (clinicScope: DashboardClinicScope) =>

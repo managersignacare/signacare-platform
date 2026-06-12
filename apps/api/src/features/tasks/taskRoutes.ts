@@ -11,10 +11,10 @@ router.use(requireModuleRead(MODULE_KEYS.TASKS));
 
 // S1.2: Idempotency-Key on task create.
 router.post('/', idempotencyMiddleware(), ctrl.createTask);
+router.get('/summary', ctrl.getTaskMonitoringSummary);
 router.get('/', ctrl.listTasks);          // ?patientId=&status=&assignedToId=&dueBefore=
 router.get('/:taskId', ctrl.getTask);
 router.patch('/:taskId', ctrl.updateTask);
 router.delete('/:taskId', ctrl.deleteTask);
 
 export default router;
-

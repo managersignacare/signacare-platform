@@ -88,6 +88,37 @@ describe('detectScribeHallucinations', () => {
     expect(doseFindings).toHaveLength(1);
   });
 
+  it('flags an embedded dose in the medication name when no separate dose field is provided', () => {
+    const transcript =
+      'Continue sertraline 50 mg daily and review again in two weeks.';
+    const report = detectScribeHallucinations(transcript, {
+      medications: [{ name: 'Sertraline 100 mg daily' }],
+    });
+    expect(report.ok).toBe(false);
+    expect(report.findings.some((f) => f.reason.includes('not substantiated by the transcript'))).toBe(true);
+  });
+
+  it('flags post-format medication dose drift in the final note text', () => {
+    const transcript =
+      'Continue sertraline 50 mg daily and review again in two weeks.';
+    const report = detectScribeHallucinations(transcript, {
+      medications: [{ name: 'Sertraline', dose: '50 mg' }],
+      noteText: 'PLAN\nContinue sertraline 100 mg daily.\nReview in two weeks.',
+    });
+    expect(report.ok).toBe(false);
+    expect(report.findings.some((f) => f.reason.includes('verified extraction was 50 mg'))).toBe(true);
+  });
+
+  it('accepts final note medication text when it matches the verified extraction exactly', () => {
+    const transcript =
+      'Continue sertraline 50 mg daily and review again in two weeks.';
+    const report = detectScribeHallucinations(transcript, {
+      medications: [{ name: 'Sertraline', dose: '50 mg' }],
+      noteText: 'PLAN\nContinue sertraline 50 mg daily.\nReview in two weeks.',
+    });
+    expect(report.ok).toBe(true);
+  });
+
   it('does NOT flag paraphrased diagnoses', () => {
     const transcript =
       'The patient continues to experience auditory hallucinations and disorganised speech. ' +

@@ -22,10 +22,15 @@ interface DisciplineRow {
   name: string;
 }
 
+interface TenantSeedResult {
+  clinic: ClinicRow;
+  sites: OrgUnitRow[];
+}
+
 interface StaffSeedTemplate {
   templateId: string;
   title: string;
-  role: 'admin' | 'manager' | 'clinician' | 'receptionist';
+  role: 'superadmin' | 'admin' | 'manager' | 'clinician' | 'receptionist' | 'referral_coordinator';
   disciplineNames: string[];
   specialtyCode: string | null;
   isPrescriber?: boolean;
@@ -48,6 +53,16 @@ interface LoginRow {
 const SOHAM_CLINIC_NAME = 'Soham Health';
 const DEMO_PASSWORD = 'Password1!';
 const DEMO_EMAIL_DOMAIN = 'sohamhealth.demo';
+const SOHAM_SUPERADMIN_EMAIL = 'admin@signacare.local';
+const SOHAM_SITE_NAMES = [
+  'PARC North East',
+  'PARC South West',
+  'Soham CCU',
+  'Soham East Clinic',
+  'Soham North Clinic',
+  'Soham South clinic',
+  'Sohum West Clinic',
+] as const;
 
 const SITE_STAFF_TEMPLATE: StaffSeedTemplate[] = [
   {
@@ -88,6 +103,27 @@ const SITE_STAFF_TEMPLATE: StaffSeedTemplate[] = [
     role: 'manager',
     disciplineNames: ['Mental Health Nursing'],
     specialtyCode: 'mental_health',
+  },
+  {
+    templateId: 'mental-health-nurse',
+    title: 'Mental Health Nurse',
+    role: 'clinician',
+    disciplineNames: ['Mental Health Nursing'],
+    specialtyCode: 'mental_health',
+  },
+  {
+    templateId: 'intake-referral-coordinator',
+    title: 'Intake / Referral Coordinator',
+    role: 'referral_coordinator',
+    disciplineNames: ['Administrative Support'],
+    specialtyCode: 'mental_health',
+  },
+  {
+    templateId: 'site-reception-admin',
+    title: 'Site Reception / Admin',
+    role: 'receptionist',
+    disciplineNames: ['Administrative Support'],
+    specialtyCode: null,
   },
   {
     templateId: 'key-clinician-clinical-psychologist',
@@ -206,6 +242,42 @@ const NAME_POOL: readonly PersonName[] = [
   { givenName: 'Blake', familyName: 'Simmons' },
   { givenName: 'Renee', familyName: 'Mason' },
   { givenName: 'Kieran', familyName: 'Douglas' },
+  { givenName: 'Maya', familyName: 'Fleming' },
+  { givenName: 'Patrick', familyName: 'Olsen' },
+  { givenName: 'Aisha', familyName: 'Malik' },
+  { givenName: 'Eli', familyName: 'McKenzie' },
+  { givenName: 'Nina', familyName: 'Chandra' },
+  { givenName: 'Hugo', familyName: 'Spencer' },
+  { givenName: 'Clara', familyName: 'Wong' },
+  { givenName: 'Max', familyName: 'Stewart' },
+  { givenName: 'Jasmine', familyName: 'Wallace' },
+  { givenName: 'Finn', familyName: 'Cooper' },
+  { givenName: 'Imogen', familyName: 'Doyle' },
+  { givenName: 'Sebastian', familyName: 'Reid' },
+  { givenName: 'Phoebe', familyName: 'Barrett' },
+  { givenName: 'Angus', familyName: 'Morris' },
+  { givenName: 'Naomi', familyName: 'Farah' },
+  { givenName: 'Theo', familyName: 'Watson' },
+  { givenName: 'Ivy', familyName: 'Kelly' },
+  { givenName: 'Hamish', familyName: 'Porter' },
+  { givenName: 'Selina', familyName: 'Roy' },
+  { givenName: 'Cameron', familyName: 'Stone' },
+  { givenName: 'Amara', familyName: 'Nair' },
+  { givenName: 'Felix', familyName: 'Hayes' },
+  { givenName: 'Mila', familyName: 'Owen' },
+  { givenName: 'Rafi', familyName: 'Kapur' },
+  { givenName: 'Elena', familyName: 'Fraser' },
+  { givenName: 'Toby', familyName: 'Banks' },
+  { givenName: 'Saskia', familyName: 'Burgess' },
+  { givenName: 'Omar', familyName: 'Haddad' },
+  { givenName: 'Piper', familyName: 'Armstrong' },
+  { givenName: 'Callum', familyName: 'Nolan' },
+  { givenName: 'Meera', familyName: 'Iyer' },
+  { givenName: 'Joel', familyName: 'Casey' },
+  { givenName: 'Tahlia', familyName: 'Fox' },
+  { givenName: 'Reuben', familyName: 'Page' },
+  { givenName: 'Anya', familyName: 'Lawson' },
+  { givenName: 'Miles', familyName: 'Barton' },
 ];
 
 function toEmailToken(input: string): string {
@@ -308,6 +380,32 @@ async function cleanupPriorDemoRows(clinicId: string): Promise<number> {
   return stale.length;
 }
 
+async function archivePriorLoginEmail(email: string): Promise<number> {
+  const now = new Date();
+  const rows = await dbAdmin('staff')
+    .whereRaw('lower(email) = ?', [email.trim().toLowerCase()])
+    .whereNull('deleted_at')
+    .select('id', 'clinic_id', 'email');
+
+  for (const row of rows) {
+    const staffId = row.id as string;
+    const clinicId = row.clinic_id as string;
+    await dbAdmin('staff_team_assignments').where({ staff_id: staffId, clinic_id: clinicId }).del().catch(() => undefined);
+    await dbAdmin('staff_specialties').where({ staff_id: staffId, clinic_id: clinicId }).del().catch(() => undefined);
+    await dbAdmin('staff_module_access').where({ staff_id: staffId, clinic_id: clinicId }).del().catch(() => undefined);
+    await dbAdmin('staff_settings').where({ staff_id: staffId }).del().catch(() => undefined);
+    await dbAdmin('staff_sessions').where({ staff_id: staffId }).del().catch(() => undefined);
+    await dbAdmin('staff').where({ id: staffId }).update({
+      email: `archived.${staffId}@invalid.local`,
+      is_active: false,
+      deleted_at: now,
+      updated_at: now,
+    });
+  }
+
+  return rows.length;
+}
+
 async function replaceAssignmentsForSites(
   staffId: string,
   clinicId: string,
@@ -338,20 +436,118 @@ async function replaceAssignmentsForSites(
   }
 }
 
-async function seed(): Promise<void> {
-  const clinic = (await dbAdmin('clinics')
-    .where({ name: SOHAM_CLINIC_NAME, is_active: true })
+async function ensureSohamDemoTenant(now: Date): Promise<TenantSeedResult> {
+  let clinic = (await dbAdmin('clinics')
+    .where({ name: SOHAM_CLINIC_NAME })
     .whereNull('deleted_at')
     .first('id', 'name')) as ClinicRow | undefined;
 
-  if (!clinic) {
-    throw new Error(`Clinic "${SOHAM_CLINIC_NAME}" not found.`);
+  if (clinic) {
+    await dbAdmin('clinics').where({ id: clinic.id }).update({
+      legal_name: 'Soham Health Pty Ltd',
+      abn: '11 000 000 101',
+      hpio: '8003620000001001',
+      npds_conformance_id: 'SOHAM-NPDS-DEMO',
+      time_zone: 'Australia/Melbourne',
+      timezone: 'Australia/Melbourne',
+      is_active: true,
+      updated_at: now,
+    });
+  } else {
+    const [created] = (await dbAdmin('clinics')
+      .insert({
+        id: randomUUID(),
+        name: SOHAM_CLINIC_NAME,
+        legal_name: 'Soham Health Pty Ltd',
+        abn: '11 000 000 101',
+        hpio: '8003620000001001',
+        npds_conformance_id: 'SOHAM-NPDS-DEMO',
+        time_zone: 'Australia/Melbourne',
+        timezone: 'Australia/Melbourne',
+        is_active: true,
+        created_at: now,
+        updated_at: now,
+      })
+      .returning(['id', 'name'])) as ClinicRow[];
+    clinic = created;
   }
 
-  const siteUnits = (await dbAdmin('org_units')
-    .where({ clinic_id: clinic.id, level: '2' })
+  if (!clinic) {
+    throw new Error(`Unable to create or resolve clinic "${SOHAM_CLINIC_NAME}".`);
+  }
+
+  let root = (await dbAdmin('org_units')
+    .where({ clinic_id: clinic.id, level: '1', name: SOHAM_CLINIC_NAME })
+    .first('id', 'name')) as OrgUnitRow | undefined;
+
+  if (root) {
+    await dbAdmin('org_units').where({ id: root.id }).update({
+      parent_id: null,
+      sort_order: 0,
+      is_active: true,
+      updated_at: now,
+    });
+  } else {
+    const [createdRoot] = (await dbAdmin('org_units')
+      .insert({
+        id: randomUUID(),
+        clinic_id: clinic.id,
+        name: SOHAM_CLINIC_NAME,
+        level: '1',
+        parent_id: null,
+        sort_order: 0,
+        is_active: true,
+        created_at: now,
+        updated_at: now,
+      })
+      .returning(['id', 'name'])) as OrgUnitRow[];
+    root = createdRoot;
+  }
+
+  if (!root) {
+    throw new Error(`Unable to create or resolve root org unit for "${SOHAM_CLINIC_NAME}".`);
+  }
+
+  for (const [index, siteName] of SOHAM_SITE_NAMES.entries()) {
+    const existing = await dbAdmin('org_units')
+      .where({ clinic_id: clinic.id, level: '2', name: siteName })
+      .first('id');
+
+    if (existing) {
+      await dbAdmin('org_units').where({ id: existing.id }).update({
+        parent_id: root.id,
+        sort_order: index + 1,
+        is_active: true,
+        updated_at: now,
+      });
+      continue;
+    }
+
+    await dbAdmin('org_units').insert({
+      id: randomUUID(),
+      clinic_id: clinic.id,
+      name: siteName,
+      level: '2',
+      parent_id: root.id,
+      sort_order: index + 1,
+      is_active: true,
+      created_at: now,
+      updated_at: now,
+    });
+  }
+
+  const sites = (await dbAdmin('org_units')
+    .where({ clinic_id: clinic.id, level: '2', is_active: true })
+    .orderBy('sort_order', 'asc')
     .orderBy('name', 'asc')
     .select('id', 'name')) as OrgUnitRow[];
+
+  return { clinic, sites };
+}
+
+async function seed(): Promise<void> {
+  const now = new Date();
+  const { clinic, sites: siteUnits } = await ensureSohamDemoTenant(now);
 
   if (siteUnits.length === 0) {
     throw new Error(`No level-2 site units found for clinic "${clinic.name}".`);
@@ -369,6 +565,7 @@ async function seed(): Promise<void> {
   }
 
   const removedCount = await cleanupPriorDemoRows(clinic.id);
+  const replacedPlatformAdminCount = await archivePriorLoginEmail(SOHAM_SUPERADMIN_EMAIL);
 
   const staffService = new StaffService(new StaffRepository());
   const seedAuth: AuthContext = {
@@ -377,10 +574,66 @@ async function seed(): Promise<void> {
     role: 'admin',
     permissions: [],
   };
+  const superadminSeedAuth: AuthContext = {
+    staffId: 'system',
+    clinicId: clinic.id,
+    role: 'superadmin',
+    permissions: [],
+  };
 
-  const now = new Date();
   const today = now.toISOString().slice(0, 10);
   const loginRows: LoginRow[] = [];
+
+  const superadminDiscipline = await resolveDisciplineForTemplate(
+    clinic.id,
+    disciplineByName,
+    {
+      templateId: 'soham-platform-superadmin',
+      title: 'Soham Platform Superadmin',
+      role: 'superadmin',
+      disciplineNames: ['Administrative Support'],
+      specialtyCode: null,
+    },
+  );
+
+  const superadmin = await runInClinicRlsContext(clinic.id, async () =>
+    staffService.createStaff(
+      clinic.id,
+      {
+        givenName: 'Platform',
+        familyName: 'Superadmin',
+        email: SOHAM_SUPERADMIN_EMAIL,
+        password: DEMO_PASSWORD,
+        role: 'superadmin',
+        discipline: superadminDiscipline.id,
+        settingsProfileTabVisible: false,
+      },
+      superadminSeedAuth,
+    ));
+
+  await dbAdmin('staff').where({ id: superadmin.id }).update({
+    must_change_password: false,
+    failed_login_attempts: 0,
+    locked_until: null,
+    updated_at: now,
+  });
+
+  await replaceAssignmentsForSites(
+    superadmin.id,
+    clinic.id,
+    siteUnits,
+    today,
+    now,
+  );
+
+  loginRows.push({
+    site: 'All Soham Sites',
+    title: 'Soham Platform Superadmin',
+    role: 'superadmin',
+    discipline: superadminDiscipline.name,
+    email: SOHAM_SUPERADMIN_EMAIL,
+    password: DEMO_PASSWORD,
+  });
 
   let nameIndex = 0;
   for (const site of siteUnits) {
@@ -504,15 +757,20 @@ async function seed(): Promise<void> {
     `Clinic: ${clinic.name}`,
     `Sites covered: ${siteUnits.length}`,
     `Old demo rows cleaned: ${removedCount}`,
+    `Prior platform superadmin rows replaced: ${replacedPlatformAdminCount}`,
     `Accounts created: ${loginRows.length}`,
     '',
     'Per-site staffing package:',
     '- 2 Consultant Psychiatrists',
     '- 2 Junior Medical Officers',
     '- 1 Team Leader (non-medical)',
+    '- 1 Mental Health Nurse',
+    '- 1 Intake / Referral Coordinator',
+    '- 1 Site Reception / Admin',
     '- 4 Key Clinicians (non-medical)',
     '',
     'Cross-site leadership package:',
+    '- 1 Platform Superadmin across all sites',
     '- 1 Regional Operations Manager (non-medical) across all sites',
     '- 1 Clinical Director (medical) across all sites',
     '',

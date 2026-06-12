@@ -17,10 +17,14 @@
  *                          S3 in production, MinIO in dev compose).
  *                          Returns presigned GET URLs for downloads.
  *
+ *   - AzureBlobStorage   — writes to native Azure Blob Storage. Azure Linux
+ *                          App Service deployments select this backend.
+ *
  * The active backend is selected by env var `BLOB_STORAGE_BACKEND`:
  *
  *   BLOB_STORAGE_BACKEND=local   (default)
  *   BLOB_STORAGE_BACKEND=s3      (requires BLOB_S3_* env vars)
+ *   BLOB_STORAGE_BACKEND=azure-blob (requires BLOB_AZURE_* env vars)
  *
  * The DB columns `storage_backend`, `storage_key`, `storage_bucket`, and
  * `storage_etag` (added by migration 20260410000001) record which backend
@@ -51,13 +55,23 @@ import {
   HeadObjectCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import {
+  BlobSASPermissions,
+  BlobServiceClient,
+  SASProtocol,
+  StorageSharedKeyCredential,
+  generateBlobSASQueryParameters,
+} from '@azure/storage-blob';
+import { resolveUploadBaseDir } from './uploadPaths';
 
-export type BlobBackendName = 'local' | 's3';
+export type BlobBackendName = 'local' | 's3' | 'azure-blob';
 
 /** Result of a successful put — written to the storage_* DB columns. */
 export interface BlobPutResult {
   /** The key the blob is stored under (relative path or S3 object key). */
   key: string;
+  /** The backend that owns the key. Persisted so mixed-backend rows resolve correctly. */
+  backend: BlobBackendName;
   /** The bucket name (for local: 'local'; for S3: the configured bucket). */
   bucket: string;
   /** Content hash / S3 ETag for integrity verification + dedup. */
@@ -107,7 +121,7 @@ export interface BlobStorage {
 export class LocalBlobStorage implements BlobStorage {
   readonly backendName: BlobBackendName = 'local';
 
-  constructor(private readonly rootDir = path.join(process.cwd(), 'uploads')) {
+  constructor(private readonly rootDir = resolveUploadBaseDir()) {
     // Ensure the root exists. We do not throw on failure here — the
     // first put() will surface a more useful error if the dir is bad.
     try {
@@ -123,7 +137,7 @@ export class LocalBlobStorage implements BlobStorage {
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(fullPath, body);
     const etag = createHash('sha256').update(body).digest('hex');
-    return { key, bucket: 'local', etag };
+    return { key, backend: this.backendName, bucket: 'local', etag };
   }
 
   async getDownloadUrl(key: string, _opts?: BlobUrlOptions): Promise<string> {
@@ -146,6 +160,78 @@ export class LocalBlobStorage implements BlobStorage {
     const fullPath = path.join(this.rootDir, key);
     try {
       return fs.readFileSync(fullPath);
+    } catch {
+      return null;
+    }
+  }
+}
+
+// ── AzureBlobStorage ────────────────────────────────────────────────────────
+
+interface AzureBlobConfig {
+  accountName: string;
+  accountKey: string;
+  containerName: string;
+  endpoint?: string;
+}
+
+/**
+ * AzureBlobStorage — writes to native Azure Blob Storage. This intentionally
+ * stays separate from S3BlobStorage; Azure Blob's REST API is not S3-compatible.
+ */
+export class AzureBlobStorage implements BlobStorage {
+  readonly backendName: BlobBackendName = 'azure-blob';
+  private readonly credential: StorageSharedKeyCredential;
+  private readonly serviceClient: BlobServiceClient;
+  private readonly containerName: string;
+
+  constructor(config: AzureBlobConfig) {
+    this.containerName = config.containerName;
+    this.credential = new StorageSharedKeyCredential(config.accountName, config.accountKey);
+    const endpoint = config.endpoint ?? `https://${config.accountName}.blob.core.windows.net`;
+    this.serviceClient = new BlobServiceClient(endpoint, this.credential);
+  }
+
+  private containerClient() {
+    return this.serviceClient.getContainerClient(this.containerName);
+  }
+
+  async put(key: string, body: Buffer, contentType: string): Promise<BlobPutResult> {
+    const blobClient = this.containerClient().getBlockBlobClient(key);
+    const result = await blobClient.uploadData(body, {
+      blobHTTPHeaders: { blobContentType: contentType },
+    });
+    const etag = (result.etag ?? createHash('sha256').update(body).digest('hex')).replace(/^"|"$/g, '');
+    return { key, backend: this.backendName, bucket: this.containerName, etag };
+  }
+
+  async getDownloadUrl(key: string, opts: BlobUrlOptions = {}): Promise<string> {
+    const ttl = opts.ttlSeconds ?? 300;
+    const blobClient = this.containerClient().getBlobClient(key);
+    const sas = generateBlobSASQueryParameters(
+      {
+        containerName: this.containerName,
+        blobName: key,
+        permissions: BlobSASPermissions.parse('r'),
+        startsOn: new Date(Date.now() - 60_000),
+        expiresOn: new Date(Date.now() + ttl * 1000),
+        protocol: SASProtocol.Https,
+        contentDisposition: opts.filename
+          ? `attachment; filename="${opts.filename.replace(/"/g, '')}"`
+          : undefined,
+      },
+      this.credential,
+    ).toString();
+    return `${blobClient.url}?${sas}`;
+  }
+
+  async delete(key: string): Promise<void> {
+    await this.containerClient().deleteBlob(key, { deleteSnapshots: 'include' });
+  }
+
+  async getBuffer(key: string): Promise<Buffer | null> {
+    try {
+      return await this.containerClient().getBlockBlobClient(key).downloadToBuffer();
     } catch {
       return null;
     }
@@ -202,7 +288,7 @@ export class S3BlobStorage implements BlobStorage {
     // ETag from S3 is wrapped in quotes — strip them so the value
     // matches the local sha256 format more closely (still opaque).
     const etag = (result.ETag ?? '').replace(/^"|"$/g, '');
-    return { key, bucket: this.bucket, etag };
+    return { key, backend: this.backendName, bucket: this.bucket, etag };
   }
 
   async getDownloadUrl(key: string, opts: BlobUrlOptions = {}): Promise<string> {
@@ -258,16 +344,40 @@ export class S3BlobStorage implements BlobStorage {
  * module load time so the rest of the app imports a stable singleton.
  *
  * env vars:
- *   BLOB_STORAGE_BACKEND=local|s3      (default: local)
+ *   BLOB_STORAGE_BACKEND=local|s3|azure-blob      (default: local)
  *   BLOB_S3_BUCKET=signacare-attachments
  *   BLOB_S3_REGION=ap-southeast-2
  *   BLOB_S3_ENDPOINT=http://minio:9000  (for MinIO; omit for real AWS)
  *   BLOB_S3_ACCESS_KEY_ID=...
  *   BLOB_S3_SECRET_ACCESS_KEY=...
  *   BLOB_S3_FORCE_PATH_STYLE=true       (set for MinIO)
+ *   BLOB_AZURE_ACCOUNT_NAME=...
+ *   BLOB_AZURE_ACCOUNT_KEY=...
+ *   BLOB_AZURE_CONTAINER=...
+ *   BLOB_AZURE_ENDPOINT=https://<account>.blob.core.windows.net
  */
-function buildDefaultBlobStorage(): BlobStorage {
-  const backend = (process.env.BLOB_STORAGE_BACKEND ?? 'local').toLowerCase();
+function requireBlobBackendName(raw: string): BlobBackendName {
+  if (raw === 'local' || raw === 's3' || raw === 'azure-blob') return raw;
+  throw new Error(`Unsupported BLOB_STORAGE_BACKEND="${raw}"`);
+}
+
+export function buildBlobStorageForBackend(backend: BlobBackendName): BlobStorage {
+  if (backend === 'azure-blob') {
+    const accountName = process.env.BLOB_AZURE_ACCOUNT_NAME;
+    const accountKey = process.env.BLOB_AZURE_ACCOUNT_KEY;
+    const containerName = process.env.BLOB_AZURE_CONTAINER;
+    if (!accountName || !accountKey || !containerName) {
+      throw new Error(
+        'BLOB_STORAGE_BACKEND=azure-blob requires BLOB_AZURE_ACCOUNT_NAME, BLOB_AZURE_ACCOUNT_KEY, BLOB_AZURE_CONTAINER',
+      );
+    }
+    return new AzureBlobStorage({
+      accountName,
+      accountKey,
+      containerName,
+      endpoint: process.env.BLOB_AZURE_ENDPOINT || undefined,
+    });
+  }
   if (backend === 's3') {
     const bucket = process.env.BLOB_S3_BUCKET;
     const region = process.env.BLOB_S3_REGION;
@@ -292,6 +402,11 @@ function buildDefaultBlobStorage(): BlobStorage {
   return new LocalBlobStorage();
 }
 
+function buildDefaultBlobStorage(): BlobStorage {
+  const backend = requireBlobBackendName((process.env.BLOB_STORAGE_BACKEND ?? 'local').toLowerCase());
+  return buildBlobStorageForBackend(backend);
+}
+
 export const blobStorage: BlobStorage = buildDefaultBlobStorage();
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -311,9 +426,15 @@ export async function resolveAttachmentDownloadUrl(row: {
   file_path?: string | null;
   filename?: string | null;
 }): Promise<string> {
-  // Modern rows: storage_key is set, route via the active backend.
+  // Modern rows: storage_key is set, route via the row's recorded backend.
   if (row.storage_key) {
-    return await blobStorage.getDownloadUrl(row.storage_key, {
+    const rowBackend = row.storage_backend
+      ? requireBlobBackendName(row.storage_backend.toLowerCase())
+      : blobStorage.backendName;
+    const storage = rowBackend === blobStorage.backendName
+      ? blobStorage
+      : buildBlobStorageForBackend(rowBackend);
+    return await storage.getDownloadUrl(row.storage_key, {
       filename: row.filename ?? undefined,
     });
   }

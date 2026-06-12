@@ -16,8 +16,6 @@ import { requireClinicModuleEnabled } from '../../middleware/clinicModuleMiddlew
 import { requireFeatureEnabled } from '../../middleware/featureFlagMiddleware';
 import { MODULE_KEYS } from '../../shared/moduleKeys';
 import multer from 'multer';
-import fs from 'fs';
-import os from 'os';
 import { logger } from '../../utils/logger';
 import { uploadLimiter } from '../../middleware/rateLimiters';
 
@@ -32,15 +30,48 @@ router.use(requireClinicModuleEnabled(MODULE_KEYS.MEDICAL_SCRIBE));
 // kill switch with the main scribe router.
 router.use(requireFeatureEnabled('ai-scribe'));
 
-const upload = multer({ dest: os.tmpdir(), limits: { fileSize: 50 * 1024 * 1024 } }); // 50MB max per chunk
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } }); // 50MB max per chunk
 
 function whisperUrl(): string {
   return process.env.WHISPER_API_URL ?? 'http://localhost:8080';
 }
 
+function summarizeWhisperError(err: unknown): {
+  message: string;
+  status?: number;
+  upstreamError?: string;
+  isChunkDecodeFailure: boolean;
+} {
+  const e = err as {
+    message?: unknown;
+    response?: { status?: unknown; data?: { error?: unknown; message?: unknown } };
+  };
+  const message = typeof e?.message === 'string' ? e.message : String(err);
+  const status = typeof e?.response?.status === 'number' ? e.response.status : undefined;
+  const upstreamError =
+    typeof e?.response?.data?.error === 'string'
+      ? e.response.data.error
+      : typeof e?.response?.data?.message === 'string'
+        ? e.response.data.message
+        : undefined;
+  const haystack = `${message}\n${upstreamError ?? ''}`;
+  const isChunkDecodeFailure = /EBML header parsing failed|Invalid data found when processing input|unknown-length element/i.test(haystack);
+
+  return { message, status, upstreamError, isChunkDecodeFailure };
+}
+
 const StreamChunkBodySchema = z.object({
   chunkIndex: z.coerce.number().int().min(0).max(100_000).default(0),
   sessionId: z.string().max(128).optional(),
+});
+
+const StreamChunkDecodeDegradedResponseSchema = z.object({
+  chunkIndex: z.number().int().nonnegative(),
+  transcript: z.literal(''),
+  sessionId: z.string(),
+  degradedMode: z.literal(true),
+  code: z.literal('SCRIBE_PARTIAL_CHUNK_NOT_DECODABLE'),
+  message: z.string(),
 });
 
 const StreamFinalBodySchema = z.object({
@@ -61,32 +92,24 @@ router.post('/stream-chunk', uploadLimiter, upload.single('audio'), async (req: 
   const chunkIndex = dto.chunkIndex;
   const sessionId = dto.sessionId ?? '';
 
-  // Declared outside try so the catch block can destroy it on error.
-  let chunkStream: fs.ReadStream | undefined;
   try {
     // Forward to Whisper server
     const FormData = (await import('form-data')).default;
     const fd = new FormData();
-    chunkStream = fs.createReadStream(req.file.path);
-    chunkStream.on('error', (streamErr) => logger.error({ err: streamErr }, 'Read stream error in stream-chunk'));
-    fd.append('audio', chunkStream, {
+    fd.append('file', req.file.buffer, {
       filename: `chunk_${chunkIndex}.webm`,
       contentType: req.file.mimetype || 'audio/webm',
+      knownLength: req.file.size,
     });
+    fd.append('language', 'en');
 
     const axios = (await import('axios')).default;
-    const whisperResp = await axios.post(`${whisperUrl()}/transcribe`, fd, {
+    const whisperResp = await axios.post(`${whisperUrl()}/inference`, fd, {
       headers: fd.getHeaders(),
       timeout: 30_000,
     });
 
     const transcript = whisperResp.data?.transcript ?? whisperResp.data?.text ?? '';
-
-    // Clean up temp file — log any unlink error so operators can detect
-    // filesystem issues, but don't block the response.
-    fs.unlink(req.file.path, (unlinkErr) => {
-      if (unlinkErr) logger.warn({ err: unlinkErr, path: req.file?.path }, 'Failed to remove chunk temp file');
-    });
 
     logger.info({ sessionId, chunkIndex, chars: transcript.length }, 'Stream chunk transcribed');
 
@@ -96,23 +119,32 @@ router.post('/stream-chunk', uploadLimiter, upload.single('audio'), async (req: 
       sessionId,
     });
   } catch (err) {
-    // CRITICAL: destroy the read stream if it's still open. Without this,
-    // a whisper-server failure leaks a file descriptor until GC runs.
-    if (chunkStream && !chunkStream.destroyed) chunkStream.destroy();
+    const failure = summarizeWhisperError(err);
+    logger.warn({
+      message: failure.message,
+      status: failure.status,
+      upstreamError: failure.upstreamError,
+      isChunkDecodeFailure: failure.isChunkDecodeFailure,
+      chunkIndex,
+      sessionId,
+    }, 'Stream chunk transcription unavailable; continuing without live partial transcript');
 
-    // Clean up temp file on error
-    if (req.file?.path) {
-      fs.unlink(req.file.path, (unlinkErr) => {
-        if (unlinkErr) logger.warn({ err: unlinkErr, path: req.file?.path }, 'Failed to remove chunk temp file after error');
-      });
+    if (failure.isChunkDecodeFailure) {
+      res.status(202).json(StreamChunkDecodeDegradedResponseSchema.parse({
+        chunkIndex,
+        transcript: '',
+        sessionId,
+        degradedMode: true,
+        code: 'SCRIBE_PARTIAL_CHUNK_NOT_DECODABLE',
+        message: 'Browser MediaRecorder chunk is not independently decodable; final full-recording transcription will still run.',
+      }));
+      return;
     }
 
-    const message = err instanceof Error ? err.message : String(err);
-    logger.error({ err, message, chunkIndex }, 'Stream chunk transcription failed');
     // @error-envelope-exempt: degraded-mode transport contract for client recovery. @response-shape-exempt: stream route returns retry metadata, not a domain DTO.
     res.status(503).json({
       code: 'SCRIBE_PARTIAL_UNAVAILABLE',
-      message,
+      message: failure.message,
       degradedMode: true,
       recovery: {
         sessionId,
@@ -133,35 +165,24 @@ router.post('/stream-final', uploadLimiter, upload.single('audio'), async (req: 
   let degradedMode = false;
 
   if (req.file) {
-    let finalStream: fs.ReadStream | undefined;
     try {
       const FormData = (await import('form-data')).default;
       const fd = new FormData();
-      finalStream = fs.createReadStream(req.file.path);
-      finalStream.on('error', (streamErr) => logger.error({ err: streamErr }, 'Read stream error in stream-final'));
-      fd.append('audio', finalStream, {
+      fd.append('file', req.file.buffer, {
         filename: 'final_chunk.webm',
         contentType: req.file.mimetype || 'audio/webm',
+        knownLength: req.file.size,
       });
+      fd.append('language', 'en');
 
       const axios = (await import('axios')).default;
-      const whisperResp = await axios.post(`${whisperUrl()}/transcribe`, fd, {
+      const whisperResp = await axios.post(`${whisperUrl()}/inference`, fd, {
         headers: fd.getHeaders(),
         timeout: 60_000,
       });
 
       finalChunkText = (whisperResp.data?.transcript ?? whisperResp.data?.text ?? '').trim();
-      fs.unlink(req.file.path, (unlinkErr) => {
-        if (unlinkErr) logger.warn({ err: unlinkErr, path: req.file?.path }, 'Failed to remove final temp file');
-      });
     } catch (finalErr) {
-      // CRITICAL: destroy stream on error (see stream-chunk for rationale)
-      if (finalStream && !finalStream.destroyed) finalStream.destroy();
-      if (req.file?.path) {
-        fs.unlink(req.file.path, (unlinkErr) => {
-          if (unlinkErr) logger.warn({ err: unlinkErr, path: req.file?.path }, 'Failed to remove final temp file after error');
-        });
-      }
       logger.warn({ err: finalErr instanceof Error ? finalErr.message : String(finalErr), sessionId }, 'stream-final transcription failed; returning partial transcript');
       degradedMode = true;
     }

@@ -12,18 +12,18 @@
 #   bash deploy/azure/preflight-linux.sh prod
 #
 # Expected parameter files:
-#   deploy/azure/parameters.{dev,staging,prod}.json
+#   deploy/azure/parameters.{staging,prod}.json
 
 set -euo pipefail
 
 ENV="${1:-}"
 if [[ -z "$ENV" ]]; then
-  echo "Usage: $0 {dev|staging|prod}" >&2
+  echo "Usage: $0 {staging|prod}" >&2
   exit 2
 fi
 
-if [[ "$ENV" != "dev" && "$ENV" != "staging" && "$ENV" != "prod" ]]; then
-  echo "Environment must be 'dev', 'staging', or 'prod', got '$ENV'" >&2
+if [[ "$ENV" != "staging" && "$ENV" != "prod" ]]; then
+  echo "Environment must be 'staging' or 'prod', got '$ENV'" >&2
   exit 2
 fi
 
@@ -100,6 +100,18 @@ POSTGRES_SKU="$(jq -r '.parameters.postgresSku.value' "$PARAMS")"
 POSTGRES_HA="$(jq -r '.parameters.postgresHaMode.value // "Disabled"' "$PARAMS")"
 REDIS_SKU="$(jq -r '.parameters.redisSku.value // "Standard"' "$PARAMS")"
 APP_PLAN_SKU="$(jq -r '.parameters.appServicePlanSku.value // "B1"' "$PARAMS")"
+AI_RUNTIME_ENABLED="$(jq -r '.parameters.aiRuntimeEnabled.value // false' "$PARAMS")"
+AI_RUNTIME_PLAN_SKU="$(jq -r '.parameters.aiRuntimePlanSku.value // "P1v3"' "$PARAMS")"
+ENABLE_PRIVATE_NETWORK="$(jq -r '.parameters.enablePrivateNetwork.value // false' "$PARAMS")"
+ENABLE_AZURE_OPENAI="$(jq -r '.parameters.enableAzureOpenAi.value // false' "$PARAMS")"
+AZURE_OPENAI_FAST_MODEL_NAME="$(jq -r '.parameters.azureOpenAiFastClinicalModelName.value // "gpt-4o-mini"' "$PARAMS")"
+AZURE_OPENAI_FAST_MODEL_VERSION="$(jq -r '.parameters.azureOpenAiFastClinicalModelVersion.value // "2024-07-18"' "$PARAMS")"
+AZURE_OPENAI_FAST_SKU="$(jq -r '.parameters.azureOpenAiFastClinicalDeploymentSku.value // "GlobalStandard"' "$PARAMS")"
+AZURE_OPENAI_FAST_CAPACITY="$(jq -r '.parameters.azureOpenAiFastClinicalCapacity.value // 100' "$PARAMS")"
+AZURE_OPENAI_BEST_MODEL_NAME="$(jq -r '.parameters.azureOpenAiBestClinicalModelName.value // "gpt-4o"' "$PARAMS")"
+AZURE_OPENAI_BEST_MODEL_VERSION="$(jq -r '.parameters.azureOpenAiBestClinicalModelVersion.value // "2024-11-20"' "$PARAMS")"
+AZURE_OPENAI_BEST_SKU="$(jq -r '.parameters.azureOpenAiBestClinicalDeploymentSku.value // "GlobalStandard"' "$PARAMS")"
+AZURE_OPENAI_BEST_CAPACITY="$(jq -r '.parameters.azureOpenAiBestClinicalCapacity.value // 50' "$PARAMS")"
 KV_ADMIN_OBJ_ID="${KEYVAULT_ADMIN_OBJECT_ID:-$(jq -r '.parameters.keyVaultAdminObjectId.value // ""' "$PARAMS")}"
 if [[ "${KEYVAULT_ADMIN_OBJECT_ID+x}" != "" ]]; then
   log "Using keyVaultAdminObjectId from KEYVAULT_ADMIN_OBJECT_ID override."
@@ -182,13 +194,101 @@ else
 fi
 
 if [[ "$REDIS_SKU" == "Basic" ]]; then
-  if [[ "$ENV" == "dev" ]]; then
-    warn "Redis SKU is Basic for dev/test. This is valid for dev only; move to Standard for staging/prod."
-  else
-    fail "Redis SKU 'Basic' is not safe for $ENV (single logical DB). Use Standard."
-  fi
+  fail "Redis SKU 'Basic' is not safe for $ENV (single logical DB). Use Standard."
 else
   pass "Redis SKU '$REDIS_SKU' is safe for $ENV."
+fi
+
+if [[ "$AI_RUNTIME_ENABLED" == "true" ]]; then
+  case "$AI_RUNTIME_PLAN_SKU" in
+    P1v3|P2v3|P3v3)
+      pass "AI runtime plan SKU '$AI_RUNTIME_PLAN_SKU' meets the dedicated-runtime minimum."
+      ;;
+    *)
+      fail "aiRuntimeEnabled=true requires aiRuntimePlanSku to be one of P1v3/P2v3/P3v3. Current value '$AI_RUNTIME_PLAN_SKU' is under-provisioned for Ollama/Whisper."
+      ;;
+  esac
+fi
+
+if [[ "$ENABLE_AZURE_OPENAI" == "true" && "$ENABLE_PRIVATE_NETWORK" != "true" ]]; then
+  fail "enableAzureOpenAi=true requires enablePrivateNetwork=true."
+elif [[ "$ENABLE_AZURE_OPENAI" == "true" ]]; then
+  pass "Azure OpenAI private lane requested with private-network support."
+  MODEL_CATALOG_JSON="$(az cognitiveservices model list --location "$LOCATION" -o json)"
+  USAGE_JSON="$(az cognitiveservices usage list --location "$LOCATION" -o json)"
+
+  check_azure_openai_deployment() {
+    local model_name="$1"
+    local model_version="$2"
+    local sku_name="$3"
+    local capacity_required="$4"
+    local alias_label="$5"
+
+    local usage_name
+    usage_name="$(
+      jq -r \
+        --arg name "$model_name" \
+        --arg version "$model_version" \
+        --arg sku "$sku_name" \
+        '
+          [
+            .[]
+            | select((.model.name // "") == $name and (.model.version // "") == $version)
+            | .model.skus[]
+            | select((.name // "") == $sku)
+            | .usageName
+          ][0] // ""
+        ' <<<"$MODEL_CATALOG_JSON"
+    )"
+    if [[ -z "$usage_name" ]]; then
+      fail "Azure OpenAI $alias_label deployment (${model_name} ${model_version} / ${sku_name}) is not supported in $LOCATION."
+      return
+    fi
+
+    local quota_limit quota_current quota_available
+    quota_limit="$(
+      jq -r --arg usage "$usage_name" '[.[] | select((.name.value // "") == $usage)][0].limit // ""' <<<"$USAGE_JSON"
+    )"
+    quota_current="$(
+      jq -r --arg usage "$usage_name" '[.[] | select((.name.value // "") == $usage)][0].currentValue // ""' <<<"$USAGE_JSON"
+    )"
+    if [[ -z "$quota_limit" || -z "$quota_current" ]]; then
+      fail "Azure OpenAI quota entry missing for $usage_name ($alias_label)."
+      return
+    fi
+
+    quota_available="$(python3 - <<'PY' "$quota_limit" "$quota_current" "$capacity_required"
+import sys
+limit = float(sys.argv[1])
+current = float(sys.argv[2])
+required = float(sys.argv[3])
+print(int(limit - current))
+if (limit - current) < required:
+    raise SystemExit(1)
+PY
+    )" || {
+      fail "Azure OpenAI quota insufficient for $alias_label (${model_name} ${model_version} / ${sku_name}): require $capacity_required, available ${quota_limit}-${quota_current}."
+      return
+    }
+
+    pass "Azure OpenAI $alias_label deployment supported with quota headroom (${model_name} ${model_version} / ${sku_name}, require $capacity_required, available $quota_available)."
+  }
+
+  check_azure_openai_deployment \
+    "$AZURE_OPENAI_FAST_MODEL_NAME" \
+    "$AZURE_OPENAI_FAST_MODEL_VERSION" \
+    "$AZURE_OPENAI_FAST_SKU" \
+    "$AZURE_OPENAI_FAST_CAPACITY" \
+    "fast_clinical"
+
+  check_azure_openai_deployment \
+    "$AZURE_OPENAI_BEST_MODEL_NAME" \
+    "$AZURE_OPENAI_BEST_MODEL_VERSION" \
+    "$AZURE_OPENAI_BEST_SKU" \
+    "$AZURE_OPENAI_BEST_CAPACITY" \
+    "best_clinical"
+elif [[ "$ENABLE_PRIVATE_NETWORK" == "true" ]]; then
+  pass "Private network enabled without Azure OpenAI lane."
 fi
 
 if ! az deployment sub validate \

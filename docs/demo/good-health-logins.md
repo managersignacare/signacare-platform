@@ -11,9 +11,28 @@
 > If you are looking at this file in production, something has gone
 > very wrong — the seed entrypoint refuses to run with
 > `NODE_ENV=production` unless `ALLOW_DEMO_SEED=1` is explicitly set.
+>
+> **Superadmin access policy note:** The Signacare platform runtime only
+> permits superadmin logins from domains listed in
+> `SUPERADMIN_ALLOWED_EMAIL_DOMAINS` (defaults:
+> `signacare.net,signacare.local`). If your environment keeps the
+> default allowlist, the `*.goodhealth.demo` superadmin personas below
+> are seed references only. Use `admin@signacare.local` for the
+> guaranteed demo superadmin login unless ops explicitly extends the
+> allowlist for demo domains.
 
+**Total personas:** 97 (5 executive + 1 demo-shortcut + 7 department heads + 84 clinic staff & superadmins)
 
-**Total personas:** 92 (5 executive + 7 department heads + 80 clinical staff)
+## Demo-Shortcut Logins
+
+> Memorable email + password pairs for quick demo access. These rows live
+> in the executive clinic tenant alongside the standard CEO/CMO personas
+> but use fixed credentials so a tester can sign in without looking up
+> the master table. MFA is intentionally disabled on these accounts.
+
+| Email | Plaintext password | Role | Clinic | Title |
+|---|---|---|---|---|
+| admin@signacare.local | `Password1!` | superadmin | executive | Demo Admin (Shortcut Login) |
 
 ## Executive & Corporate
 
@@ -37,12 +56,13 @@
 | rafael.costa@exec.goodhealth.demo | `Hod-surgery!Costa2026` | admin | executive | Head of Department — Surgery |
 | helena.abramowitz@exec.goodhealth.demo | `Hod-oncology!Abramowitz2026` | admin | executive | Head of Department — Oncology |
 
-## Clinical Staff (by clinic)
+## Clinic Staff & Superadmins (by clinic)
 
-### eastern — 20 personas
+### eastern — 21 personas
 
 | Email | Plaintext password | Role | Clinic | Title |
 |---|---|---|---|---|
+| superadmin@eastern.goodhealth.demo | `Superadmin!Eastern2026` | superadmin | eastern | Clinic Superadmin — Good Health Eastern Mind Clinic |
 | mateo.soerensen@eastern.goodhealth.demo | `Teamlead!Soerensen2026` | clinician | eastern | Consultant Psychiatrist (Team Lead) — Good Health Eastern Mind Clinic (Alpha) |
 | elias.garcia@eastern.goodhealth.demo | `Registrar!Garcia2026` | clinician | eastern | Psychiatry Registrar — Good Health Eastern Mind Clinic (Alpha) |
 | mireille.hernandez@eastern.goodhealth.demo | `Registrar!Hernandez2026` | clinician | eastern | Psychiatry Registrar — Good Health Eastern Mind Clinic (Alpha) |
@@ -64,10 +84,11 @@
 | frida.joshi@eastern.goodhealth.demo | `Coordinator!Joshi2026` | clinician | eastern | Case Coordinator — Good Health Eastern Mind Clinic (Beta) |
 | omar.fitzgerald@eastern.goodhealth.demo | `Admin!Fitzgerald2026` | receptionist | eastern | Administrative Officer — Good Health Eastern Mind Clinic (Beta) |
 
-### northern — 20 personas
+### northern — 21 personas
 
 | Email | Plaintext password | Role | Clinic | Title |
 |---|---|---|---|---|
+| superadmin@northern.goodhealth.demo | `Superadmin!Northern2026` | superadmin | northern | Clinic Superadmin — Good Health Northern Mind Clinic |
 | keira.singh@northern.goodhealth.demo | `Teamlead!Singh2026` | clinician | northern | Consultant Psychiatrist (Team Lead) — Good Health Northern Mind Clinic (Alpha) |
 | isabella.kapoor@northern.goodhealth.demo | `Registrar!Kapoor2026` | clinician | northern | Psychiatry Registrar — Good Health Northern Mind Clinic (Alpha) |
 | tomas.clarke@northern.goodhealth.demo | `Registrar!Clarke2026` | clinician | northern | Psychiatry Registrar — Good Health Northern Mind Clinic (Alpha) |
@@ -89,10 +110,11 @@
 | kiri.kapoor@northern.goodhealth.demo | `Coordinator!Kapoor2026` | clinician | northern | Case Coordinator — Good Health Northern Mind Clinic (Beta) |
 | fergus.abara@northern.goodhealth.demo | `Admin!Abara2026` | receptionist | northern | Administrative Officer — Good Health Northern Mind Clinic (Beta) |
 
-### southern — 20 personas
+### southern — 21 personas
 
 | Email | Plaintext password | Role | Clinic | Title |
 |---|---|---|---|---|
+| superadmin@southern.goodhealth.demo | `Superadmin!Southern2026` | superadmin | southern | Clinic Superadmin — Good Health Southern Mind Clinic |
 | lakshmi.petrova@southern.goodhealth.demo | `Teamlead!Petrova2026` | clinician | southern | Consultant Psychiatrist (Team Lead) — Good Health Southern Mind Clinic (Alpha) |
 | mateo.petrova@southern.goodhealth.demo | `Registrar!Petrova2026` | clinician | southern | Psychiatry Registrar — Good Health Southern Mind Clinic (Alpha) |
 | elias.okonkwo@southern.goodhealth.demo | `Registrar!Okonkwo2026` | clinician | southern | Psychiatry Registrar — Good Health Southern Mind Clinic (Alpha) |
@@ -114,10 +136,11 @@
 | rosa.papadopoulos@southern.goodhealth.demo | `Coordinator!Papadopoulos2026` | clinician | southern | Case Coordinator — Good Health Southern Mind Clinic (Beta) |
 | mireille.okafor@southern.goodhealth.demo | `Admin!Okafor2026` | receptionist | southern | Administrative Officer — Good Health Southern Mind Clinic (Beta) |
 
-### western — 20 personas
+### western — 21 personas
 
 | Email | Plaintext password | Role | Clinic | Title |
 |---|---|---|---|---|
+| superadmin@western.goodhealth.demo | `Superadmin!Western2026` | superadmin | western | Clinic Superadmin — Good Health Western Mind Clinic |
 | irene.abara@western.goodhealth.demo | `Teamlead!Abara2026` | clinician | western | Consultant Psychiatrist (Team Lead) — Good Health Western Mind Clinic (Alpha) |
 | frida.beltran@western.goodhealth.demo | `Registrar!Beltran2026` | clinician | western | Psychiatry Registrar — Good Health Western Mind Clinic (Alpha) |
 | lachlan.patel@western.goodhealth.demo | `Registrar!Patel2026` | clinician | western | Psychiatry Registrar — Good Health Western Mind Clinic (Alpha) |
@@ -138,4 +161,3 @@
 | tobias.patel@western.goodhealth.demo | `Mhn!Patel2026` | clinician | western | Mental Health Nurse — Good Health Western Mind Clinic (Beta) |
 | mei.beltran@western.goodhealth.demo | `Coordinator!Beltran2026` | clinician | western | Case Coordinator — Good Health Western Mind Clinic (Beta) |
 | priyanka.schwartz@western.goodhealth.demo | `Admin!Schwartz2026` | receptionist | western | Administrative Officer — Good Health Western Mind Clinic (Beta) |
-

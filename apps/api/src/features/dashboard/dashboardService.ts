@@ -2,6 +2,10 @@
 import {
   type AuthContext,
   type ClinicianDashboard,
+  DASHBOARD_CARD_CATALOG,
+  DEFAULT_DASHBOARD_PREFERENCES,
+  DashboardPreferencesResponseSchema,
+  DashboardPreferencesUpdateSchema,
   type ManagerDashboard,
   type OvernightAlert,
   type StaffActivityMetric,
@@ -10,8 +14,10 @@ import {
   TeamDashboardScopesSchema,
   type TeamDashboardScopes,
   type TeamDashboardScopeType,
+  normalizeDashboardPreferences,
 } from '@signacare/shared';
 import * as repo from './dashboardRepository';
+import * as preferencesRepo from './dashboardPreferencesRepository';
 import { cachedQuery } from '../../utils/queryCache';
 import { AppError } from '../../shared/errors';
 
@@ -281,6 +287,53 @@ export async function getManagerDashboard(
     },
     generatedAt: new Date().toISOString(),
   };
+}
+
+export async function getDashboardPreferences(
+  auth: AuthContext,
+) {
+  const saved = await preferencesRepo.getDashboardPreferencesSetting(
+    auth.staffId,
+    auth.clinicId,
+  );
+
+  return DashboardPreferencesResponseSchema.parse({
+    preferences: normalizeDashboardPreferences(
+      saved ?? DEFAULT_DASHBOARD_PREFERENCES,
+    ),
+    catalog: DASHBOARD_CARD_CATALOG,
+  });
+}
+
+export async function updateDashboardPreferences(
+  auth: AuthContext,
+  patch: unknown,
+) {
+  const current = normalizeDashboardPreferences(
+    (await preferencesRepo.getDashboardPreferencesSetting(
+      auth.staffId,
+      auth.clinicId,
+    )) ?? DEFAULT_DASHBOARD_PREFERENCES,
+  );
+  const nextPatch = DashboardPreferencesUpdateSchema.parse(patch);
+  const merged = normalizeDashboardPreferences({
+    ...current,
+    ...nextPatch,
+    viewPreferences: nextPatch.viewPreferences
+      ? { ...current.viewPreferences, ...nextPatch.viewPreferences }
+      : current.viewPreferences,
+  });
+
+  await preferencesRepo.setDashboardPreferencesSetting(
+    auth.staffId,
+    auth.clinicId,
+    merged,
+  );
+
+  return DashboardPreferencesResponseSchema.parse({
+    preferences: merged,
+    catalog: DASHBOARD_CARD_CATALOG,
+  });
 }
 
 export async function getTeamDashboardScopes(

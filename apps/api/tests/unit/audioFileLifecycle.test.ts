@@ -79,6 +79,26 @@ describe('Audio file lifecycle (hard-delete on transcription)', () => {
     });
   });
 
+  describe('Whisper HTTP contract', () => {
+    const src = readFileSync(STREAMING_ROUTE_PATH, 'utf8');
+
+    it('uses the deployed Whisper /inference endpoint and "file" multipart field', () => {
+      // deploy/whisper-server/server.py exposes POST /inference and
+      // requires multipart field "file". The stale /transcribe + "audio"
+      // shape returns 404 in Azure and degrades Ambient AI streaming.
+      expect(src).toMatch(/whisperUrl\(\)}\/inference/);
+      expect(src).not.toMatch(/whisperUrl\(\)}\/transcribe/);
+      expect(src).toMatch(/fd\.append\('file'/);
+      expect(src).not.toMatch(/fd\.append\('audio'/);
+    });
+
+    it('treats undecodable MediaRecorder chunks as degraded live-preview failures', () => {
+      expect(src).toMatch(/SCRIBE_PARTIAL_CHUNK_NOT_DECODABLE/);
+      expect(src).toMatch(/summarizeWhisperError/);
+      expect(src).not.toMatch(/logger\.error\(\{\s*err,\s*message,\s*chunkIndex\s*\}/);
+    });
+  });
+
   describe('Regression guard: no setTimeout cleanup', () => {
     const src = readFileSync(STREAMING_ROUTE_PATH, 'utf8');
 

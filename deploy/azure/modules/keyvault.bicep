@@ -8,6 +8,7 @@
 //   - PHI_ENCRYPTION_KEY (hex)
 //   - BLIND_INDEX_KEY (hex, DIFFERENT from PHI_ENCRYPTION_KEY per NIST
 //     SP 800-57 §8.2.3)
+//   - PATIENT_APP_DEDUPE_PEPPER (hex, HMAC key for public registration dedupe)
 //   - SESSION_SECRET
 //   - SLACK_WEBHOOK_SECURITY, SLACK_WEBHOOK_OPS
 //   - SENTRY_DSN

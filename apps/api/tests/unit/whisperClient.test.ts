@@ -114,22 +114,22 @@ describe('BUG-424 absorb-1 — recordLlmInteraction provider-aware version resol
     // test in tests/integration/whisperAsrModelVersionRoundTrip.int.test.ts
     // is the live-DB end-to-end gate.
     let captured: Record<string, unknown> | null = null;
+    const insertFor = (table: string) => ({
+      insert: async (row: Record<string, unknown>) => {
+        if (table === 'llm_interactions') captured = row;
+        return [];
+      },
+    });
+    const trx = Object.assign(
+      (table: string) => insertFor(table),
+      { raw: async () => [] },
+    );
     vi.doMock('../../src/db/db', () => ({
       dbAdmin: Object.assign(
-        (table: string) => ({
-          insert: async (row: Record<string, unknown>) => {
-            if (table === 'llm_interactions') captured = row;
-            return [];
-          },
-        }),
+        (table: string) => insertFor(table),
         {
           transaction: async (fn: (trx: unknown) => Promise<void>) => {
-            await fn((table: string) => ({
-              insert: async (row: Record<string, unknown>) => {
-                if (table === 'llm_interactions') captured = row;
-                return [];
-              },
-            }));
+            await fn(trx);
           },
         },
       ),

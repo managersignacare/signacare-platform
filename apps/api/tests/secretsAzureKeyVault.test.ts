@@ -62,6 +62,7 @@ describe('envKeyToVaultSecretName', () => {
   it('maps UPPER_SNAKE env names to kebab-lower vault secret names', () => {
     expect(envKeyToVaultSecretName('JWT_ACCESS_SECRET')).toBe('jwt-access-secret');
     expect(envKeyToVaultSecretName('DB_APP_PASSWORD')).toBe('db-app-password');
+    expect(envKeyToVaultSecretName('BLOB_AZURE_ACCOUNT_KEY')).toBe('blob-azure-account-key');
     expect(envKeyToVaultSecretName('BLOB_S3_SECRET_ACCESS_KEY')).toBe('blob-s3-secret-access-key');
     expect(envKeyToVaultSecretName('HI_SERVICE_CERT_PASSPHRASE')).toBe('hi-service-cert-passphrase');
   });
@@ -161,7 +162,7 @@ describe('loadSecretsAsync — azure_keyvault backend', () => {
     process.env.AZURE_KEYVAULT_URL = 'https://test-kv.vault.azure.net';
     process.env.NODE_ENV = 'production';
     // Make sure the required keys are NOT in env.
-    for (const k of ['JWT_ACCESS_SECRET', 'JWT_REFRESH_SECRET', 'DB_APP_PASSWORD', 'PHI_ENCRYPTION_KEY', 'BLIND_INDEX_KEY']) {
+    for (const k of ['JWT_ACCESS_SECRET', 'JWT_REFRESH_SECRET', 'DB_APP_PASSWORD', 'BLIND_INDEX_KEY', 'PATIENT_APP_DEDUPE_PEPPER']) {
       delete process.env[k];
     }
     // Every vault lookup returns SecretNotFound so nothing lands in env.
@@ -180,6 +181,7 @@ describe('loadSecretsAsync — azure_keyvault backend', () => {
         'db-app-password': 'test-db-pw',
         'phi-encryption-key': 'a'.repeat(64),
         'blind-index-key': 'b'.repeat(64),
+        'patient-app-dedupe-pepper': 'patient-dedupe-pepper-test',
       };
       if (map[name]) return { value: map[name] };
       throw Object.assign(new Error('nf'), { code: 'SecretNotFound' });
@@ -191,7 +193,7 @@ describe('loadSecretsAsync — azure_keyvault backend', () => {
     process.env.SECRETS_BACKEND = 'azure_keyvault';
     process.env.AZURE_KEYVAULT_URL = 'https://test-kv.vault.azure.net';
     process.env.NODE_ENV = 'test';
-    for (const k of ['JWT_ACCESS_SECRET', 'JWT_REFRESH_SECRET', 'DB_APP_PASSWORD', 'PHI_ENCRYPTION_KEY', 'BLIND_INDEX_KEY']) {
+    for (const k of ['JWT_ACCESS_SECRET', 'JWT_REFRESH_SECRET', 'DB_APP_PASSWORD', 'BLIND_INDEX_KEY', 'PATIENT_APP_DEDUPE_PEPPER']) {
       delete process.env[k];
     }
     getSecretMock.mockRejectedValue(Object.assign(new Error('nf'), { code: 'SecretNotFound' }));

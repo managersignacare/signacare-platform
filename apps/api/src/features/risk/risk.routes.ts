@@ -12,9 +12,13 @@
 //
 // Every route gets auth + tenant middleware inline because we need
 // tenant scoping to apply before the controller reads req.clinicId.
-// The module-access gate is applied via router.use at the top so
-// it fires for every handler whether future routes are added at the
-// root or under the patient prefix.
+// The root-level router can safely gate every request via router.use
+// because every mounted path belongs to the risk_assessments surface.
+//
+// The patient-nested router is mounted under `/api/v1/patients`, so a
+// router-level gate would incorrectly run for unrelated `/patients`
+// routes before Express decides no nested risk path matched. Keep the
+// auth/module middleware inline on the concrete risk routes only.
 import { Router } from 'express';
 import { riskController } from './riskController';
 import { authMiddleware } from '../../middleware/authMiddleware';
@@ -51,22 +55,24 @@ riskRoutes.get('/templates/:templateId', riskController.getTemplateById);
 // as a second router lets us stay relative-path-only while the
 // two surfaces share middleware and controllers.
 export const riskPatientRoutes = Router();
-riskPatientRoutes.use(
-  authMiddleware,
-  requireModuleRead(MODULE_KEYS.RISK_ASSESSMENTS),
-);
 riskPatientRoutes.get(
   '/:patientId/risk-assessments',
+  authMiddleware,
+  requireModuleRead(MODULE_KEYS.RISK_ASSESSMENTS),
   tenantMiddleware,
   riskController.listForPatient,
 );
 riskPatientRoutes.get(
   '/:patientId/risk-assessments/:id',
+  authMiddleware,
+  requireModuleRead(MODULE_KEYS.RISK_ASSESSMENTS),
   tenantMiddleware,
   riskController.getById,
 );
 riskPatientRoutes.delete(
   '/:patientId/risk-assessments/:id',
+  authMiddleware,
+  requireModuleRead(MODULE_KEYS.RISK_ASSESSMENTS),
   tenantMiddleware,
   riskController.softDelete,
 );

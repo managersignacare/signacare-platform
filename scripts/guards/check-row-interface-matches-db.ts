@@ -47,7 +47,7 @@
  */
 
 import { readFileSync, readdirSync, statSync } from 'fs';
-import { resolve } from 'path';
+import { basename, resolve } from 'path';
 
 interface SchemaSnapshot {
   generatedAt: string;
@@ -235,6 +235,35 @@ function relpath(p: string, root: string): string {
   return p.startsWith(root) ? p.substring(root.length + 1) : p;
 }
 
+function snakeToPascalCase(input: string): string {
+  return input
+    .split('_')
+    .filter((part) => part.length > 0)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join('');
+}
+
+function inferGeneratedDbTypeTable(
+  file: string,
+  rootDir: string,
+  snapshot: SchemaSnapshot,
+  check: InterfaceCheck,
+): string | null {
+  const generatedTypesRoot = resolve(rootDir, 'apps', 'api', 'src', 'db', 'types');
+  if (!file.startsWith(`${generatedTypesRoot}/`)) return null;
+
+  const tableName = basename(file, '.ts');
+  if (!snapshot.tables[tableName]) return null;
+
+  const expectedInterfaceName = `${snakeToPascalCase(tableName)}Row`;
+  if (check.interfaceName !== expectedInterfaceName) return null;
+
+  // Generated DB type files are authoritative table-row contracts. Bind
+  // them even when stale so reverse-drift failures surface immediately
+  // instead of quietly disappearing into the unbound bucket.
+  return tableName;
+}
+
 export function runCheck(
   rootDir: string,
   snapshotPath: string,
@@ -265,6 +294,7 @@ export function runCheck(
   for (const f of tsFiles) {
     const checks = parseFile(f);
     for (const c of checks) {
+      const boundTable = c.boundTable ?? inferGeneratedDbTypeTable(f, rootDir, snapshot, c);
       scanned++;
 
       // Whole-interface exemption (skip BOTH directions): select-aliased,
@@ -274,15 +304,15 @@ export function runCheck(
         exempt++;
         continue;
       }
-      if (!c.boundTable) {
+      if (!boundTable) {
         unbound++;
         continue;
       }
-      const dbCols = snapshot.tables[c.boundTable];
+      const dbCols = snapshot.tables[boundTable];
       if (!dbCols) {
         violations.push(
-          `${relpath(c.file, rootDir)}:${c.lineNo}  ${c.interfaceName} → table "${c.boundTable}" does not exist in schema snapshot.\n` +
-          `     Possible causes: typo in db<${c.interfaceName}>('${c.boundTable}'), missing migration, or snapshot is stale.\n` +
+          `${relpath(c.file, rootDir)}:${c.lineNo}  ${c.interfaceName} → table "${boundTable}" does not exist in schema snapshot.\n` +
+          `     Possible causes: typo in db<${c.interfaceName}>('${boundTable}'), missing migration, or snapshot is stale.\n` +
           `     Fix: verify the table name + run \`npm run db:snapshot --workspace=apps/api\` after migrations.`,
         );
         continue;
@@ -294,7 +324,7 @@ export function runCheck(
       // interface (or allowlisted). Skipped for partial-shape interfaces.
       const realButUndeclared = c.exemptReason === 'partial-shape'
         ? []
-        : dbCols.filter((col) => !c.fields.includes(col) && !allowlist.has(`${c.boundTable}.${col}`));
+        : dbCols.filter((col) => !c.fields.includes(col) && !allowlist.has(`${boundTable}.${col}`));
 
       const hasForward = phantomFields.length > 0;
       const hasReverse = realButUndeclared.length > 0;
@@ -304,7 +334,7 @@ export function runCheck(
         continue;
       }
 
-      let msg = `${relpath(c.file, rootDir)}:${c.lineNo}  ${c.interfaceName} → table "${c.boundTable}"\n`;
+      let msg = `${relpath(c.file, rootDir)}:${c.lineNo}  ${c.interfaceName} → table "${boundTable}"\n`;
       if (hasForward) {
         msg += `  Interface declares fields that don't exist in the DB:\n`;
         for (const field of phantomFields) {

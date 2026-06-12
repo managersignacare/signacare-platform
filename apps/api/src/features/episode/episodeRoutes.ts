@@ -55,20 +55,6 @@ interface EpisodeAllocationMdtRoleRow {
   updated_at: string | Date | null;
 }
 
-interface MedicationSummaryRow {
-  drug_label: string | null;
-  dose: string | null;
-  taper_schedule: unknown | null;
-}
-
-interface ClinicalNoteSummaryRow {
-  note_type: string | null;
-  title: string | null;
-  content: string | null;
-  structured_fields: unknown | null;
-  contact_meta: unknown | null;
-}
-
 const IsoDateTimeLikeSchema = z.union([z.string(), z.date()]).transform((value) => (
   value instanceof Date ? value.toISOString() : value
 ));
@@ -102,10 +88,6 @@ const EpisodeAllocationResponseSchema = z.object({
   })),
 });
 
-const EpisodeDischargeSummaryResponseSchema = z.object({
-  content: z.string(),
-});
-
 const EpisodeOkResponseSchema = z.object({
   ok: z.literal(true),
 });
@@ -120,42 +102,6 @@ const EpisodeDischargeSummaryReadResponseSchema = z.union([
   }),
   z.object({}),
 ]);
-
-function parseJsonbRecord(value: unknown): Record<string, unknown> {
-  if (value == null) return {};
-  if (typeof value === 'string') {
-    try {
-      const parsed = JSON.parse(value) as unknown;
-      return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-        ? (parsed as Record<string, unknown>)
-        : {};
-    } catch {
-      return {};
-    }
-  }
-  if (typeof value === 'object' && !Array.isArray(value)) {
-    return value as Record<string, unknown>;
-  }
-  return {};
-}
-
-function mapDischargeSummaryNoteToResponse(row: ClinicalNoteSummaryRow) {
-  return {
-    noteType: row.note_type,
-    title: row.title,
-    content: row.content,
-    structuredFields: parseJsonbRecord(row.structured_fields),
-    contactMeta: parseJsonbRecord(row.contact_meta),
-  };
-}
-
-function mapDischargeSummaryMedicationToResponse(row: MedicationSummaryRow) {
-  return {
-    medicationName: row.drug_label,
-    dose: row.dose,
-    taperSchedule: parseJsonbRecord(row.taper_schedule),
-  };
-}
 
 router.get('/patients-by-clinician/:clinicianId', async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -564,56 +510,18 @@ router.get('/:id/allocation', async (req: Request, res: Response, next: NextFunc
 
 // ── Discharge Summary with Vetting (Feature 4) ──
 
-// Generate discharge summary via AI
-router.post('/:id/discharge-summary/generate', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const ep = await db('episodes')
-      .where({ id: req.params.id, clinic_id: req.clinicId })
-      .whereNull('deleted_at')
-      .first();
-    if (!ep) throw new AppError('Episode not found', 404, 'NOT_FOUND');
-
-    // Gather context for AI
-    // BUG-430: explicit clinic_id on every patient-scoped read (CLAUDE.md §1.3).
-    const notes = await db('clinical_notes')
-      .where({ patient_id: ep.patient_id, clinic_id: req.clinicId, episode_id: ep.id })
-      .whereNull('deleted_at')
-      .orderBy('created_at', 'desc')
-      .limit(20)
-      .select('note_type', 'title', 'content', 'structured_fields', 'contact_meta') as ClinicalNoteSummaryRow[];
-    const patient = await db('patients')
-      .where({ id: ep.patient_id, clinic_id: req.clinicId })
-      .whereNull('deleted_at')
-      .first();
-    const meds = await db('patient_medications')
-      .where({ patient_id: ep.patient_id, clinic_id: req.clinicId, status: 'active' })
-      .whereNull('deleted_at')
-      .select('drug_label', 'dose', 'taper_schedule') as MedicationSummaryRow[];
-
-    const mappedNotes = notes.map(mapDischargeSummaryNoteToResponse);
-    const mappedMeds = meds.map(mapDischargeSummaryMedicationToResponse);
-
-    const context = `Patient: ${patient?.given_name} ${patient?.family_name}\nEpisode: ${ep.presenting_problem}\nDiagnosis: ${ep.primary_diagnosis ?? 'N/A'}\nMedications: ${mappedMeds.map((m) => `${m.medicationName ?? 'Unknown'} ${m.dose ?? ''}${Object.keys(m.taperSchedule).length > 0 ? ` (taper: ${JSON.stringify(m.taperSchedule)})` : ''}`).join(', ')}\nNotes: ${mappedNotes.map((n) => `[${n.noteType ?? 'note'}] ${n.title ?? 'Untitled'}: ${((n.content ?? JSON.stringify(n.structuredFields) ?? '').substring(0, 500))}`).join('\n')}`;
-
-    // Try AI generation
-    let content = '';
-    try {
-      const { clinicalAi } = await import('../../mcp/localLlmAgent');
-      content = await clinicalAi.generateDischargeSummary(context);
-    } catch (err) {
-      logger.warn(
-        { err, episodeId: req.params.id, clinicId: req.clinicId, kind: 'discharge_summary_ai_fallback' },
-        'AI discharge summary generation failed; using deterministic fallback',
-      );
-      content = `[AI generation unavailable. Please write the discharge summary manually.]\n\nPatient: ${patient?.given_name} ${patient?.family_name}\nEpisode: ${ep.presenting_problem}\nDiagnosis: ${ep.primary_diagnosis ?? ''}\nMedications: ${mappedMeds.map((m) => m.medicationName).join(', ')}`;
-    }
-
-    await db('episodes')
-      .where({ id: req.params.id, clinic_id: req.clinicId })
-      .whereNull('deleted_at')
-      .update({ discharge_summary_content: content, discharge_vetting_status: 'draft', updated_at: new Date() });
-    res.json(EpisodeDischargeSummaryResponseSchema.parse({ content }));
-  } catch (err) { next(err); }
+// Legacy sync endpoint retained fail-closed so old clients get a clear
+// migration target instead of a browser-held long AI request.
+router.post('/:id/discharge-summary/generate', async (_req: Request, _res: Response, next: NextFunction) => {
+  next(new AppError(
+    'Discharge summary generation must run through the durable async AI job workflow.',
+    409,
+    'AI_ACTION_REQUIRES_ASYNC_JOB',
+    {
+      action: 'discharge',
+      recommendedEndpoint: '/api/v1/ai/jobs',
+    },
+  ));
 });
 
 // Submit discharge summary for consultant vetting

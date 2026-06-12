@@ -17,6 +17,7 @@ import { requirePatientRelationship } from '../../shared/authGuards';
 import { ensureClinicalNoteConsent } from '../../shared/recordingConsent';
 import { resolveStaffRecipientsWithAdminFallback } from '../../shared/staffActivenessResolver';
 import { getHl7OutboundRetryProfile } from '../../integrations/hl7/hl7OutboundRetryProfile';
+import { createBullmqRedisConnection } from '../../shared/bullmqRedisConnection';
 import type {
   PathologyOrderCreateDTO,
   PathologyOrderResponse,
@@ -28,7 +29,7 @@ import type {
 // BUG-263 keeps routine/urgent on that baseline while allowing per-job STAT
 // overrides at enqueue time.
 const hl7OutboundQueue = new Queue('hl7-outbound', {
-  connection: { host: process.env['REDIS_HOST'] ?? 'localhost', port: 6379 },
+  connection: createBullmqRedisConnection(),
   defaultJobOptions: {
     attempts: 5,
     backoff: { type: 'exponential', delay: 30_000 },

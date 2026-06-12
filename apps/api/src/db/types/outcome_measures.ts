@@ -24,6 +24,7 @@ export interface OutcomeMeasuresRow {
   assigned_by?: string | null;
   completed_at?: string | null;
   lock_version: number;
+  deleted_at?: string | null;
 }
 
 export const OUTCOME_MEASURES_COLUMNS = [
@@ -46,6 +47,7 @@ export const OUTCOME_MEASURES_COLUMNS = [
   'assigned_by',
   'completed_at',
   'lock_version',
+  'deleted_at',
 ] as const;
 
 export type OutcomeMeasuresColumn = typeof OUTCOME_MEASURES_COLUMNS[number];

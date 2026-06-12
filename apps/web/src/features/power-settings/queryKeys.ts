@@ -33,6 +33,10 @@ export const powerSettingsKeys = {
     [...powerSettingsKeys.all, 'access-admins', clinicId] as const,
   clinicStaff: (clinicId: string) =>
     [...powerSettingsKeys.all, 'clinic-staff', clinicId] as const,
+  aiRuntime: (clinicId: string) =>
+    [...powerSettingsKeys.all, 'ai-runtime', clinicId] as const,
+  aiRuntimeHealth: () =>
+    [...powerSettingsKeys.all, 'ai-runtime-health'] as const,
   levelLabels: (clinicId: string) =>
     [...powerSettingsKeys.all, 'level-labels', clinicId] as const,
 

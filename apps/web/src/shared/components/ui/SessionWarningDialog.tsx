@@ -93,7 +93,7 @@ export function SessionWarningDialog() {
       <DialogContent>
         <Typography id="session-warning-description" variant="body2" sx={{ mb: 2 }}>
           Your session will expire in <strong>{secondsLeft} seconds</strong> due to inactivity.
-          {scribeActive && ' (Extended session — AI Scribe is active)'}
+          {scribeActive && ' (AI Scribe activity keeps the session alive while recording or processing)'}
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2, fontSize: 12 }}>
           Any unsaved work will be saved as a draft. Click "Extend Session" to continue.

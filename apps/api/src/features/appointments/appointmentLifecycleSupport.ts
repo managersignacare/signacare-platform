@@ -1,9 +1,11 @@
+// @jsonb-extraction-exempt: support-layer booking notifications and calendar sync read staff for internal routing only; this module does not shape API response DTOs.
 import { db } from '../../db/db';
 import { settingsService } from '../settings/settingsService';
 import { jobBus } from '../../shared/jobBus';
 import { emitClinicalSignal } from '../events/clinicalSignalEmitter';
 import { AppError } from '../../shared/errors';
 import { logger } from '../../utils/logger';
+import { outlookCalendarSyncService } from '../../integrations/outlook/outlookCalendarSyncService';
 
 const DEFAULT_BOOKING_MAX_ADVANCE_DAYS = 183;
 const DEFAULT_BOOKING_OPEN_HOUR_LOCAL = 6;
@@ -149,4 +151,167 @@ export async function emitAppointmentBookedNotification(input: {
       'Failed to emit appointment-booked notification',
     );
   }
+}
+
+function appointmentTypeLabel(type: string): string {
+  switch (type) {
+    case 'initial': return 'Initial assessment';
+    case 'follow_up': return 'Follow-up';
+    case 'assessment': return 'Assessment';
+    case 'telehealth': return 'Telehealth';
+    case 'group': return 'Group session';
+    case 'clinical_review': return 'Clinical review';
+    default: return type;
+  }
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+async function clinicianHasConnectedOutlookCalendar(
+  clinicId: string,
+  clinicianId: string,
+): Promise<boolean> {
+  const row = await db('staff')
+    .where({ clinic_id: clinicId, id: clinicianId })
+    .whereNull('deleted_at')
+    .first('outlook_refresh_token');
+  return Boolean(row?.outlook_refresh_token);
+}
+
+async function resolveStaffCalendarEmails(
+  clinicId: string,
+  staffIds: string[],
+): Promise<string[]> {
+  if (staffIds.length === 0) return [];
+  const rows = await db('staff')
+    .where({ clinic_id: clinicId })
+    .whereNull('deleted_at')
+    .whereIn('id', staffIds)
+    .select('email', 'outlook_email');
+  const emails = rows
+    .map((row) => String(row['outlook_email'] ?? row['email'] ?? '').trim())
+    .filter((email) => email.length > 0);
+  return Array.from(new Set(emails));
+}
+
+export async function enqueueAppointmentCalendarSync(input: {
+  clinicId: string;
+  appointmentId: string;
+  clinicianId: string;
+  patientId: string;
+  appointmentType: string;
+  mode: 'direct' | 'telehealth' | 'videoconference' | 'other';
+  startTimeIso: string;
+  endTimeIso: string;
+  notes?: string | null;
+  attendeeStaffIds?: string[];
+  type: 'create' | 'update' | 'delete';
+}): Promise<void> {
+  const connected = await clinicianHasConnectedOutlookCalendar(
+    input.clinicId,
+    input.clinicianId,
+  );
+  if (!connected) return;
+
+  try {
+    await outlookCalendarSyncService.ensureSubscriptionForStaff({
+      clinicId: input.clinicId,
+      ownerStaffId: input.clinicianId,
+    });
+  } catch (error) {
+    logger.warn(
+      {
+        err: error,
+        clinicId: input.clinicId,
+        clinicianId: input.clinicianId,
+        appointmentId: input.appointmentId,
+      },
+      'Failed to ensure Outlook calendar subscription before appointment sync',
+    );
+  }
+
+  const patientName = await readPatientDisplayName(input.clinicId, input.patientId);
+  const subject = `${appointmentTypeLabel(input.appointmentType)} — ${patientName}`;
+
+  if (input.type === 'delete') {
+    await db('appointments')
+      .where({ clinic_id: input.clinicId, id: input.appointmentId })
+      .whereNull('deleted_at')
+      .update({
+        outlook_last_synced_at: new Date(),
+        outlook_sync_status: 'pending_delete',
+        outlook_sync_error: null,
+        updated_at: new Date(),
+      })
+      .catch((error) => {
+        logger.warn(
+          { err: error, clinicId: input.clinicId, appointmentId: input.appointmentId },
+          'Failed to mark appointment as pending Outlook delete before enqueue',
+        );
+      });
+    await jobBus.enqueue(
+      'outlook',
+      {
+        clinicId: input.clinicId,
+        clinicianId: input.clinicianId,
+        appointmentId: input.appointmentId,
+        type: 'delete',
+      },
+      { jobId: `outlook:delete:${input.appointmentId}` },
+    );
+    return;
+  }
+
+  const attendeeEmails = await resolveStaffCalendarEmails(
+    input.clinicId,
+    (input.attendeeStaffIds ?? []).filter((id) => id !== input.clinicianId),
+  );
+  const htmlBody = [
+    `<p><strong>${escapeHtml(subject)}</strong></p>`,
+    input.notes ? `<p>${escapeHtml(String(input.notes)).replace(/\n/g, '<br/>')}</p>` : '',
+  ].filter(Boolean).join('');
+
+  await db('appointments')
+    .where({ clinic_id: input.clinicId, id: input.appointmentId })
+    .whereNull('deleted_at')
+    .update({
+      outlook_last_synced_at: new Date(),
+      outlook_sync_status: input.type === 'create' ? 'pending_create' : 'pending_update',
+      outlook_sync_error: null,
+      updated_at: new Date(),
+    })
+    .catch((error) => {
+      logger.warn(
+        { err: error, clinicId: input.clinicId, appointmentId: input.appointmentId, type: input.type },
+        'Failed to mark appointment as pending Outlook sync before enqueue',
+      );
+    });
+
+  await jobBus.enqueue(
+    'outlook',
+    {
+      clinicId: input.clinicId,
+      clinicianId: input.clinicianId,
+      appointmentId: input.appointmentId,
+      type: input.type,
+      payload: {
+        subject,
+        htmlBody,
+        startIso: input.startTimeIso,
+        endIso: input.endTimeIso,
+        attendeeEmails,
+        isTeamsMeeting: input.mode === 'videoconference',
+      },
+    },
+    {
+      jobId: `${input.type === 'create' ? 'outlook:create' : 'outlook:update'}:${input.appointmentId}:${input.startTimeIso}:${input.endTimeIso}`,
+    },
+  );
 }

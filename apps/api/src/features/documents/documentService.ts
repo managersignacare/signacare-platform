@@ -1,12 +1,18 @@
 // apps/api/src/features/documents/documentService.ts
 import { db } from '../../db/db';
 import { randomUUID } from 'crypto';
+import type { AuthContext, RoutedModelExecution } from '@signacare/shared';
 import { AppError } from '../../shared/errors';
-import { config } from '../../config/config';
 import { logger } from '../../utils/logger';
 import { DOCUMENT_TEMPLATES, type DocumentType } from './documentTemplates';
-import { recordLlmInteraction } from '../../shared/recordLlmInteraction';
 import { PIPELINE_STAGES, type PipelineStage } from '../../shared/pipelineTracker';
+import { appendClinicalContextToPrompt, buildClinicalContext } from '../llm/context/buildClinicalContext';
+import { recordClinicalContextLlmInteraction } from '../llm/context/contextAuditWriter';
+import {
+  resolveLockedRuntimeSelection,
+  routeTextGeneration,
+  type LockedAiRuntimeSelection,
+} from '../llm/modelRouter/modelRouter';
 
 export interface GenerateDocumentDTO {
   patientId: string;
@@ -145,62 +151,24 @@ async function buildPatientContext(clinicId: string, patientId: string): Promise
   return lines.join('\n');
 }
 
-// ── Ollama call ───────────────────────────────────────────────────────────────
-
-async function callOllama(
-  systemPrompt: string,
-  userMessage: string,
-  model: string,
-  temperature: number,
-): Promise<{
-  text: string;
-  promptTokens: number;
-  completionTokens: number;
-  // BUG-037 — forensic audit fields. modelVersion uses tag-fallback
-  // (Ollama /api/generate doesn't echo the manifest digest); BUG-282
-  // tracks /api/show digest integration. requestedTemperature is the
-  // value caller passed in (Ollama doesn't echo runtime temperature).
-  modelVersion: string;
-  requestedTemperature: number;
-}> {
-  const prompt = `${systemPrompt}\n\n${userMessage}`;
-
-  const res = await fetch(`${config.ollama.baseUrl}/api/generate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model,
-      prompt,
-      stream: false,
-      options: { temperature },
-    }),
-  });
-
-  if (!res.ok) {
-    throw new Error(`Ollama error: ${res.status} ${await res.text()}`);
-  }
-
-  const data = await res.json() as {
-    response: string;
-    model?: string;
-    prompt_eval_count?: number;
-    eval_count?: number;
-  };
-
+function buildFailedExecution(
+  alias: (typeof DOCUMENT_TEMPLATES)[DocumentType]['alias'],
+  runtimeSelection: LockedAiRuntimeSelection,
+): RoutedModelExecution {
   return {
-    text: data.response,
-    promptTokens: data.prompt_eval_count ?? 0,
-    completionTokens: data.eval_count ?? 0,
-    modelVersion: data.model ?? model,
-    requestedTemperature: temperature,
+    alias,
+    backend: runtimeSelection.backend,
+    modelName: 'unknown',
+    modelVersion: 'unknown',
+    deployment: null,
+    localStyleAdapterModelName: runtimeSelection.localStyleAdapterModelName,
   };
 }
 
 // ── Main service ──────────────────────────────────────────────────────────────
 
 export async function generateDocument(
-  clinicId: string,
-  actorId: string,
+  auth: AuthContext,
   dto: GenerateDocumentDTO,
 ): Promise<GeneratedDocument> {
   const template = DOCUMENT_TEMPLATES[dto.documentType];
@@ -208,81 +176,144 @@ export async function generateDocument(
     throw new AppError(`Unknown document type: ${dto.documentType}`, 400, 'VALIDATION_ERROR');
   }
 
-  const patientContext = await buildPatientContext(clinicId, dto.patientId);
+  const runtimeSelection = await resolveLockedRuntimeSelection(auth.clinicId);
+  const legacyPatientContext = await buildPatientContext(auth.clinicId, dto.patientId);
+  const clinicalContext = await buildClinicalContext({
+    auth,
+    documentType: template.contextDocumentType,
+    patientId: dto.patientId,
+  });
 
-  const userMessage = [
+  const baseUserMessage = [
     'Please generate the document using the patient data below.',
     '',
-    patientContext,
+    '=== PATIENT DOCUMENT DATA ===',
+    legacyPatientContext,
     dto.additionalContext ? `\n=== ADDITIONAL CONTEXT FROM CLINICIAN ===\n${dto.additionalContext}` : '',
   ].filter(Boolean).join('\n');
+  const prompt = appendClinicalContextToPrompt(baseUserMessage, clinicalContext.renderedPrompt);
 
-  const model = config.ollama.model;
-  // BUG-037 — explicit temperature so the audit row reflects intent.
-  // Document generation is factual / structured; 0.2 matches the other
-  // clinical-document paths in localLlmAgent (letter, maudsley, etc.).
   const documentTemperature = 0.2;
   const startMs = Date.now();
 
-  logger.info({ action: 'document_generate_start', documentType: dto.documentType, patientId: dto.patientId, clinicId, model });
+  logger.info({
+    action: 'document_generate_start',
+    documentType: dto.documentType,
+    patientId: dto.patientId,
+    clinicId: auth.clinicId,
+    routedAlias: template.alias,
+    runtimeBackend: runtimeSelection.backend,
+  });
 
-  let content: string;
-  let promptTokens = 0;
-  let completionTokens = 0;
-  let modelVersion = model;
-  let requestedTemperature = documentTemperature;
-
+  let routed;
   try {
-    const result = await callOllama(template.systemPrompt, userMessage, model, documentTemperature);
-    content = result.text;
-    promptTokens = result.promptTokens;
-    completionTokens = result.completionTokens;
-    modelVersion = result.modelVersion;
-    requestedTemperature = result.requestedTemperature;
+    routed = await routeTextGeneration({
+      clinicId: auth.clinicId,
+      runtimeSelection,
+      alias: template.alias,
+      prompt,
+      system: template.systemPrompt,
+      temperature: documentTemperature,
+      maxTokens: template.maxTokens,
+      action: 'letter',
+    });
   } catch (err) {
-    logger.error({ err, action: 'document_generate_error', documentType: dto.documentType, clinicId });
-    throw new AppError('AI document generation failed. Please check that Ollama is running.', 503, 'AI_SERVICE_UNAVAILABLE');
+    const latencyMs = Date.now() - startMs;
+    const failedPipeline: PipelineStage[] = [{
+      stage: PIPELINE_STAGES.DOCUMENT_GENERATE,
+      startedAt: new Date(startMs).toISOString(),
+      durationMs: latencyMs,
+      success: false,
+      meta: { documentType: dto.documentType, routedAlias: template.alias },
+    }];
+    await recordClinicalContextLlmInteraction({
+      clinicId: auth.clinicId,
+      userId: auth.staffId,
+      patientId: dto.patientId,
+      feature: `document_${dto.documentType}`,
+      execution: buildFailedExecution(template.alias, runtimeSelection),
+      promptText: `${template.systemPrompt}\n\n${prompt}`,
+      outputText: '',
+      pipeline: failedPipeline,
+      temperature: documentTemperature,
+      latencyMs,
+      success: false,
+      errorCode: 'AI_SERVICE_UNAVAILABLE',
+      consentId: null,
+      contextEnvelope: clinicalContext.envelope,
+      cachedPromptTokens: null,
+      promptPrefixHash: null,
+      metadata: {
+        versionSource: runtimeSelection.backend === 'azure_openai' ? 'provider' : 'tag',
+        documentType: dto.documentType,
+        legacyDocumentContextIncluded: true,
+        legacyDocumentContextLength: legacyPatientContext.length,
+      },
+    });
+    logger.error({
+      err,
+      action: 'document_generate_error',
+      documentType: dto.documentType,
+      clinicId: auth.clinicId,
+      routedAlias: template.alias,
+      runtimeBackend: runtimeSelection.backend,
+    });
+    throw new AppError(
+      'AI document generation failed. Please check that the configured clinical AI backend is available.',
+      503,
+      'AI_SERVICE_UNAVAILABLE',
+    );
   }
 
+  const content = routed.text;
+  const promptTokens = routed.promptTokens ?? 0;
+  const completionTokens = routed.completionTokens ?? 0;
   const latencyMs = Date.now() - startMs;
-  logger.info({ action: 'document_generate_complete', documentType: dto.documentType, latencyMs, promptTokens, completionTokens });
+  logger.info({
+    action: 'document_generate_complete',
+    documentType: dto.documentType,
+    latencyMs,
+    promptTokens,
+    completionTokens,
+    routedAlias: routed.execution.alias,
+    routedBackend: routed.execution.backend,
+    modelName: routed.execution.modelName,
+  });
 
-  // BUG-037 — canonical audit via recordLlmInteraction with explicit
-  // model_version (tag-fallback) + requested temperature + single
-  // document_generate pipeline stage.
   const pipeline: PipelineStage[] = [{
     stage: PIPELINE_STAGES.DOCUMENT_GENERATE,
     startedAt: new Date(startMs).toISOString(),
     durationMs: latencyMs,
     success: true,
-    meta: { documentType: dto.documentType },
+    meta: {
+      documentType: dto.documentType,
+      routedAlias: routed.execution.alias,
+      routedBackend: routed.execution.backend,
+    },
   }];
-  await recordLlmInteraction({
-    clinicId,
-    userId: actorId,
+  await recordClinicalContextLlmInteraction({
+    clinicId: auth.clinicId,
+    userId: auth.staffId,
     patientId: dto.patientId,
     feature: `document_${dto.documentType}`,
-    modelName: model,
-    modelVersion,
-    modelProvider: 'ollama',
-    temperature: requestedTemperature,
+    execution: routed.execution,
+    temperature: documentTemperature,
     pipeline,
     promptTokens,
     completionTokens,
-    totalTokens: promptTokens + completionTokens,
+    cachedPromptTokens: routed.cachedPromptTokens,
+    promptPrefixHash: routed.promptPrefixHash,
     latencyMs,
     success: true,
-    // BUG-342 — raw prompt (system + user message) + generated document
-    // content move to encrypted llm_prompts_outputs (BUG-282). Document
-    // generation is NOT recording-bound so consentId is null; training-
-    // export path filters on consent_id IS NOT NULL so these rows are
-    // excluded from fine-tuning corpora.
-    promptText: `${template.systemPrompt}\n\n${userMessage}`,
+    promptText: `${template.systemPrompt}\n\n${prompt}`,
     outputText: content,
     consentId: null,
+    contextEnvelope: clinicalContext.envelope,
     metadata: {
-      versionSource: 'tag',
+      versionSource: routed.execution.backend === 'azure_openai' ? 'provider' : 'tag',
       documentType: dto.documentType,
+      legacyDocumentContextIncluded: true,
+      legacyDocumentContextLength: legacyPatientContext.length,
     },
   });
 
@@ -292,9 +323,9 @@ export async function generateDocument(
   try {
     const { createAutoContactRecord } = await import('../contacts/autoContactRecord');
     await createAutoContactRecord({
-      clinicId,
+      clinicId: auth.clinicId,
       patientId: dto.patientId,
-      staffId: actorId,
+      staffId: auth.staffId,
       sourceType: 'correspondence',
       sourceId: randomUUID(),
       contactType: 'Non-face-to-face — Clinical documentation',

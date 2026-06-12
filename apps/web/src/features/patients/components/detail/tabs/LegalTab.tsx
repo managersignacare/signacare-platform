@@ -11,6 +11,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import React, { useState } from 'react';
 import { apiClient } from '../../../../../shared/services/apiClient';
 import { ContactFormDialog } from '../../notes/ContactFormDialog';
+import { llmAiJobsApi } from '../../../../../shared/services/llmAiJobsApi';
 import AdvanceDirectivesTab from './AdvanceDirectivesTab';
 import { legalOrdersKeys, patientsKeys, patientReferralsKeys } from '../../../queryKeys';
 
@@ -248,10 +249,10 @@ function OrdersPanel({ patientId }: OrdersPanelProps) {
                   setMhrtLoading(true);
                   try {
                     const context = `Patient legal orders: ${JSON.stringify(orders?.map((o) => ({ type: o.orderTypeName, status: o.status, startDate: o.startDate, endDate: o.endDate, notes: o.notes })) ?? [])}`;
-                    const resp = await apiClient.instance.post<{ result: string }>('llm/clinical-ai', {
+                    const result = await llmAiJobsApi.runClinicalAiJob({
                       action: 'mhrt-report', data: context, patientId, enhance: true,
-                    }, { timeout: 180000 });
-                    setMhrtContent(resp.data.result);
+                    });
+                    setMhrtContent(result);
                   } catch (err: unknown) {
                     setMhrtContent(`[Generation failed: ${getErrorMessage(err)}. Please write the report manually.]`);
                   }

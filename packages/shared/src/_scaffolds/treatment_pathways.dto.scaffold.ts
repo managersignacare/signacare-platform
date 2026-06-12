@@ -15,6 +15,7 @@ export const TreatmentPathwaysDtoScaffoldSchema = z.object({
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime().nullable().optional(),
   lockVersion: z.number().int(),
+  updatedByStaffId: z.string().uuid().nullable().optional(),
 });
 
 export type TreatmentPathwaysDtoScaffold = z.infer<typeof TreatmentPathwaysDtoScaffoldSchema>;

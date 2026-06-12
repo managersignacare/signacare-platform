@@ -53,7 +53,7 @@
 | 2.1.1 Keyboard | Supports | Every interactive surface is keyboard-reachable. Drag-and-drop on the bed Kanban board ([apps/web/src/features/beds/components/KanbanBoard.tsx](../../apps/web/src/features/beds/components/KanbanBoard.tsx)) and template OptionsList ([apps/web/src/features/templates/components/OptionsList.tsx](../../apps/web/src/features/templates/components/OptionsList.tsx)) uses `@dnd-kit/core` `KeyboardSensor` + `sortableKeyboardCoordinates` — Tab to focus → Space to pick up → arrow keys to move → Space to drop → Escape to cancel. |
 | 2.1.2 No Keyboard Trap | Supports | No known keyboard traps. |
 | 2.1.4 Character Key Shortcuts | Supports | No single-character shortcuts are bound. |
-| 2.2.1 Timing Adjustable | Supports | 60-minute idle session timeout has a 15-minute warning dialog with Extend option; 75-minute extended window during scribe recording. |
+| 2.2.1 Timing Adjustable | Supports | 15-minute idle session timeout shows a 2-minute warning dialog with Extend option; active AI Scribe recording/processing keeps the session alive so long interviews are not interrupted mid-encounter. |
 | 2.2.2 Pause, Stop, Hide | Not Applicable | No auto-updating content other than live SSE notifications, which are user-dismissable. |
 | 2.3.1 Three Flashes or Below | Supports | No flashing content. |
 | 2.4.1 Bypass Blocks | Supports | `skip-to-main-content` link present on every route. |

@@ -10,6 +10,7 @@ import {
   episodeId,
   staffId,
   noteId,
+  derive,
 } from '../config/ids';
 import { createRng, type SeededRng } from '../lib/rng';
 import type { GeneratorResult } from './01_clinics';
@@ -61,10 +62,22 @@ interface ClinicalNoteRow {
   signed_by: string | null;
   signed_by_id: string | null;
   is_reportable_contact: boolean;
+  consent_id: string;
+}
+
+interface ScribeConsentRow {
+  id: string;
+  clinic_id: string;
+  patient_id: string;
+  mode: string;
+  clinician_attested_by_id: string;
+  clinician_attestation_text: string;
+  attested_at: string;
 }
 
 export interface ClinicalNotesBuild {
   readonly rows: ClinicalNoteRow[];
+  readonly consentRows: ScribeConsentRow[];
 }
 
 const AUTHOR_SLUGS = [
@@ -181,6 +194,7 @@ interface PatientContext {
 function buildNotesForPatient(ctx: PatientContext): ClinicalNoteRow[] {
   const rng = createRng(0xc10ca).fork(`notes.${ctx.patientSeed}`);
   const rows: ClinicalNoteRow[] = [];
+  const consentUuid = derive(ctx.patientUuid, 'scribe-consent.demo-clinical-notes');
 
   const ep1Uuid = episodeId(ctx.patientUuid, 1);
   const ep2Uuid = episodeId(ctx.patientUuid, 2);
@@ -221,6 +235,7 @@ function buildNotesForPatient(ctx: PatientContext): ClinicalNoteRow[] {
       signed_by: signed ? authorUuid : null,
       signed_by_id: signed ? authorUuid : null,
       is_reportable_contact: true,
+      consent_id: consentUuid,
     });
   };
 
@@ -240,12 +255,24 @@ function buildNotesForPatient(ctx: PatientContext): ClinicalNoteRow[] {
 
 export function buildClinicalNotes(): ClinicalNotesBuild {
   const rows: ClinicalNoteRow[] = [];
+  const consentRows: ScribeConsentRow[] = [];
 
   for (const clinic of MENTAL_HEALTH_CLINICS) {
     const cid = clinicId(clinic.slug);
     for (const team of TEAM_SLUGS) {
       for (let i = 1; i <= PATIENTS_PER_TEAM; i++) {
         const pid = patientId(clinic.slug, team, i);
+        const teamLeadId = staffId(clinic.slug, `${team}.team-lead`);
+        consentRows.push({
+          id: derive(pid, 'scribe-consent.demo-clinical-notes'),
+          clinic_id: cid,
+          patient_id: pid,
+          mode: 'clinician_attestation',
+          clinician_attested_by_id: teamLeadId,
+          clinician_attestation_text:
+            'Fictional Good Health demo consent for seeded clinical-note fixtures.',
+          attested_at: '2024-11-15T00:00:00.000Z',
+        });
         rows.push(
           ...buildNotesForPatient({
             patientUuid: pid,
@@ -259,7 +286,7 @@ export function buildClinicalNotes(): ClinicalNotesBuild {
     }
   }
 
-  return { rows };
+  return { rows, consentRows };
 }
 
 async function upsertById<T extends { id: string }>(
@@ -285,6 +312,11 @@ async function upsertById<T extends { id: string }>(
 export async function runClinicalNotesStep(
   knex: Knex,
 ): Promise<GeneratorResult> {
-  const { rows } = buildClinicalNotes();
-  return upsertById(knex, 'clinical_notes', rows);
+  const { rows, consentRows } = buildClinicalNotes();
+  const consentResult = await upsertById(knex, 'scribe_consents', consentRows);
+  const noteResult = await upsertById(knex, 'clinical_notes', rows);
+  return {
+    inserted: consentResult.inserted + noteResult.inserted,
+    updated: consentResult.updated + noteResult.updated,
+  };
 }

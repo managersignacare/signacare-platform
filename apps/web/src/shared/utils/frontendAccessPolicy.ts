@@ -4,6 +4,7 @@ import {
   type AuthUser,
   type Permission,
   type Role,
+  roleSatisfiesRequirement,
 } from '@signacare/shared';
 
 type RouteAccessRule = {
@@ -65,7 +66,7 @@ export function canAccessRoute(
   const rule = ROUTE_ACCESS_RULES[normalizedPath];
   if (!rule) return true;
 
-  if (rule.allowedRoles && !rule.allowedRoles.includes(user.role)) {
+  if (rule.allowedRoles && !rule.allowedRoles.some((role) => roleSatisfiesRequirement(user.role, role))) {
     return false;
   }
 

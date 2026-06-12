@@ -1,8 +1,9 @@
-import { RoleEnum } from '@signacare/shared';
+import { RoleEnum, isPrescriberSystemRole } from '@signacare/shared';
 
 export const STAFF_SYSTEM_ROLES = RoleEnum.options;
 
 export type StaffSystemRole = (typeof STAFF_SYSTEM_ROLES)[number];
+export { isPrescriberSystemRole };
 
 export const STAFF_PROVIDER_TYPES = [
   'Medicare',

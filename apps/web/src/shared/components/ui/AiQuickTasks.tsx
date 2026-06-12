@@ -16,6 +16,8 @@ import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../../services/apiClient';
 import { sharedPatientQuickTaskKeys } from '../../queryKeys';
 import { useAuthStore } from '../../store/authStore';
+import { llmAiJobsApi } from '../../services/llmAiJobsApi';
+import type { ClinicalAiJobAction } from '../../services/llmAiJobsApi';
 import { MarkdownRenderer } from './MarkdownRenderer';
 
 interface QuickTask {
@@ -79,6 +81,7 @@ function AiQuickTasksDialog({ open, onClose }: AiQuickTasksDialogProps) {
   const [result, setResult] = useState('');
   const [loading, setLoading] = useState(false);
   const [extraFields, setExtraFields] = useState<Record<string, string>>({});
+  const [jobAction, setJobAction] = useState('');
 
   // Appointment booking specific
   const [apptOptions, setApptOptions] = useState<{ time: string; type: string; mode: string }[]>([]);
@@ -89,10 +92,12 @@ function AiQuickTasksDialog({ open, onClose }: AiQuickTasksDialogProps) {
     if (!selectedTask || !patient) return;
     setLoading(true); setResult('');
     try {
-      let action = '', data = '';
+      let action: ClinicalAiJobAction | null = null;
+      let data = '';
+      let templateType: string | undefined;
       switch (selectedTask) {
         case 'med-certificate': {
-          action = 'letter';
+          action = 'certificate';
           const certDate = extraFields.date ? new Date(extraFields.date).toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' }) : new Date().toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' });
           const certDuration = extraFields.duration || '1 day';
           const certReason = extraFields.reason || 'Medical treatment / Mental health care';
@@ -134,6 +139,7 @@ IMPORTANT: Use the patient's actual name, UR number, date of birth, and diagnosi
           data = `Generate an MHRT (Mental Health Review Tribunal) report for this patient.
 Include: current legal status, diagnosis and ICD-10 code, treatment history, current treatment plan (medications with doses, psychological interventions, social supports), mental state examination, risk assessment (to self, to others, vulnerability), treating team opinion on continued order with clinical justification, patient's expressed views, and least restrictive alternative analysis.
 Reference: Mental Health Act 2014 (Vic). This is for a formal tribunal hearing.`;
+          templateType = 'MHRT report';
           break;
         case 'discharge-summary':
           action = 'discharge';
@@ -147,9 +153,10 @@ Include: admission summary, diagnosis, treatment provided, medications at discha
           data = `Generate an NDIS functional capacity report for patient (ID: ${patient.id}).
 Include: diagnosis, functional impact across domains (self-care, communication, social interaction, learning, mobility, self-management), support needs, recommended NDIS support categories and hours, goals.
 Follow NDIS evidence guidelines for psychosocial disability.`;
+          templateType = 'NDIS functional capacity report';
           break;
         case 'risk-summary':
-          action = 'formulation';
+          action = 'risk-summary';
           data = `Generate a structured risk assessment summary for patient (ID: ${patient.id}).
 Include: risk to self (suicidal ideation, self-harm, overdose), risk to others (aggression, violence), vulnerability (exploitation, neglect, homelessness), historical risk factors, current protective factors, risk management plan.`;
           break;
@@ -171,10 +178,23 @@ Include: risk to self (suicidal ideation, self-harm, overdose), risk to others (
         }
       }
 
-      const resp = await apiClient.instance.post<{ result: string }>('llm/clinical-ai', {
-        action, data, patientId: patient.id, enhance: true,
-      }, { timeout: 180_000 });
-      setResult(resp.data.result);
+      if (!action) {
+        throw new Error(`Unsupported quick task: ${selectedTask}`);
+      }
+
+      setJobAction(action);
+      const status = await llmAiJobsApi.runClinicalAiJobDetailed({
+        action,
+        data,
+        patientId: patient.id,
+        enhance: true,
+        templateType,
+      });
+      const completed = status.result?.trim();
+      if (!completed) {
+        throw new Error('Clinical AI job completed without generated text.');
+      }
+      setResult(completed);
     } catch (error: unknown) {
       setResult(`Error: ${getErrorMessage(error, 'AI unavailable')}`);
     } finally {
@@ -276,10 +296,10 @@ Include: risk to self (suicidal ideation, self-harm, overdose), risk to others (
             )}
 
             {!result && (
-              <Button variant="contained" startIcon={loading ? <CircularProgress role="progressbar" aria-label="Loading" size={16} sx={{ color: '#fff' }} /> : <AutoAwesomeIcon />}
+                <Button variant="contained" startIcon={loading ? <CircularProgress role="progressbar" aria-label="Loading" size={16} sx={{ color: '#fff' }} /> : <AutoAwesomeIcon />}
                 onClick={handleGenerate} disabled={loading || !patient}
                 sx={{ bgcolor: '#b8621a', '&:hover': { bgcolor: '#d6741f' } }}>
-                {loading ? 'Generating...' : 'Generate'}
+                {loading ? `Generating${jobAction ? ` (${jobAction})` : ''}...` : 'Generate'}
               </Button>
             )}
 

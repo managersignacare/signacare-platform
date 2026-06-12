@@ -43,9 +43,12 @@ export const ClinicalNotesResponseScaffoldSchema = z.object({
   updatedAt: z.string().datetime(),
   deletedAt: z.string().datetime().nullable().optional(),
   lockVersion: z.number().int(),
+  searchTsv: z.unknown().nullable().optional(),
   reviewedAndAdoptedById: z.string().uuid().nullable().optional(),
   reviewedAndAdoptedAt: z.string().datetime().nullable().optional(),
   consentId: z.string().uuid().nullable().optional(),
+  signedContentHash: z.string().max(64).nullable().optional(),
+  signedContentHashAlg: z.string().max(16).nullable().optional(),
 });
 
 export type ClinicalNotesResponseScaffold = z.infer<typeof ClinicalNotesResponseScaffoldSchema>;

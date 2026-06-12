@@ -20,9 +20,15 @@ import { Controller, useForm } from 'react-hook-form';
 import { apiClient } from '../../../shared/services/apiClient';
 import { useCreateAppointment, useCreateRecurringAppointment } from '../hooks/useCreateAppointment';
 import { appointmentKeys } from '../queryKeys';
-import type { CreateAppointment } from '../types/appointmentTypes';
+import type { AppointmentMode as AppointmentModeValue, CreateAppointment } from '../types/appointmentTypes';
 
 const DOW_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const APPOINTMENT_MODE_OPTIONS: Array<{ value: AppointmentModeValue; label: string }> = [
+  { value: 'direct', label: 'Direct' },
+  { value: 'telehealth', label: 'Telehealth' },
+  { value: 'videoconference', label: 'Videoconference' },
+  { value: 'other', label: 'Other' },
+];
 
 interface Props {
   onSuccess?: () => void;
@@ -96,6 +102,7 @@ export const AppointmentForm = ({ onSuccess }: Props) => {
       episodeId: '',
       clinicianId: '',
       type: 'initial',
+      mode: 'direct',
       startTime: new Date().toISOString(),
       endTime: new Date().toISOString(),
       notes: '',
@@ -104,7 +111,10 @@ export const AppointmentForm = ({ onSuccess }: Props) => {
   const appointmentConflict = isAppointmentConflict(error);
   const appointmentErrorMessage = getAppointmentMutationMessage(error);
 
-  const isTelehealth = watch('type') === 'telehealth';
+  const isTelehealth = (() => {
+    const mode = watch('mode');
+    return mode === 'telehealth' || mode === 'videoconference';
+  })();
   const onSubmit = (values: CreateAppointment) => {
     // datetime-local inputs produce "YYYY-MM-DDTHH:MM" — append seconds+timezone for ISO 8601
     const normalise = (dt: string) => {
@@ -210,6 +220,27 @@ export const AppointmentForm = ({ onSuccess }: Props) => {
                     : [{ id: 'initial', name: 'Initial' }, { id: 'follow_up', name: 'Follow up' }, { id: 'assessment', name: 'Assessment' }, { id: 'telehealth', name: 'Telehealth' }, { id: 'group', name: 'Group' }, { id: 'clinical_review', name: 'Clinical review' }]
                   ).map(m => (
                     <MenuItem key={m.id ?? m.name} value={m.name}>{m.name}</MenuItem>
+                  ))}
+                </TextField>
+              )}
+            />
+          </Grid>
+          <Grid>
+            <Controller
+              name="mode"
+              control={control}
+              render={({ field }) => (
+                <TextField
+                  {...field}
+                  select
+                  label="Mode"
+                  error={Boolean(errors.mode)}
+                  helperText={errors.mode?.message}
+                >
+                  {APPOINTMENT_MODE_OPTIONS.map((option) => (
+                    <MenuItem key={option.value} value={option.value}>
+                      {option.label}
+                    </MenuItem>
                   ))}
                 </TextField>
               )}

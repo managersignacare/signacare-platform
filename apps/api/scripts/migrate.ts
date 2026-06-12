@@ -39,6 +39,7 @@ async function main(): Promise<void> {
     user: config.database.user,
     password: config.database.password,
     database: config.database.database,
+    ssl: config.database.ssl,
   };
 
   const isCompiled = __filename.endsWith('.js');

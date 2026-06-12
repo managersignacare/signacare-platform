@@ -3,13 +3,22 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { appointmentApi } from '../services/appointmentApi';
 import type { CreateAppointment } from '../types/appointmentTypes';
 import { appointmentQueryKeys } from './useAppointments';
+import { patientAppointmentsKeys, patientsKeys } from '../../patients/queryKeys';
+import { calendarKeys } from '../../calendar/queryKeys';
 
 export const useCreateAppointment = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (dto: CreateAppointment) => appointmentApi.create(dto),
-    onSuccess: () => {
+    onSuccess: (_created, dto) => {
       void queryClient.invalidateQueries({ queryKey: appointmentQueryKeys.all });
+      void queryClient.invalidateQueries({
+        queryKey: patientAppointmentsKeys.byPatient(dto.patientId),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: patientsKeys.appointments(dto.patientId),
+      });
+      void queryClient.invalidateQueries({ queryKey: calendarKeys.todayAll() });
     },
   });
 };
@@ -53,8 +62,15 @@ export const useCreateRecurringAppointment = () => {
       }
       return results;
     },
-    onSuccess: () => {
+    onSuccess: (_created, dto) => {
       void queryClient.invalidateQueries({ queryKey: appointmentQueryKeys.all });
+      void queryClient.invalidateQueries({
+        queryKey: patientAppointmentsKeys.byPatient(dto.patientId),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: patientsKeys.appointments(dto.patientId),
+      });
+      void queryClient.invalidateQueries({ queryKey: calendarKeys.todayAll() });
     },
   });
 };

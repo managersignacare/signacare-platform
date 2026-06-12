@@ -25,6 +25,9 @@ export interface LlmInteractionsRow {
   created_at: string;
   updated_at?: string | null;
   embedding?: unknown | null;
+  model_version?: string | null;
+  temperature?: string | null;
+  pipeline?: unknown | null;
 }
 
 export const LLM_INTERACTIONS_COLUMNS = [
@@ -48,6 +51,9 @@ export const LLM_INTERACTIONS_COLUMNS = [
   'created_at',
   'updated_at',
   'embedding',
+  'model_version',
+  'temperature',
+  'pipeline',
 ] as const;
 
 export type LlmInteractionsColumn = typeof LLM_INTERACTIONS_COLUMNS[number];

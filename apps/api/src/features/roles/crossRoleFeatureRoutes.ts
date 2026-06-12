@@ -371,12 +371,12 @@ router.get(
 // in `patients.photo_url` is the resolved download URL, which means:
 //   - local backend: stays as `/uploads/patient-photos/...` (auth-gated
 //     static serve, identical to legacy behaviour)
-//   - s3 backend:    becomes a presigned S3 URL that expires per the
+//   - cloud backend: becomes a signed URL that expires per the
 //     facade's default TTL (5 minutes). Frontend should re-fetch the
 //     patient row when it needs a fresh photo URL.
 //
 // Note: storing a presigned URL on the patient row is intentionally
-// simple for now. If a hospital deploys with BLOB_STORAGE_BACKEND=s3
+// simple for now. If a hospital deploys with cloud blob storage
 // and finds the 5-minute TTL too short, the right fix is to store
 // only the storage_key on the patient row (new column) and resolve
 // to a fresh URL on every read. That refactor is out of S1.1-DEFERRED-A.

@@ -9,6 +9,7 @@ export const PatientSummarySignoffsDtoScaffoldSchema = z.object({
   id: z.string().uuid(),
   clinicId: z.string().uuid(),
   patientId: z.string().uuid(),
+  summarySection: z.string().max(64),
   signedOffById: z.string().uuid(),
   signedOffAt: z.string().datetime(),
   reviewDueDate: z.string(),

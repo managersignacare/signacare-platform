@@ -9,32 +9,18 @@ import ViewListIcon from '@mui/icons-material/ViewList';
 import ViewWeekIcon from '@mui/icons-material/ViewWeek';
 import {
     Alert, Box, Button, Card, CardContent, Chip, CircularProgress,
-    Dialog, DialogActions, DialogContent, DialogTitle, Divider, FormControl, FormControlLabel,
-    Grid, IconButton, InputLabel, MenuItem, Paper, Select, Switch, Tab, Tabs, TextField, ToggleButton, ToggleButtonGroup, Tooltip, Typography
+    FormControl, IconButton, InputLabel, MenuItem, Paper, Select, Tab, Tabs, ToggleButton, ToggleButtonGroup, Tooltip, Typography
 } from '@mui/material';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import React, { useMemo, useState } from 'react';
-import { type AppointmentType } from '@signacare/shared';
+import { type AppointmentMode } from '@signacare/shared';
 import { PrintExportButtons } from '../../../../../shared/components/ui/PrintExportButtons';
 import { apiClient } from '../../../../../shared/services/apiClient';
 import { extractListResponse } from '../../../../../shared/services/extractListResponse';
-import {
-  episodesKeys,
-  patientAppointmentsKeys,
-  patientNotesKeys,
-  patientReferralsKeys,
-  patientsKeys,
-} from '../../../queryKeys';
+import { patientAppointmentsKeys, patientNotesKeys, patientReferralsKeys, patientsKeys } from '../../../queryKeys';
 import { useOrgTree } from '../../../../org-settings/hooks/useOrgSettings';
-import type { OrgUnit } from '../../../../org-settings/services/orgSettingsApi';
 import { ContactFormDialog } from '../../notes/ContactFormDialog';
-import { PatientSearchAutocomplete, type PatientOption } from '../../PatientSearchAutocomplete';
-
-function flattenUnits(nodes: OrgUnit[]): { id: string; name: string }[] {
-  const r: { id: string; name: string }[] = [];
-  function w(l: OrgUnit[], d: number) { for (const n of l) { r.push({ id: n.id, name: '\u00A0'.repeat(d * 2) + n.name }); if (n.children?.length) w(n.children, d + 1); } }
-  w(nodes, 0); return r;
-}
+import { NewAppointmentDialog, flattenUnits } from './NewAppointmentDialog';
 
 interface StaffLookupEntry {
   id: string;
@@ -49,25 +35,18 @@ interface AppointmentApiRecord {
   endTime: string;
   clinicianId?: string | null;
   teamId?: string | null;
+  teamName?: string | null;
   status: string;
   type: string;
+  mode?: AppointmentMode | null;
+  attendeeStaffIds?: string[];
+  attendeeStaffNames?: string[];
   notes?: string | null;
   telehealthLink?: string | null;
 }
 
-interface EpisodeSummary {
-  id: string;
-  title: string;
-  episodeType: string;
-  status: string;
-}
-
 function useStaffLookup() {
   return useQuery({ queryKey: patientsKeys.staffLookup(), queryFn: () => apiClient.get<StaffLookupEntry[]>('staff/lookup'), staleTime: 5 * 60 * 1000 });
-}
-
-function useAppointmentModes() {
-  return useQuery({ queryKey: patientsKeys.staffSettingsAppointmentModes(), queryFn: () => apiClient.get<{ modes: { id: string; name: string; isActive: boolean }[] }>('staff-settings/appointment-modes').then(r => r.modes), staleTime: 5 * 60 * 1000 });
 }
 
 type CalView = 'day' | 'workweek' | 'week' | 'list';
@@ -75,33 +54,17 @@ type CalView = 'day' | 'workweek' | 'week' | 'list';
 interface Appointment {
   id: string; title: string; date: string; startTime: string; endTime: string;
   clinicianName: string; teamName: string; status: string; type: string; mode?: string;
+  modeValue?: AppointmentMode | null;
   patientResponse?: string;
   clinicianId?: string | null;
   teamId?: string | null;
+  attendeeStaffIds?: string[];
   notes?: string | null;
 }
 
 const HOURS = Array.from({ length: 12 }, (_, i) => i + 7);
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
 const ALLDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-const DURATIONS = [15, 20, 30, 45, 60, 90, 120];
-const APPOINTMENT_TYPE_OPTIONS: Array<{ value: AppointmentType; label: string }> = [
-  { value: 'clinical_review', label: 'Psychiatrist Review' },
-  { value: 'follow_up', label: 'Follow-up' },
-  { value: 'assessment', label: 'Assessment' },
-  { value: 'initial', label: 'Initial Assessment' },
-  { value: 'group', label: 'Group Session' },
-  { value: 'telehealth', label: 'Telehealth' },
-];
-const APPOINTMENT_TYPE_LABEL_BY_VALUE: Record<AppointmentType, string> = APPOINTMENT_TYPE_OPTIONS.reduce(
-  (acc, option) => {
-    acc[option.value] = option.label;
-    return acc;
-  },
-  {} as Record<AppointmentType, string>,
-);
-const MBS_ITEMS = ['291 — Consultation (< 45 min)', '293 — Consultation (> 45 min)', '296 — Group therapy', '2710 — Telepsychiatry', '2712 — Telepsychiatry (> 45 min)', '2713 — Review (< 15 min)', '80010 — Focused Psychological Strategy (short)', '80110 — Focused Psychological Strategy (standard)', 'None — No MBS item'];
-const REMINDER_OPTIONS = ['1 hour before', '2 hours before', '1 day before', '2 days before', '1 week before'];
 
 function getWeekDates(date: Date, includeWeekend: boolean): Date[] {
   const d = new Date(date); const day = d.getDay(); const diff = d.getDate() - day + (day === 0 ? -6 : 1);
@@ -114,6 +77,16 @@ const APPT_TYPE_LABELS: Record<string, string> = {
   initial: 'Initial Assessment', follow_up: 'Follow-up', assessment: 'Assessment',
   telehealth: 'Telehealth', group: 'Group Session', clinical_review: 'Clinical Review',
 };
+function appointmentModeLabel(mode?: AppointmentMode | null, telehealthLink?: string | null): string {
+  const labels: Record<AppointmentMode, string> = {
+    direct: 'Direct',
+    telehealth: 'Telehealth',
+    videoconference: 'Videoconference',
+    other: 'Other',
+  };
+  if (mode) return labels[mode] ?? mode;
+  return telehealthLink ? 'Videoconference' : 'Direct';
+}
 
 interface AppointmentsTabProps { patientId: string }
 export function AppointmentsTab({ patientId }: AppointmentsTabProps) {
@@ -176,12 +149,14 @@ function CalendarView({ patientId }: CalendarViewProps) {
       startTime: start.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', hour12: false }),
       endTime: end.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', hour12: false }),
       clinicianName,
-      teamName: '',
+      teamName: a.teamName ?? '',
       status: a.status,
       type: a.type,
-      mode: a.type === 'telehealth' ? 'Telehealth (Video)' : a.telehealthLink ? 'Telehealth (Video)' : 'In Person',
+      mode: appointmentModeLabel(a.mode, a.telehealthLink),
+      modeValue: a.mode ?? null,
       clinicianId: a.clinicianId ?? null,
       teamId: a.teamId ?? null,
+      attendeeStaffIds: a.attendeeStaffIds ?? [],
       notes: a.notes ?? null,
     };
   }), [rawAppts, staffList]);
@@ -315,371 +290,6 @@ function ListView({ appointments, onEdit }: ListViewProps) {
           </CardContent>
         </Card>))}
     </Box>
-  );
-}
-
-// ============ Enhanced Appointment Dialog ============
-
-function NewAppointmentDialog({ open, onClose, flatUnits, staffList, patientId, editing }: {
-  open: boolean; onClose: () => void;
-  flatUnits: { id: string; name: string }[];
-  staffList: { id: string; givenName: string; familyName: string }[];
-  patientId?: string;
-  editing?: Appointment | null;
-}) {
-  const { data: modes } = useAppointmentModes();
-  const activeEpisodes = useQuery({
-    queryKey: episodesKeys.active(patientId ?? ''),
-    queryFn: () => apiClient.get<{ data: EpisodeSummary[] }>(`episodes/patient/${patientId}`).then(r => r.data?.filter(e => e.status === 'open') ?? []),
-    enabled: !!patientId,
-  });
-
-  // Patient search (for sidebar appointment creation)
-  // When `patientId` is supplied by the parent, we don't render the
-  // search field at all (see `{!patientId && (...)}` below); when it's
-  // not supplied, this state captures the user's selection.
-  const [selectedPatient, setSelectedPatient] = useState<PatientOption | null>(null);
-  const selectedPatientId = selectedPatient?.id ?? '';
-
-  const [title, setTitle] = useState('');
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-  const [startTime, setStartTime] = useState('09:00');
-  const [duration, setDuration] = useState(30);
-  const [endTime, setEndTime] = useState('09:30');
-  const [clinician, setClinician] = useState('');
-  const [team, setTeam] = useState('');
-  const [apptType, setApptType] = useState<AppointmentType>('clinical_review');
-  const [mode, setMode] = useState('');
-  const [telehealthLink, setTelehealthLink] = useState('');
-  const [episodeId, setEpisodeId] = useState('');
-  const [mbsItem, setMbsItem] = useState('');
-  const [inviteEmails, setInviteEmails] = useState('');
-  const [reminders, setReminders] = useState<string[]>(['1 day before']);
-  const [notes, setNotes] = useState('');
-  const [checklistItems, setChecklistItems] = useState<string[]>([]);
-  const [newCheckItem, setNewCheckItem] = useState('');
-  const [sendPatientReminder, setSendPatientReminder] = useState(true);
-  const [recurrence, setRecurrence] = useState('none');
-  const [recurrenceEnd, setRecurrenceEnd] = useState('');
-  const [recurrenceDays, setRecurrenceDays] = useState<number[]>([]);
-  const [recurrenceTime, setRecurrenceTime] = useState('');
-  const [savingAppt, setSavingAppt] = useState(false);
-  const qc = useQueryClient();
-
-  // Pre-fill form when editing
-  React.useEffect(() => {
-    if (editing && open) {
-      setTitle(editing.title || '');
-      setDate(editing.date || new Date().toISOString().split('T')[0]);
-      setStartTime(editing.startTime || '09:00');
-      setEndTime(editing.endTime || '09:30');
-      setClinician(editing.clinicianId ?? '');
-      setTeam(editing.teamId ?? '');
-      setApptType((editing.type as AppointmentType) || 'clinical_review');
-      setMode(editing.mode || '');
-      setNotes(editing.notes || '');
-    }
-  }, [editing, open]);
-
-  // Auto-calculate end time from start + duration
-  React.useEffect(() => {
-    const [h, m] = (startTime ?? '00:00').split(':').map(Number);
-    const totalMin = h * 60 + m + duration;
-    const eh = Math.floor(totalMin / 60);
-    const em = totalMin % 60;
-    setEndTime(`${String(eh).padStart(2, '0')}:${String(em).padStart(2, '0')}`);
-  }, [startTime, duration]);
-
-  const isTelehealth = mode?.toLowerCase().includes('telehealth');
-
-  const handleReminderToggle = (reminder: string) => {
-    setReminders(prev => prev.includes(reminder) ? prev.filter(r => r !== reminder) : [...prev, reminder]);
-  };
-
-  return (
-    <Dialog aria-labelledby="dialog-title" open={open} onClose={onClose} maxWidth="md" fullWidth>
-      <DialogTitle id="dialog-title" sx={{ fontFamily: 'Albert Sans, sans-serif', fontWeight: 700 }}>{editing ? 'Edit Appointment' : 'New Appointment'}</DialogTitle>
-      <Divider />
-      <DialogContent>
-        <Grid container spacing={2} sx={{ mt: 0.5 }}>
-
-          {/* Patient search — only if no patientId provided. Shape C: MUI Autocomplete (BUG-447 child 8/15) */}
-          {!patientId && (
-            <Grid size={{ xs: 12 }}>
-              <Typography variant="subtitle2" sx={{ mb: 0.5 }}>Patient</Typography>
-              <PatientSearchAutocomplete
-                value={selectedPatient}
-                onChange={setSelectedPatient}
-                placeholder="Search patient by name or UR number…"
-                fullWidth
-              />
-            </Grid>
-          )}
-
-          {/* Episode */}
-          <Grid size={{ xs: 12, sm: 6 }}>
-            <FormControl fullWidth size="small">
-              <InputLabel>Episode</InputLabel>
-              <Select value={episodeId} onChange={e => setEpisodeId(e.target.value)} label="Episode">
-                <MenuItem value="">— No episode —</MenuItem>
-                {(activeEpisodes.data ?? []).map((ep) => <MenuItem key={ep.id} value={ep.id}>{ep.title} ({ep.episodeType})</MenuItem>)}
-              </Select>
-            </FormControl>
-          </Grid>
-
-          <Grid size={{ xs: 12, sm: 6 }}>
-            <FormControl fullWidth size="small">
-              <InputLabel>Appointment Type</InputLabel>
-              <Select value={apptType} onChange={e => { const nextType = e.target.value as AppointmentType; setApptType(nextType); if (!title) setTitle(APPOINTMENT_TYPE_LABEL_BY_VALUE[nextType] ?? nextType); }} label="Appointment Type">
-                {APPOINTMENT_TYPE_OPTIONS.map(t => <MenuItem key={t.value} value={t.value}>{t.label}</MenuItem>)}
-              </Select>
-            </FormControl>
-          </Grid>
-
-          <Grid size={{ xs: 12 }}>
-            <TextField label="Title *" fullWidth size="small" value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Psychiatrist Review" />
-          </Grid>
-
-          {/* Date, Time, Duration */}
-          <Grid size={{ xs: 12, sm: 3 }}>
-            <TextField label="Date" type="date" fullWidth size="small" value={date} onChange={e => setDate(e.target.value)} slotProps={{ inputLabel: { shrink: true } }} />
-          </Grid>
-          <Grid size={{ xs: 6, sm: 3 }}>
-            <TextField label="Start Time" type="time" fullWidth size="small" value={startTime} onChange={e => setStartTime(e.target.value)} slotProps={{ inputLabel: { shrink: true } }} />
-          </Grid>
-          <Grid size={{ xs: 6, sm: 3 }}>
-            <FormControl fullWidth size="small">
-              <InputLabel>Duration</InputLabel>
-              <Select value={duration} onChange={e => setDuration(Number(e.target.value))} label="Duration">
-                {DURATIONS.map(d => <MenuItem key={d} value={d}>{d} min</MenuItem>)}
-              </Select>
-            </FormControl>
-          </Grid>
-          <Grid size={{ xs: 6, sm: 3 }}>
-            <TextField label="End Time" type="time" fullWidth size="small" value={endTime} onChange={e => setEndTime(e.target.value)} slotProps={{ inputLabel: { shrink: true } }} />
-          </Grid>
-
-          {/* Mode */}
-          <Grid size={{ xs: 12, sm: 6 }}>
-            <FormControl fullWidth size="small">
-              <InputLabel>Mode</InputLabel>
-              <Select value={mode} onChange={e => setMode(e.target.value)} label="Mode">
-                <MenuItem value="">—</MenuItem>
-                {(modes ?? []).filter(m => m.isActive).map(m => <MenuItem key={m.id} value={m.name}>{m.name}</MenuItem>)}
-              </Select>
-            </FormControl>
-          </Grid>
-
-          {isTelehealth && (
-            <Grid size={{ xs: 12, sm: 6 }}>
-              <TextField label="Telehealth Link" fullWidth size="small" value={telehealthLink} onChange={e => setTelehealthLink(e.target.value)} placeholder="https://meet.example.com/..." />
-            </Grid>
-          )}
-
-          {/* Clinician & Team */}
-          <Grid size={{ xs: 12, sm: 6 }}>
-            <FormControl fullWidth size="small">
-              <InputLabel>Clinician</InputLabel>
-              <Select value={clinician} onChange={e => setClinician(e.target.value)} label="Clinician">
-                <MenuItem value="">—</MenuItem>
-                {staffList.map(s => <MenuItem key={s.id} value={s.id}>{s.givenName} {s.familyName}</MenuItem>)}
-              </Select>
-            </FormControl>
-          </Grid>
-          <Grid size={{ xs: 12, sm: 6 }}>
-            <FormControl fullWidth size="small">
-              <InputLabel>Team / Unit</InputLabel>
-              <Select value={team} onChange={e => setTeam(e.target.value)} label="Team / Unit">
-                <MenuItem value="">—</MenuItem>
-                {flatUnits.map(u => <MenuItem key={u.id} value={u.id}>{u.name}</MenuItem>)}
-              </Select>
-            </FormControl>
-          </Grid>
-
-          {/* MBS Item */}
-          <Grid size={{ xs: 12, sm: 6 }}>
-            <FormControl fullWidth size="small">
-              <InputLabel>MBS Item</InputLabel>
-              <Select value={mbsItem} onChange={e => setMbsItem(e.target.value)} label="MBS Item">
-                <MenuItem value="">— None —</MenuItem>
-                {MBS_ITEMS.map(m => <MenuItem key={m} value={m}>{m}</MenuItem>)}
-              </Select>
-            </FormControl>
-          </Grid>
-
-          {/* Invite others */}
-          <Grid size={{ xs: 12, sm: 6 }}>
-            <TextField label="Invite Others (emails, comma separated)" fullWidth size="small" value={inviteEmails} onChange={e => setInviteEmails(e.target.value)} placeholder="dr.smith@example.com, nurse@clinic.com" />
-          </Grid>
-
-          {/* Reminders */}
-          <Grid size={{ xs: 12 }}>
-            <Typography variant="subtitle2" sx={{ mb: 0.5 }}>Reminders</Typography>
-            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
-              {REMINDER_OPTIONS.map(r => (
-                <Chip key={r} label={r} size="small" variant={reminders.includes(r) ? 'filled' : 'outlined'}
-                  onClick={() => handleReminderToggle(r)}
-                  sx={{ cursor: 'pointer', ...(reminders.includes(r) ? { bgcolor: '#b8621a', color: '#fff' } : {}) }} />
-              ))}
-            </Box>
-            <FormControlLabel sx={{ mt: 0.5 }}
-              control={<Switch size="small" checked={sendPatientReminder} onChange={(_, v) => setSendPatientReminder(v)} sx={{ '& .Mui-checked': { color: '#b8621a' } }} />}
-              label={<Typography variant="caption">Send reminder to patient app</Typography>} />
-          </Grid>
-
-          {/* Notes */}
-          <Grid size={{ xs: 12 }}>
-            <TextField label="Notes" fullWidth size="small" multiline rows={2} value={notes} onChange={e => setNotes(e.target.value)} />
-          </Grid>
-
-          {/* Recurring Appointment */}
-          {!editing && (
-            <>
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <FormControl fullWidth size="small">
-                  <InputLabel>Recurring</InputLabel>
-                  <Select value={recurrence} onChange={e => { setRecurrence(e.target.value); if (e.target.value === 'none') { setRecurrenceDays([]); setRecurrenceTime(''); } }} label="Recurring">
-                    <MenuItem value="none">One-off</MenuItem>
-                    <MenuItem value="daily">Daily</MenuItem>
-                    <MenuItem value="weekly">Weekly</MenuItem>
-                    <MenuItem value="fortnightly">Fortnightly</MenuItem>
-                    <MenuItem value="monthly">Monthly</MenuItem>
-                  </Select>
-                </FormControl>
-              </Grid>
-              {recurrence !== 'none' && (
-                <>
-                  <Grid size={{ xs: 12, sm: 6 }}>
-                    <TextField label="Recurrence End Date" type="date" fullWidth size="small" value={recurrenceEnd} onChange={e => setRecurrenceEnd(e.target.value)}
-                      slotProps={{ inputLabel: { shrink: true } }} />
-                  </Grid>
-                  {(recurrence === 'weekly' || recurrence === 'fortnightly') && (
-                    <Grid size={{ xs: 12 }}>
-                      <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>Repeat on days</Typography>
-                      <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
-                        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, idx) => (
-                          <Chip key={day} label={day} size="small"
-                            variant={recurrenceDays.includes(idx) ? 'filled' : 'outlined'}
-                            onClick={() => setRecurrenceDays(prev => prev.includes(idx) ? prev.filter(d => d !== idx) : [...prev, idx].sort())}
-                            sx={{ cursor: 'pointer', fontSize: 11, minWidth: 44, ...(recurrenceDays.includes(idx) ? { bgcolor: '#327C8D', color: '#fff' } : {}) }} />
-                        ))}
-                      </Box>
-                    </Grid>
-                  )}
-                  <Grid size={{ xs: 12, sm: 4 }}>
-                    <TextField label="Recurrence Time" type="time" fullWidth size="small"
-                      value={recurrenceTime || startTime} onChange={e => setRecurrenceTime(e.target.value)}
-                      slotProps={{ inputLabel: { shrink: true } }}
-                      helperText="Time for each recurring appointment" />
-                  </Grid>
-                </>
-              )}
-            </>
-          )}
-        </Grid>
-
-        {/* Pre-Appointment Checklist for Viva App */}
-        <Box sx={{ mt: 2, p: 2, bgcolor: '#F3E5F5', borderRadius: 2 }}>
-          <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#7B1FA2', mb: 1 }}>
-            📋 Pre-Appointment Checklist (Viva App)
-          </Typography>
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-            Items here will be sent to the patient's Viva app as a checklist to complete before the appointment.
-          </Typography>
-          {checklistItems.map((item, i) => (
-            <Box key={i} sx={{ display: 'flex', alignItems: 'center', py: 0.3 }}>
-              <Typography sx={{ fontSize: 12, flex: 1 }}>• {item}</Typography>
-              <Button size="small" sx={{ fontSize: 9, minWidth: 0, color: '#D32F2F' }}
-                onClick={() => setChecklistItems(prev => prev.filter((_, idx) => idx !== i))}>✕</Button>
-            </Box>
-          ))}
-          <Box sx={{ display: 'flex', gap: 1, mt: 0.5 }}>
-            <input value={newCheckItem} onChange={e => setNewCheckItem(e.target.value)}
-              placeholder="e.g. Bring Medicare card, blood test results..."
-              onKeyDown={e => { if (e.key === 'Enter' && newCheckItem.trim()) { setChecklistItems(prev => [...prev, newCheckItem.trim()]); setNewCheckItem(''); } }}
-              style={{ flex: 1, padding: '6px 10px', border: '1px solid #CE93D8', borderRadius: 6, fontSize: 12, background: 'white' }} />
-            <Button size="small" variant="outlined" disabled={!newCheckItem.trim()}
-              onClick={() => { if (newCheckItem.trim()) { setChecklistItems(prev => [...prev, newCheckItem.trim()]); setNewCheckItem(''); } }}
-              sx={{ fontSize: 10, borderColor: '#7B1FA2', color: '#7B1FA2' }}>Add</Button>
-          </Box>
-        </Box>
-      </DialogContent>
-      <Divider />
-      <DialogActions sx={{ px: 3, py: 2 }}>
-        <Button onClick={onClose} sx={{ color: 'text.secondary' }}>Cancel</Button>
-        <Button variant="contained" disabled={!title.trim() || savingAppt}
-          onClick={async () => {
-            setSavingAppt(true);
-            try {
-              const pid = selectedPatientId || patientId;
-              // Build ISO datetime from date + time
-              const startIso = `${date}T${startTime || '09:00'}:00`;
-              const endIso = `${date}T${endTime || '09:30'}:00`;
-              const isRecurring = !editing && recurrence !== 'none';
-              const method = editing ? apiClient.patch : apiClient.post;
-              const url = editing ? `appointments/${editing.id}` : isRecurring ? 'appointments/recurring' : 'appointments';
-
-              if (editing) {
-                // PATCH — send only fields accepted by UpdateAppointmentDTO
-                await method(url, {
-                  clinicianId: clinician || undefined,
-                  startTime: startIso,
-                  endTime: endIso,
-                  type: apptType || 'follow_up',
-                  episodeId: episodeId || null,
-                  notes: notes || undefined,
-                  ...(telehealthLink ? {
-                    telehealthDetails: {
-                      telehealthLink,
-                      telehealthProvider: undefined,
-                      telehealthPasscode: undefined,
-                    },
-                  } : {}),
-                });
-              } else {
-                // POST — send full CreateAppointmentDTO
-                await method(url, {
-                  patientId: pid,
-                  clinicianId: clinician || undefined,
-                  startTime: startIso,
-                  endTime: endIso,
-                  type: apptType || 'follow_up',
-                  episodeId: episodeId || undefined,
-                  notes: notes || undefined,
-                  ...(telehealthLink ? {
-                    telehealthDetails: {
-                      telehealthLink,
-                      telehealthProvider: undefined,
-                      telehealthPasscode: undefined,
-                    },
-                  } : {}),
-                  ...(isRecurring ? {
-                    recurrenceRule: recurrence,
-                    recurrenceEndDate: recurrenceEnd || undefined,
-                    recurrenceDays: recurrenceDays.length > 0 ? recurrenceDays : undefined,
-                    recurrenceTime: recurrenceTime || startTime || undefined,
-                  } : {}),
-                });
-              }
-              qc.invalidateQueries({ queryKey: patientAppointmentsKeys.all });
-              qc.invalidateQueries({ queryKey: patientsKeys.appointments(pid ?? '') });
-              // Save checklist items to Viva if any
-              if (checklistItems.length > 0 && pid) {
-                for (let ci = 0; ci < checklistItems.length; ci++) {
-                  try {
-                    await apiClient.post(`patient-app/checklists/${pid}`, { item: checklistItems[ci], sortOrder: ci });
-                  } catch { /* non-critical */ }
-                }
-              }
-              onClose();
-            } catch { /* error handled by global handler */ }
-            setSavingAppt(false);
-          }}
-          sx={{ bgcolor: '#b8621a', '&:hover': { bgcolor: '#d6741f' } }}>
-          {savingAppt ? 'Creating...' : 'Create Appointment'}
-        </Button>
-      </DialogActions>
-    </Dialog>
   );
 }
 

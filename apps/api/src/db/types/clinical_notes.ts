@@ -42,9 +42,12 @@ export interface ClinicalNotesRow {
   updated_at: string;
   deleted_at?: string | null;
   lock_version: number;
+  search_tsv?: unknown | null;
   reviewed_and_adopted_by_id?: string | null;
   reviewed_and_adopted_at?: string | null;
   consent_id?: string | null;
+  signed_content_hash?: string | null;
+  signed_content_hash_alg?: string | null;
 }
 
 export const CLINICAL_NOTES_COLUMNS = [
@@ -85,9 +88,12 @@ export const CLINICAL_NOTES_COLUMNS = [
   'updated_at',
   'deleted_at',
   'lock_version',
+  'search_tsv',
   'reviewed_and_adopted_by_id',
   'reviewed_and_adopted_at',
   'consent_id',
+  'signed_content_hash',
+  'signed_content_hash_alg',
 ] as const;
 
 export type ClinicalNotesColumn = typeof CLINICAL_NOTES_COLUMNS[number];

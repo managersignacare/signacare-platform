@@ -1,0 +1,6 @@
+apiVersion: v2
+name: signacare-sovereign-gpu-inference
+description: Signacare sovereign GPU inference workload for the Phase 5 self-hosted AI lane.
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

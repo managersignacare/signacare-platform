@@ -18,6 +18,40 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # ── 0. Affected workspace plan ──────────────────────────────────────────────
+  # Build work is affected-aware; safety/security/clinical guards remain broad.
+  # This keeps CI fast on docs/ops changes without narrowing patient-safety
+  # assurance. The planner writes job outputs consumed by the build job below.
+  affected-workspaces:
+    name: Affected Workspace Plan
+    runs-on: ubuntu-latest
+    outputs:
+      build_any: ${{ steps.affected.outputs.build_any }}
+      build_shared: ${{ steps.affected.outputs.build_shared }}
+      build_ui_components: ${{ steps.affected.outputs.build_ui_components }}
+      build_api: ${{ steps.affected.outputs.build_api }}
+      build_web: ${{ steps.affected.outputs.build_web }}
+      build_gateway: ${{ steps.affected.outputs.build_gateway }}
+      build_mobile_sara: ${{ steps.affected.outputs.build_mobile_sara }}
+      build_mobile_viva: ${{ steps.affected.outputs.build_mobile_viva }}
+      deploy: ${{ steps.affected.outputs.deploy }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - name: Install root dependencies for tsx
+        run: npm ci --ignore-scripts
+      - name: Compute affected workspaces
+        id: affected
+        env:
+          GITHUB_EVENT_BEFORE: ${{ github.event.before || '' }}
+        run: npm run ci:affected-workspaces
+
   # ── 1. Lint ─────────────────────────────────────────────────────────────────
   # Enforce consistent code style across all workspaces via ESLint.
   # Catches common bugs (unused vars, missing deps) before they hit review.
@@ -277,7 +311,8 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
-    needs: [lint, typecheck]
+    needs: [lint, typecheck, affected-workspaces]
+    if: ${{ needs['affected-workspaces'].outputs.build_any == 'true' }}
     steps:
       - uses: actions/checkout@v4
       - name: Setup Node.js 20
@@ -288,12 +323,16 @@ jobs:
       - name: Install dependencies
         run: npm ci --workspaces --include-workspace-root
       - name: Build shared package
+        if: ${{ needs['affected-workspaces'].outputs.build_shared == 'true' }}
         run: npm run build --workspace=packages/shared
       - name: Assert shared dist emitted
+        if: ${{ needs['affected-workspaces'].outputs.build_shared == 'true' }}
         run: test -f packages/shared/dist/index.js || (echo 'packages/shared/dist/index.js missing' && exit 1)
       - name: Build API
+        if: ${{ needs['affected-workspaces'].outputs.build_api == 'true' }}
         run: npm run build --workspace=apps/api
       - name: Assert api dist emitted (S2.1)
+        if: ${{ needs['affected-workspaces'].outputs.build_api == 'true' }}
         run: |
           test -f apps/api/dist/src/server.js || (echo 'apps/api/dist/src/server.js missing' && exit 1)
           test -f apps/api/dist/scripts/migrate.js || (echo 'apps/api/dist/scripts/migrate.js missing' && exit 1)
@@ -304,7 +343,14 @@ jobs:
           # appear as a stale string literal.
           echo 'API build artifacts present'
       - name: Build Web
+        if: ${{ needs['affected-workspaces'].outputs.build_web == 'true' }}
         run: npm run build --workspace=apps/web
+      - name: Guard web bundle budget
+        if: ${{ needs['affected-workspaces'].outputs.build_web == 'true' }}
+        run: npm run guard:web-bundle-budget
+      - name: Build EMR gateway
+        if: ${{ needs['affected-workspaces'].outputs.build_gateway == 'true' }}
+        run: npm run build --workspace=apps/emr-gateway
 
   # ── 6. Security audit (npm audit) ─────────────────────────────────────────────
   # HIPAA §164.308(a)(1)(ii)(A) — Risk Analysis: regularly review technical
@@ -746,6 +792,7 @@ jobs:
     name: C3 Coverage Artifact (BUG-429 evidence producer)
     runs-on: ubuntu-latest
     needs:
+      - affected-workspaces
       - lint
       - typecheck
       - test-unit
@@ -1088,6 +1135,21 @@ jobs:
       - name: Run guard:generator-no-diff
         run: npm run guard:generator-no-diff
 
+  generated-api-contracts-guard:
+    name: Generated API Client Contract Guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci --workspaces --include-workspace-root
+      - name: Run guard:api-client-contracts
+        run: npm run guard:api-client-contracts
+
   no-column-ddl-in-raw-sql-guard:
     name: No Column DDL in Raw SQL Guard (Phase 0b.1c; second-line defense)
     runs-on: ubuntu-latest
@@ -1183,6 +1245,22 @@ jobs:
         run: npm ci --workspaces --include-workspace-root
       - name: Run dependency-cruiser validation
         run: npm run arch:depcruise
+
+  repo-architecture-contract-guard:
+    name: Repo Architecture Contract Guard
+    runs-on: ubuntu-latest
+    needs: [arch-quality, generated-api-contracts-guard]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci --workspaces --include-workspace-root
+      - name: Run repo architecture contract
+        run: npm run guard:repo-architecture-contract
 
   # ── 12. Accessibility Check ───────────────────────────────────────────────────
   # WCAG 2.1 AA compliance check — healthcare apps must be accessible (DDA
@@ -1320,6 +1398,7 @@ jobs:
     name: CI Gate (required)
     runs-on: ubuntu-latest
     needs:
+      - affected-workspaces
       - lint
       - typecheck
       - test-unit
@@ -1368,6 +1447,7 @@ jobs:
       - zod-schema-parity-guard
       - scaffold-extension-guard
       - generator-no-diff-guard
+      - generated-api-contracts-guard
       - no-column-ddl-in-raw-sql-guard
       - no-hardcoded-column-lists-guard
       - opt-locking-new-tables-guard
@@ -1375,6 +1455,7 @@ jobs:
       - atomic-catalogue-flip-guard
       - patient-app-ownership-guard
       - arch-quality
+      - repo-architecture-contract-guard
       - a11y
     if: always()
     steps:
@@ -1384,6 +1465,7 @@ jobs:
             echo "::error::One or more CI jobs failed. Blocking merge."
             echo ""
             echo "Failed jobs:"
+            echo "  affected-workspaces:          ${{ needs['affected-workspaces'].result }}"
             echo "  lint:                        ${{ needs.lint.result }}"
             echo "  typecheck:                   ${{ needs.typecheck.result }}"
             echo "  test-unit:                   ${{ needs.test-unit.result }}"
@@ -1431,6 +1513,7 @@ jobs:
             echo "  zod-schema-parity-guard:     ${{ needs.zod-schema-parity-guard.result }}"
             echo "  scaffold-extension-guard:    ${{ needs.scaffold-extension-guard.result }}"
             echo "  generator-no-diff-guard:     ${{ needs.generator-no-diff-guard.result }}"
+            echo "  generated-api-contracts-guard: ${{ needs['generated-api-contracts-guard'].result }}"
             echo "  no-column-ddl-in-raw-sql-guard: ${{ needs.no-column-ddl-in-raw-sql-guard.result }}"
             echo "  no-hardcoded-column-lists-guard: ${{ needs.no-hardcoded-column-lists-guard.result }}"
             echo "  opt-locking-new-tables-guard: ${{ needs.opt-locking-new-tables-guard.result }}"
@@ -1438,6 +1521,7 @@ jobs:
             echo "  atomic-catalogue-flip-guard: ${{ needs.atomic-catalogue-flip-guard.result }}"
             echo "  patient-app-ownership-guard: ${{ needs.patient-app-ownership-guard.result }}"
             echo "  arch-quality:                ${{ needs.arch-quality.result }}"
+            echo "  repo-architecture-contract-guard: ${{ needs['repo-architecture-contract-guard'].result }}"
             echo "  a11y:                        ${{ needs.a11y.result }}"
             exit 1
           fi

@@ -10,6 +10,7 @@ export type MigrationDbConfig = {
   user: string;
   password: string;
   database: string;
+  ssl?: boolean;
 };
 
 type MigrationModule = {
@@ -45,19 +46,33 @@ export function createMigrationSource(
   migrationsDir: string,
   defaultExtensions: readonly string[],
 ): Knex.MigrationSource<string> {
+  const compiledJsNameToRuntimePath = new Map<string, string>();
+
   return {
     async getMigrations(extensions: readonly string[]): Promise<string[]> {
       const extList = extensions.length > 0 ? extensions : defaultExtensions;
       const files = fs
         .readdirSync(migrationsDir)
         .filter((fileName) => extList.some((ext) => fileName.endsWith(ext)));
-      return orderMigrationsForExecution(files);
+
+      const canonicalFiles = files.map((fileName) => {
+        if (fileName.endsWith('.js')) {
+          const canonicalName = `${fileName.slice(0, -3)}.ts`;
+          compiledJsNameToRuntimePath.set(canonicalName, fileName);
+          return canonicalName;
+        }
+
+        return fileName;
+      });
+
+      return orderMigrationsForExecution(canonicalFiles);
     },
     getMigrationName(migration: string): string {
       return migration;
     },
     async getMigration(migration: string): Promise<MigrationModule> {
-      const fullPath = path.join(migrationsDir, migration);
+      const runtimeFileName = compiledJsNameToRuntimePath.get(migration) ?? migration;
+      const fullPath = path.join(migrationsDir, runtimeFileName);
       const loaded = await import(fullPath);
       const candidate = 'default' in loaded && loaded.default ? loaded.default : loaded;
       if (!isMigrationModule(candidate)) {
@@ -74,7 +89,14 @@ export function createMigrationKnex(
 ): Knex {
   return knex({
     client: 'pg',
-    connection: pgConfig,
+    connection: {
+      host: pgConfig.host,
+      port: pgConfig.port,
+      user: pgConfig.user,
+      password: pgConfig.password,
+      database: pgConfig.database,
+      ...(pgConfig.ssl ? { ssl: { rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false' } } : {}),
+    },
     pool: { min: 1, max: 1 },
     migrations: {
       tableName: 'knex_migrations',
@@ -99,7 +121,14 @@ export async function runSqlMigrations(
     .sort();
   if (sqlFiles.length === 0) return;
 
-  const client = new Client(pgConfig);
+  const client = new Client({
+    host: pgConfig.host,
+    port: pgConfig.port,
+    user: pgConfig.user,
+    password: pgConfig.password,
+    database: pgConfig.database,
+    ...(pgConfig.ssl ? { ssl: { rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false' } } : {}),
+  });
   await client.connect();
   try {
     for (const fileName of sqlFiles) {

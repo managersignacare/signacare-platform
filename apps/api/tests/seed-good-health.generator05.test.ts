@@ -18,27 +18,45 @@ describe('seed-good-health generator 05: master login table', () => {
     const md = await buildMasterLoginMarkdown();
     expect(md).toContain('FICTIONAL DEMO DATA');
     expect(md).toContain('# Good Health — Master Login Table');
+    expect(md).toContain('SUPERADMIN_ALLOWED_EMAIL_DOMAINS');
+    expect(md).toContain('admin@signacare.local');
   });
 
   it('markdown reports the exact total persona count', async () => {
     const md = await buildMasterLoginMarkdown();
-    // 5 executive + 7 dept heads + 80 clinic = 92
-    expect(md).toContain('**Total personas:** 92');
+    // 5 executive + 1 demo-shortcut admin + 7 dept heads + 84 clinic staff/superadmins = 97
+    expect(md).toContain('**Total personas:** 97');
   });
 
   it('markdown lists every section header the operator expects', async () => {
     const md = await buildMasterLoginMarkdown();
+    expect(md).toContain('## Demo-Shortcut Logins');
     expect(md).toContain('## Executive & Corporate');
     expect(md).toContain('## Department Heads');
-    expect(md).toContain('## Clinical Staff (by clinic)');
+    expect(md).toContain('## Clinic Staff & Superadmins (by clinic)');
+  });
+
+  it('demo-shortcut section pins admin@signacare.local / Password1! verbatim', async () => {
+    const md = await buildMasterLoginMarkdown();
+    expect(md).toContain(
+      '| admin@signacare.local | `Password1!` | superadmin | executive | Demo Admin (Shortcut Login) |',
+    );
   });
 
   it('markdown contains one sub-section per mental-health clinic', async () => {
     const md = await buildMasterLoginMarkdown();
-    expect(md).toContain('### northern — 20 personas');
-    expect(md).toContain('### eastern — 20 personas');
-    expect(md).toContain('### southern — 20 personas');
-    expect(md).toContain('### western — 20 personas');
+    expect(md).toContain('### northern — 21 personas');
+    expect(md).toContain('### eastern — 21 personas');
+    expect(md).toContain('### southern — 21 personas');
+    expect(md).toContain('### western — 21 personas');
+  });
+
+  it('markdown includes a clinic superadmin for every seeded mental-health clinic', async () => {
+    const md = await buildMasterLoginMarkdown();
+    expect(md).toContain('| superadmin@northern.goodhealth.demo | `Superadmin!Northern2026` | superadmin | northern | Clinic Superadmin');
+    expect(md).toContain('| superadmin@eastern.goodhealth.demo | `Superadmin!Eastern2026` | superadmin | eastern | Clinic Superadmin');
+    expect(md).toContain('| superadmin@southern.goodhealth.demo | `Superadmin!Southern2026` | superadmin | southern | Clinic Superadmin');
+    expect(md).toContain('| superadmin@western.goodhealth.demo | `Superadmin!Western2026` | superadmin | western | Clinic Superadmin');
   });
 
   it('markdown is byte-stable across two builds (determinism proof)', async () => {
@@ -83,8 +101,8 @@ describe('seed-good-health generator 05: master login table', () => {
     const dataLines = md
       .split('\n')
       .filter((l) => l.startsWith('| ') && !l.startsWith('|---') && !l.includes('Email |'));
-    // 92 personas → 92 data rows
-    expect(dataLines.length).toBe(92);
+    // 97 personas → 97 data rows (96 standard + 1 demo-shortcut)
+    expect(dataLines.length).toBe(97);
     for (const line of dataLines) {
       const cols = line.split('|').filter((s) => s.trim().length > 0);
       expect(cols.length).toBe(5);

@@ -31,10 +31,12 @@ apps/api/src/features/llm/scribeRoutes.ts=363
 # route modules is tracked as a follow-up architecture slice.
 # 2026-05-31 bump: activation hardening + wearable/digital care route wiring
 # landed in same file; keep ratchet strict on future growth.
-apps/api/src/features/patient-app/patientAppRoutes.internal.ts=2263
-# BUG-SA-112 (post-deploy split): clinical-intelligence summary +
-# related safety wiring increased patientRoutes LOC in this release.
-apps/api/src/features/patients/patientRoutes.ts=1698
+# 2026-06-07 bump: outcome-measure soft-delete filtering landed before the
+# broader patient-app route split; keep future growth pointed at extraction.
+apps/api/src/features/patient-app/patientAppRoutes.internal.ts=2316
+# 2026-06-04 ratchet drop: ancillary route extraction reduced the patient
+# route composer; keep the remaining clinical route surface bounded.
+apps/api/src/features/patients/patientRoutes.ts=1069
 apps/api/src/features/referrals/referralRepository.ts=683
 apps/api/src/features/referrals/referralService.ts=689
 apps/api/src/features/reports/reportsRoutes.ts=602
@@ -43,6 +45,11 @@ apps/api/src/features/roles/nurseFeatureRoutes.ts=824
 apps/api/src/features/staff-settings/staffSettingsRoutes.ts=1111
 apps/api/src/integrations/fhir/fhirRoutes.ts=668
 apps/api/src/integrations/fhir/smartAuth.ts=615
+# BUG-AI-QUEUE-47 (post-remediation split): aiWorker remains the durable
+# job orchestrator while retry/priority helpers are carved into siblings.
+# This bump documents the local hardening pass; future growth must keep
+# decomposing the worker instead of raising the ceiling again.
+apps/api/src/jobs/workers/aiWorker.ts=1009
 apps/api/src/mcp/ambientProcessor.ts=1245
 apps/api/src/mcp/medicalScribe.ts=907
 apps/api/src/mcp/scribeEnhancements.ts=1211
@@ -69,27 +76,26 @@ apps/web/src/features/patients/components/detail/tabs/AlertsPlansTab.internal.ts
 apps/web/src/features/patients/components/detail/tabs/AppointmentsTab.tsx=976
 # 2026-05-31 bump: episode-scoped assessment linkage + clinician feedback UX.
 apps/web/src/features/patients/components/detail/tabs/AssessmentsTab.tsx=737
-# BUG-SA-113 (post-deploy split): correspondence history/readability
-# uplift and message rendering fixes increased LOC.
-apps/web/src/features/patients/components/detail/tabs/CorrespondenceTab.tsx=1400
+# 2026-06-04 ratchet drop: correspondence tab split to a bounded composer.
+apps/web/src/features/patients/components/detail/tabs/CorrespondenceTab.tsx=107
 apps/web/src/features/patients/components/detail/tabs/EctTab.tsx=1197
-# BUG-466 B1 explicit-any tranches (Tracking/Inpatient/Episodes/Correspondence) increased
-# local typed payload and safety-normalization scaffolding; ceilings bumped
-# to current LOC snapshot so future growth still fails at +50.
-# BUG-SA-114 (post-deploy split): episode lifecycle + MDT work added
-# structural logic pending extraction into bounded sections.
-apps/web/src/features/patients/components/detail/tabs/EpisodesTab.tsx=1562
+# 2026-06-04 ratchet drop: episode lifecycle tab split to a bounded composer.
+apps/web/src/features/patients/components/detail/tabs/EpisodesTab.tsx=253
 apps/web/src/features/patients/components/detail/tabs/InpatientCareTab.tsx=1334
 apps/web/src/features/patients/components/detail/tabs/MedicationsTab.tsx=100
-# 2026-05-31 bump: diagnosis/summary rendering fixes and contract alignment.
-apps/web/src/features/patients/components/detail/tabs/SummaryTab.tsx=1760
+# 2026-06-06 Phase 8 UI refactor: SummaryTab split into useClinicalSummaryJobs +
+# useSummarySectionState + ClinicalSummaryArtifactPanel composition shell.
+apps/web/src/features/patients/components/detail/tabs/SummaryTab.tsx=400
 apps/web/src/features/patients/components/detail/tabs/TrackingTab.tsx=849
 apps/web/src/features/patients/components/detail/tabs/VivaTab.tsx=1725
 # BUG-SA-115 (post-deploy split): new life-chart schema domain model
 # exceeds 1000 LOC block threshold until modularized.
 apps/web/src/features/patients/components/detail/tabs/lifeChartSchemaDomain.ts=26
 apps/web/src/features/patients/components/notes/AddNoteDialog.tsx=925
-apps/web/src/features/patients/components/notes/AmbientAiRecorder.tsx=1528
+# 2026-06-06 Phase 8 UI refactor: AmbientAiRecorder split into
+# useAmbientServiceProbe + useAmbientRecorderController + useAmbientScribeJobRunner
+# + AmbientRecorderControls + AmbientDiagnosticsPanel composition shell.
+apps/web/src/features/patients/components/notes/AmbientAiRecorder.tsx=271
 apps/web/src/features/patients/components/registration/EditPatientWizard.tsx=439
 apps/web/src/features/patients/pages/PatientsPage.tsx=798
 apps/web/src/features/power-settings/pages/PowerSettingsPage.tsx=859

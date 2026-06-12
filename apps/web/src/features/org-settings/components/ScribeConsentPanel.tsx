@@ -39,6 +39,10 @@ interface ClinicSettingsResponse {
   scribeConsentMode: ScribeConsentMode
   aiChatClassifierMode?: AiChatClassifierMode
   scribeAudioRetention?: ScribeAudioRetention
+  scribeAudioRetentionAdr?: string | null
+  scribeAudioRetentionClinicalReview?: string | null
+  scribeAudioRetentionApprovedByStaffId?: string | null
+  scribeAudioRetentionApprovedAt?: string | null
   emailSenderMode?: EmailSenderMode
   clinicSenderEmail?: string | null
   clinicSenderName?: string | null
@@ -61,6 +65,8 @@ export const ScribeConsentPanel: React.FC = () => {
   const [mode, setMode] = React.useState<ScribeConsentMode>('clinician_attestation')
   const [classifier, setClassifier] = React.useState<AiChatClassifierMode>('regex_keyword')
   const [retention, setRetention] = React.useState<ScribeAudioRetention>('immediate_delete')
+  const [retentionAdr, setRetentionAdr] = React.useState('')
+  const [retentionClinicalReview, setRetentionClinicalReview] = React.useState('')
   const [senderMode, setSenderMode] = React.useState<EmailSenderMode>('staff_delegated')
   const [senderEmail, setSenderEmail] = React.useState('')
   const [senderName, setSenderName] = React.useState('')
@@ -69,6 +75,8 @@ export const ScribeConsentPanel: React.FC = () => {
     if (data?.scribeConsentMode) setMode(data.scribeConsentMode)
     if (data?.aiChatClassifierMode) setClassifier(data.aiChatClassifierMode)
     if (data?.scribeAudioRetention) setRetention(data.scribeAudioRetention)
+    setRetentionAdr(data?.scribeAudioRetentionAdr ?? '')
+    setRetentionClinicalReview(data?.scribeAudioRetentionClinicalReview ?? '')
     setSenderMode(data?.emailSenderMode ?? 'staff_delegated')
     setSenderEmail(data?.clinicSenderEmail ?? '')
     setSenderName(data?.clinicSenderName ?? '')
@@ -76,6 +84,8 @@ export const ScribeConsentPanel: React.FC = () => {
     data?.scribeConsentMode,
     data?.aiChatClassifierMode,
     data?.scribeAudioRetention,
+    data?.scribeAudioRetentionAdr,
+    data?.scribeAudioRetentionClinicalReview,
     data?.emailSenderMode,
     data?.clinicSenderEmail,
     data?.clinicSenderName,
@@ -83,19 +93,27 @@ export const ScribeConsentPanel: React.FC = () => {
 
   const saveMut = useMutation({
     mutationFn: (patch: Partial<Pick<ClinicSettingsResponse,
-      'scribeConsentMode' | 'aiChatClassifierMode' | 'scribeAudioRetention' | 'emailSenderMode' | 'clinicSenderEmail' | 'clinicSenderName'>>) =>
+      'scribeConsentMode' | 'aiChatClassifierMode' | 'scribeAudioRetention' | 'scribeAudioRetentionAdr' | 'scribeAudioRetentionClinicalReview' | 'emailSenderMode' | 'clinicSenderEmail' | 'clinicSenderName'>>) =>
       apiClient.patch<ClinicSettingsResponse>('clinic-settings', patch),
     onSuccess: () => qc.invalidateQueries({ queryKey: clinicSettingsKeys.current() }),
   })
 
   const normalizedSenderEmail = senderEmail.trim()
   const normalizedSenderName = senderName.trim()
+  const normalizedRetentionAdr = retentionAdr.trim()
+  const normalizedRetentionClinicalReview = retentionClinicalReview.trim()
   const senderConfigInvalid = senderMode === 'clinic_mailbox' && normalizedSenderEmail.length === 0
+  const retentionOverrideProofRequired = retention !== 'immediate_delete'
+  const retentionOverrideProofMissing =
+    retentionOverrideProofRequired
+    && (normalizedRetentionAdr.length < 6 || normalizedRetentionClinicalReview.length < 10)
 
   const anyDirty =
     mode !== data?.scribeConsentMode ||
     classifier !== (data?.aiChatClassifierMode ?? 'regex_keyword') ||
     retention !== (data?.scribeAudioRetention ?? 'immediate_delete') ||
+    normalizedRetentionAdr !== (data?.scribeAudioRetentionAdr ?? '') ||
+    normalizedRetentionClinicalReview !== (data?.scribeAudioRetentionClinicalReview ?? '') ||
     senderMode !== (data?.emailSenderMode ?? 'staff_delegated') ||
     normalizedSenderEmail !== (data?.clinicSenderEmail ?? '') ||
     normalizedSenderName !== (data?.clinicSenderName ?? '')
@@ -200,10 +218,10 @@ export const ScribeConsentPanel: React.FC = () => {
           Scribe Audio Retention
         </Typography>
         <Typography variant="body2" color="text.secondary" mb={2}>
-          Audit Tier 5.13 — how long scribe audio is kept after the transcript is produced. The
-          default is <strong>immediate delete</strong>, which is the safest privacy posture.
-          Longer retention windows support clinician re-listening and medico-legal review but
-          increase the surface of retained recordings.
+          Audit Tier 5.13 — how long scribe audio is kept after the transcript is produced.
+          The default is <strong>immediate delete</strong>, matching the strongest AU privacy
+          posture. Longer retention windows are blocked unless this clinic records ADR evidence
+          and clinical safety review evidence.
         </Typography>
 
         {!isLoading && (
@@ -220,7 +238,46 @@ export const ScribeConsentPanel: React.FC = () => {
               <MenuItem value="30d">Retain 30 days</MenuItem>
               <MenuItem value="90d">Retain 90 days</MenuItem>
             </Select>
+            <FormHelperText>
+              Non-immediate retention is an exception path. The database rejects it without
+              documented ADR and clinical safety review proof.
+            </FormHelperText>
           </FormControl>
+        )}
+        {!isLoading && retentionOverrideProofRequired && (
+          <Box sx={{ mt: 2, display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
+            <TextField
+              label="ADR / governance reference"
+              placeholder="ADR-0042 or docs/adr/audio-retention.md"
+              value={retentionAdr}
+              onChange={(e) => setRetentionAdr(e.target.value)}
+              size="small"
+              required
+              error={normalizedRetentionAdr.length > 0 && normalizedRetentionAdr.length < 6}
+              helperText="Required before retained recording windows can be enabled."
+            />
+            <TextField
+              label="Clinical safety review evidence"
+              placeholder="Clinical Safety Review CSR-2026-06 approved retained audio window"
+              value={retentionClinicalReview}
+              onChange={(e) => setRetentionClinicalReview(e.target.value)}
+              size="small"
+              required
+              error={normalizedRetentionClinicalReview.length > 0 && normalizedRetentionClinicalReview.length < 10}
+              helperText="Required. Include review identifier or approved governance note."
+            />
+          </Box>
+        )}
+        {!isLoading && retentionOverrideProofMissing && (
+          <Alert severity="warning" sx={{ mt: 2 }}>
+            Audio retention beyond immediate-delete cannot be saved until ADR and clinical
+            safety review evidence are provided.
+          </Alert>
+        )}
+        {!isLoading && data?.scribeAudioRetentionApprovedAt && retention !== 'immediate_delete' && (
+          <Alert severity="info" sx={{ mt: 2 }}>
+            Retention exception approved on {new Date(data.scribeAudioRetentionApprovedAt).toLocaleString('en-AU')}.
+          </Alert>
         )}
       </Paper>
 
@@ -297,11 +354,13 @@ export const ScribeConsentPanel: React.FC = () => {
       <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
         <Button
           variant="contained"
-          disabled={saveMut.isPending || !anyDirty || senderConfigInvalid}
+          disabled={saveMut.isPending || !anyDirty || senderConfigInvalid || retentionOverrideProofMissing}
           onClick={() => saveMut.mutate({
             scribeConsentMode: mode,
             aiChatClassifierMode: classifier,
             scribeAudioRetention: retention,
+            scribeAudioRetentionAdr: retentionOverrideProofRequired ? normalizedRetentionAdr : null,
+            scribeAudioRetentionClinicalReview: retentionOverrideProofRequired ? normalizedRetentionClinicalReview : null,
             emailSenderMode: senderMode,
             clinicSenderEmail: normalizedSenderEmail.length > 0 ? normalizedSenderEmail : null,
             clinicSenderName: normalizedSenderName.length > 0 ? normalizedSenderName : null,

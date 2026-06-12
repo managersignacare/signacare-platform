@@ -3,6 +3,7 @@ import type { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { generateDocument, listDocumentTypes } from './documentService';
 import type { DocumentType } from './documentTemplates';
+import { buildAuthContext } from '../../shared/buildAuthContext';
 
 const GenerateSchema = z.object({
   patientId:         z.string().uuid(),
@@ -13,9 +14,9 @@ const GenerateSchema = z.object({
 export async function generate(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const dto = GenerateSchema.parse(req.body);
+    const auth = buildAuthContext(req, dto.patientId);
     const result = await generateDocument(
-      req.clinicId,
-      req.user!.id,
+      auth,
       { ...dto, documentType: dto.documentType as DocumentType },
     );
     res.json(result);

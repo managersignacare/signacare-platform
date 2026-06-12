@@ -13,6 +13,7 @@ import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import PeopleAltIcon from '@mui/icons-material/PeopleAlt';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../../../../../shared/services/apiClient';
+import { llmAiJobsApi } from '../../../../../shared/services/llmAiJobsApi';
 import {
   patientAppointmentsKeys,
   patientPathwaysKeys,
@@ -225,7 +226,7 @@ export function LinkagesPanel({ patientId }: LinkagesPanelProps): React.ReactEle
         `[${i.category}] ${i.title} — status: ${i.status}, source: ${i.source}, date: ${i.date}`,
       ).join('\n');
 
-      const resp = await apiClient.instance.post<{ result: string }>('llm/clinical-ai', {
+      const result = await llmAiJobsApi.runClinicalAiJob({
         action: 'linkages',
         patientId,
         data: {
@@ -236,8 +237,8 @@ export function LinkagesPanel({ patientId }: LinkagesPanelProps): React.ReactEle
           categoriesActive,
         },
         enhance: true,
-      }, { timeout: 120_000 });
-      setAiSummary(resp.data.result);
+      });
+      setAiSummary(result);
     } catch (err: unknown) {
       setAiError(extractErrorMessage(err, 'Failed to generate linkage summary'));
     } finally {
@@ -371,4 +372,3 @@ export function LinkagesPanel({ patientId }: LinkagesPanelProps): React.ReactEle
     </Box>
   );
 }
-

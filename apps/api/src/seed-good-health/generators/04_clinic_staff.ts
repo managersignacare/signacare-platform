@@ -19,14 +19,16 @@ import type {
   StaffMasterLoginRow,
 } from './02_executive_staff';
 
-// Phase 0.8 generator 04 — clinical staff (80 personas).
+// Phase 0.8 generator 04 — clinic staff (84 personas).
 //
-// Shape: 4 mental-health clinics × 2 teams (alpha/beta) × 10 roster
-// slots = 80 staff rows. Each staff row gets a matching
-// staff_specialties row pinning them to specialty_code='mental_health'
-// with is_primary=true so later generators that scope a clinical
-// query by specialty (e.g. listing available clinicians for an
-// appointment) find every seeded person.
+// Shape: 4 mental-health clinics × (1 clinic superadmin + 2 teams
+// (alpha/beta) × 10 roster slots) = 84 staff rows. Clinical roster
+// rows get a matching staff_specialties row pinning them to
+// specialty_code='mental_health' with is_primary=true so later
+// generators that scope a clinical query by specialty (e.g. listing
+// available clinicians for an appointment) find every seeded clinical
+// person. Clinic superadmins deliberately do not get a clinical
+// specialty row; they exist for demo configuration and access setup.
 //
 // Names are drawn from a deterministic name pool via a seeded PRNG
 // forked per (clinic, team) so the Alpha team's name picks don't
@@ -69,6 +71,34 @@ export async function buildClinicStaff(
     const cid = clinicId(clinic.slug);
     const usedEmails = emailsByClinic.get(cid) ?? new Set<string>();
     emailsByClinic.set(cid, usedEmails);
+    const superadminId = staffId(clinic.slug, 'clinic-superadmin');
+    const superadminEmail = `superadmin@${clinic.slug}.goodhealth.demo`;
+    const superadminPassword = buildPlainPassword('superadmin', clinic.slug);
+
+    usedEmails.add(superadminEmail);
+    staffRows.push({
+      id: superadminId,
+      clinic_id: cid,
+      given_name: 'Clinic',
+      family_name: 'Superadmin',
+      email: superadminEmail,
+      password_hash: await Promise.resolve(hashFn(superadminPassword)),
+      role: 'superadmin',
+      discipline: 'Clinic Administration',
+      is_active: true,
+      require_mfa: true,
+      has_mfa_configured: false,
+      failed_login_attempts: 0,
+    });
+
+    loginTable.push({
+      staffId: superadminId,
+      email: superadminEmail,
+      plainPassword: superadminPassword,
+      titleLabel: `Clinic Superadmin — ${clinic.name}`,
+      clinicSlug: clinic.slug,
+      role: 'superadmin',
+    });
 
     for (const team of TEAM_SLUGS) {
       // Fork rng per (clinic, team) so adding roster slots later

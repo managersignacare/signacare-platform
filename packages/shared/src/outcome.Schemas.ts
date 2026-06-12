@@ -4,6 +4,9 @@ const OUTCOME_INSTRUMENT_RULES = {
   honos: { items: 12, min: 0, max: 4 },
   honos65: { items: 12, min: 0, max: 4 },
   honosca: { items: 13, min: 0, max: 4 },
+  k10: { items: 10, min: 1, max: 5 },
+  k10plus: { items: 14, min: 1, max: 5 },
+  lsp16: { items: 16, min: 0, max: 4 },
 } as const;
 
 function coerceNumericItem(value: unknown): number | null {
@@ -26,7 +29,14 @@ export const CreateOutcomeMeasureSchema = z.object({
 }).superRefine((dto, ctx) => {
   const rule =
     OUTCOME_INSTRUMENT_RULES[dto.measureType as keyof typeof OUTCOME_INSTRUMENT_RULES];
-  if (!rule) return;
+  if (!rule) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['measureType'],
+      message: `${dto.measureType} is not a supported outcome-measure instrument`,
+    });
+    return;
+  }
 
   let derivedTotal = 0;
   for (let itemIndex = 1; itemIndex <= rule.items; itemIndex += 1) {

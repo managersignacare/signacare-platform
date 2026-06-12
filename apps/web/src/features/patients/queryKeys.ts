@@ -62,6 +62,8 @@ export const patientsKeys = {
   diagnoses: (patientId: string) => ['patient-diagnoses', patientId] as const,
   messages: (patientId: string) => ['patient-messages', patientId] as const,
   carers: (patientId: string) => ['carers', patientId] as const,
+  dutyRelationshipsMe: (patientId: string) =>
+    ['patient-duty-relationships', patientId, 'me'] as const,
   // Notes (patient-level and by type)
   notes: (patientId: string) => ['patient-notes', patientId] as const,
   notesAll: () => ['patient-notes'] as const,
@@ -228,7 +230,10 @@ export const outcomeMeasuresKeys = {
   byPatient: (patientId: string) => ['outcome-measures', patientId] as const,
   byPatientEpisode: (patientId: string, episodeId: string) =>
     ['outcome-measures', patientId, 'episode', episodeId] as const,
-  summary: (patientId: string) => ['outcome-measures', patientId, 'summary'] as const,
+  summary: (
+    patientId: string,
+    family?: 'outcome_measure' | 'clinician_rating_scale' | 'self_rated_scale',
+  ) => ['outcome-measures', patientId, 'summary', family ?? 'all'] as const,
   api: (patientId: string) => ['outcomes-api', patientId] as const,
   apiAll: () => ['outcomes-api'] as const,
   inpatient: (patientId: string) => ['inpatient-outcomes', patientId] as const,

@@ -8,6 +8,8 @@ import type { Knex } from 'knex';
  * this is still tenant-bounded (clinic-scoped), not cross-clinic.
  */
 export const CLINIC_WIDE_CLINICAL_LEADERSHIP_ROLE_PREFIXES = [
+  'clinical manager',
+  'medical director',
   'clinical director',
   'executive director',
 ] as const;

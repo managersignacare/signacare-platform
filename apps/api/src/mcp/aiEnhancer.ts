@@ -9,12 +9,133 @@
  * 5. Post-Processing — clean up, validate required sections, format consistency
  */
 
-import { callLocalLlm } from './localLlmAgent'
+import { routeTextGeneration, resolveLockedRuntimeSelection } from '../features/llm/modelRouter/modelRouter'
+import { resolveClinicalActionAlias } from '../features/llm/modelRouter/clinicalPromptCatalog'
 import { db, rlsStore } from '../db/db'
 import { logger } from '../utils/logger'
 import type { PatientRow } from '../features/patients/patientRepository'
 import type { AuthContext } from '@signacare/shared'
 import { requirePatientRelationship } from '../shared/authGuards'
+
+type DateLike = string | Date | null
+
+interface ContextContactRow {
+  given_name?: string | null
+  family_name?: string | null
+  relationship?: string | null
+  phone_mobile?: string | null
+  is_emergency_contact?: boolean | null
+  is_carer?: boolean | null
+  has_consent?: boolean | null
+}
+
+interface ContextEpisodeRow {
+  status?: string | null
+  episode_type?: string | null
+  team?: string | null
+  start_date?: DateLike
+  end_date?: DateLike
+  primary_diagnosis?: string | null
+  closure_reason?: string | null
+}
+
+interface ContextMedicationRow {
+  medication_name?: string | null
+  dose?: string | null
+  frequency?: string | null
+  route?: string | null
+  indication?: string | null
+  is_lai?: boolean | null
+  is_s8?: boolean | null
+  is_clozapine?: boolean | null
+  prescribed_at?: DateLike
+  ceased_at?: DateLike
+  ceased_reason?: string | null
+}
+
+interface ContextAlertRow {
+  title?: string | null
+  alert_type_name?: string | null
+  severity?: string | null
+  notes?: string | null
+  is_active?: boolean | null
+  resolved_at?: DateLike
+}
+
+interface ContextNoteRow {
+  created_at: string | Date
+  note_type?: string | null
+  note_category?: string | null
+  author_name?: string | null
+  assessment_html?: string | null
+  content_html?: string | null
+  plan_html?: string | null
+  is_signed?: boolean | null
+}
+
+interface ContextRiskAssessmentRow {
+  created_at: string | Date
+  risk_self?: string | null
+  risk_others?: string | null
+  risk_vulnerability?: string | null
+  summary?: string | null
+}
+
+interface ContextLegalOrderRow {
+  order_type_name?: string | null
+  status?: string | null
+  startdate?: DateLike
+  enddate?: DateLike
+  tribunal_date?: DateLike
+}
+
+interface ContextPathologyRow {
+  test_name?: string | null
+  collected_at?: DateLike
+  value?: string | null
+  unit?: string | null
+  flag?: string | null
+  reference_range?: string | null
+}
+
+interface ContextAppointmentRow {
+  start_time: string | Date
+  appointment_type?: string | null
+  clinician_name?: string | null
+  status?: string | null
+}
+
+interface ContextReferralRow {
+  referral_type?: string | null
+  referrer_name?: string | null
+  status?: string | null
+  created_at?: DateLike
+  reason?: string | null
+}
+
+interface ContextClinicalReviewRow {
+  review_date?: DateLike
+  review_type?: string | null
+  reviewer_name?: string | null
+  summary?: string | null
+  notes?: string | null
+}
+
+type PatientContextRows = [
+  PatientRow | null,
+  ContextContactRow[],
+  ContextEpisodeRow[],
+  ContextMedicationRow[],
+  ContextMedicationRow[],
+  ContextAlertRow[],
+  ContextNoteRow[],
+  ContextLegalOrderRow[],
+  ContextRiskAssessmentRow[],
+  ContextPathologyRow[],
+  ContextAppointmentRow[],
+  ContextReferralRow[],
+  ContextClinicalReviewRow[],
+]
 
 /** Strip leaked RAG context and refinement meta-commentary from LLM output */
 function stripLeakedContext(text: string): string {
@@ -69,9 +190,12 @@ function stripLeakedContext(text: string): string {
  * the handler-layer check. `auth.clinicId` replaces the previous
  * separate `clinicId` parameter — the guard ensures tenant scope.
  */
-export async function loadPatientContext(auth: AuthContext, patientId: string): Promise<string> {
+export async function loadPatientContext(auth: AuthContext, patientId: string): Promise<string>
+export async function loadPatientContext(auth: AuthContext, patientId: string, options?: { episodeId?: string }): Promise<string>
+export async function loadPatientContext(auth: AuthContext, patientId: string, options: { episodeId?: string } = {}): Promise<string> {
   await requirePatientRelationship(auth, patientId);
   const clinicId = auth.clinicId;
+  const { episodeId } = options;
   const strip = (html: string) => (html ?? '').replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim()
 
   // AI context reads are best-effort enrichment, not a source of truth.
@@ -102,6 +226,9 @@ export async function loadPatientContext(auth: AuthContext, patientId: string): 
     db('episodes')
       .where({ patient_id: patientId, clinic_id: clinicId })
       .whereNull('deleted_at')
+      .modify((query) => {
+        if (episodeId) query.where('id', episodeId);
+      })
       .orderBy('start_date', 'desc')
       .limit(50)
       .catch(logQueryFail('episodes')) // BUG-437 — llm-ctx-cap per-patient episodes
@@ -129,6 +256,9 @@ export async function loadPatientContext(auth: AuthContext, patientId: string): 
     db('clinical_notes')
       .where({ patient_id: patientId, clinic_id: clinicId })
       .whereNull('deleted_at')
+      .modify((query) => {
+        if (episodeId) query.where('episode_id', episodeId);
+      })
       .orderBy('created_at', 'desc')
       .limit(15)
       .catch(logQueryFail('clinical_notes'))
@@ -145,6 +275,9 @@ export async function loadPatientContext(auth: AuthContext, patientId: string): 
     db('risk_assessments')
       .where({ patient_id: patientId, clinic_id: clinicId })
       .whereNull('deleted_at')
+      .modify((query) => {
+        if (episodeId) query.where('episode_id', episodeId);
+      })
       .orderBy('created_at', 'desc')
       .limit(3)
       .catch(logQueryFail('risk_assessments'))
@@ -171,16 +304,15 @@ export async function loadPatientContext(auth: AuthContext, patientId: string): 
   const queryClinicalReviews = () =>
     db('clinical_reviews')
       .where({ patient_id: patientId, clinic_id: clinicId })
+      .modify((query) => {
+        if (episodeId) query.where('episode_id', episodeId);
+      })
       .orderBy('review_date', 'desc')
       .limit(3)
       .catch(logQueryFail('clinical_reviews'))
 
   const hasScopedTrx = !!rlsStore.getStore()
-  const [
-    patient, contacts, allEpisodes, activeMeds, ceasedMeds,
-    alerts, notes, legal, riskAssessments, pathology,
-    appointments, referrals, clinicalReviews,
-  ] = hasScopedTrx
+  const contextRows = hasScopedTrx
     ? [
       await queryPatient(),
       await queryContacts(),
@@ -211,6 +343,11 @@ export async function loadPatientContext(auth: AuthContext, patientId: string): 
       queryReferrals(),
       queryClinicalReviews(),
     ])
+  const [
+    patient, contacts, allEpisodes, activeMeds, ceasedMeds,
+    alerts, notes, legal, riskAssessments, pathology,
+    appointments, referrals, clinicalReviews,
+  ] = contextRows as PatientContextRows
 
   const sections: string[] = []
 
@@ -534,9 +671,16 @@ export async function generateWithRefinement(
   system: string,
   model?: string,
   clinicId?: string,
-): Promise<string> {
+): Promise<{ text: string; model: string }> {
   // Pass 1: Generate draft
-  const draft = await callLocalLlm({ prompt, system, model, clinicId, action })
+  const draft = await routeTextGeneration({
+    clinicId,
+    alias: resolveClinicalActionAlias(action as Parameters<typeof resolveClinicalActionAlias>[0]),
+    prompt,
+    system,
+    requestedModel: model,
+    action,
+  })
 
   // Pass 2: Refine — check for completeness, accuracy, formatting
   const refinementPrompt = `Review and improve this clinical document. Fix any:
@@ -556,16 +700,20 @@ ${prompt.substring(0, 1000)}
 
 Return the improved document only, no commentary.`
 
-  const refined = await callLocalLlm({
+  const refined = await routeTextGeneration({
+    clinicId,
+    alias: resolveClinicalActionAlias(action as Parameters<typeof resolveClinicalActionAlias>[0]),
     prompt: refinementPrompt,
     system: 'You are a clinical document quality reviewer. Improve the document while preserving clinical accuracy. Return only the improved document.',
-    model,
+    requestedModel: model,
     temperature: 0.1,
-    clinicId,
     action,
   })
 
-  return refined.text
+  return {
+    text: refined.text,
+    model: refined.execution.modelName,
+  }
 }
 
 // ============ 4. Structured Template Enforcement ============
@@ -593,6 +741,7 @@ export async function enhancedGenerate(opts: {
   action: string
   data: string
   patientId?: string
+  episodeId?: string
   /**
    * BUG-281 — AuthContext-first per CLAUDE.md §13. REQUIRED when
    * `patientId` is set (patient-data read path); OPTIONAL when
@@ -611,7 +760,7 @@ export async function enhancedGenerate(opts: {
   // carry an AuthContext so the gate in loadPatientContext can run.
   let enriched = false
   if (opts.patientId && opts.auth) {
-    const context = await loadPatientContext(opts.auth, opts.patientId)
+    const context = await loadPatientContext(opts.auth, opts.patientId, { episodeId: opts.episodeId })
     if (context) {
       enrichedData = `REFERENCE DATA (use this information to fill in the document but do NOT include this raw data block in your output):\n${context}\n\n--- TASK ---\n${opts.data}`
       enriched = true
@@ -624,10 +773,25 @@ export async function enhancedGenerate(opts: {
 
   const fullPrompt = `${enrichedData}${exampleSuffix}`
 
-  // Decide whether to use the expensive 2-pass refinement or fast single-pass
-  // Complex reports benefit from refinement; quick tasks don't need it
   const COMPLEX_ACTIONS = new Set(['maudsley', 'mhrt-report', 'formulation', '91day', 'discharge'])
-  const shouldRefine = opts.refine !== false && COMPLEX_ACTIONS.has(opts.action)
+  let shouldRefine = opts.refine !== false && COMPLEX_ACTIONS.has(opts.action)
+
+  // Dedicated Azure lanes can absorb the extra refinement pass. On the
+  // local Ollama lane, long-form two-pass generation has proven brittle
+  // under staging-sized CPU budgets, so prefer the single-pass route.
+  if (shouldRefine && effectiveClinicId) {
+    try {
+      const runtimeSelection = await resolveLockedRuntimeSelection(effectiveClinicId)
+      if (runtimeSelection.backend === 'local_ollama') {
+        shouldRefine = false
+      }
+    } catch (err) {
+      logger.warn(
+        { err, clinicId: effectiveClinicId, action: opts.action },
+        'AI enhancer runtime selection lookup failed; keeping default refinement behavior',
+      )
+    }
+  }
 
   const ENHANCER_PROMPTS: Record<string, string> = {
     maudsley: 'You are a clinical documentation assistant generating Maudsley format summaries for Australian mental health services.',
@@ -640,24 +804,29 @@ export async function enhancedGenerate(opts: {
   }
 
   let result: string
+  let usedModel = opts.model ?? 'default'
   if (shouldRefine) {
-    result = await generateWithRefinement(
+    const refined = await generateWithRefinement(
       opts.action,
       fullPrompt,
       ENHANCER_PROMPTS[opts.action] ?? '',
       opts.model,
       effectiveClinicId,
     )
+    result = refined.text
+    usedModel = refined.model
   } else {
     // Fast single-pass: use the system prompt directly
-    const r = await callLocalLlm({
+    const r = await routeTextGeneration({
+      clinicId: effectiveClinicId,
+      alias: resolveClinicalActionAlias(opts.action as Parameters<typeof resolveClinicalActionAlias>[0]),
       prompt: fullPrompt,
       system: ENHANCER_PROMPTS[opts.action] ?? undefined,
-      model: opts.model,
-      clinicId: effectiveClinicId,
+      requestedModel: opts.model,
       action: opts.action,
     })
     result = r.text
+    usedModel = r.execution.modelName
   }
 
   // Post-process: strip any leaked RAG context or refinement notes
@@ -667,7 +836,7 @@ export async function enhancedGenerate(opts: {
 
   return {
     result,
-    model: opts.model ?? 'default',
+    model: usedModel,
     enriched,
     sections,
   }

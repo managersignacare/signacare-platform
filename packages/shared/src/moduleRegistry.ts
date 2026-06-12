@@ -105,8 +105,11 @@ export const MODULE_REGISTRY: ModuleDescriptor[] = [
       { id: 'referrals',      label: 'Referrals',      order: 80 },
       { id: 'documents',      label: 'Documents',      order: 90 },
       { id: 'correspondence', label: 'Correspondence', order: 100 },
-      { id: 'mh-exchange',    label: 'Information Exchange', order: 105 },
-      { id: 'assessments',    label: 'Assessments',    order: 110 },
+      { id: 'mh-exchange',    label: 'MH Information Exchange', order: 105 },
+      { id: 'assessments',    label: 'Rating Scales',  order: 110 },
+      // Phase 8 separation refactor: outcome measures are now a
+      // dedicated tab (sibling of the rating-scales 'assessments' tab).
+      { id: 'outcome-measures', label: 'Outcome Measures', order: 111 },
       { id: 'appointments',   label: 'Appointments',   order: 120 },
       { id: 'tracking',       label: 'Tracking',       order: 130 },
       { id: 'billing',        label: 'Billing',        order: 140 },
@@ -151,7 +154,7 @@ export const MODULE_REGISTRY: ModuleDescriptor[] = [
     specialty: 'general_medicine',
     displayName: 'IM Information Exchange',
     patientTabs: [
-      { id: 'gim-exchange', label: 'Information Exchange', order: 155 },
+      { id: 'gim-exchange', label: 'IM Information Exchange', order: 155 },
     ],
   },
   // Medication reconciliation is no longer a top-level patient tab — the
@@ -192,7 +195,7 @@ export const MODULE_REGISTRY: ModuleDescriptor[] = [
     specialty: 'mental_health',
     displayName: 'Psychology Pathways',
     patientTabs: [
-      { id: 'pathways',         label: 'Psychology',       order: 220 },
+      { id: 'pathways',         label: 'Psychology Pathways', order: 220 },
       { id: 'lived-experience', label: 'Lived Experience', order: 230 },
     ],
     navItems: [
@@ -225,7 +228,7 @@ export const MODULE_REGISTRY: ModuleDescriptor[] = [
     id: 'paediatrics.information-exchange',
     specialty: 'paediatrics',
     displayName: 'Paed Information Exchange',
-    patientTabs: [{ id: 'paed-exchange', label: 'Information Exchange', order: 255 }],
+    patientTabs: [{ id: 'paed-exchange', label: 'Paed Information Exchange', order: 255 }],
   },
   // ── Obstetrics & Gynaecology ──────────────────────────────────────────
   // Specialty-gated. One top-level tab (obs-gyne) hosts the pregnancy
@@ -241,7 +244,7 @@ export const MODULE_REGISTRY: ModuleDescriptor[] = [
     id: 'obstetrics_gynaecology.information-exchange',
     specialty: 'obstetrics_gynaecology',
     displayName: 'O&G Information Exchange',
-    patientTabs: [{ id: 'obs-exchange', label: 'Information Exchange', order: 285 }],
+    patientTabs: [{ id: 'obs-exchange', label: 'Obs & Gyne Information Exchange', order: 285 }],
   },
   // ── Surgery ────────────────────────────────────────────────────────────
   // Specialty-gated. One top-level tab hosts the case list, WHO
@@ -252,13 +255,13 @@ export const MODULE_REGISTRY: ModuleDescriptor[] = [
     id: 'surgery.module',
     specialty: 'surgery',
     displayName: 'Surgery',
-    patientTabs: [{ id: 'surgery', label: 'Surgery', order: 310 }],
+    patientTabs: [{ id: 'surgery', label: 'Surgery', order: 340 }],
   },
   {
     id: 'surgery.information-exchange',
     specialty: 'surgery',
     displayName: 'Surgery Information Exchange',
-    patientTabs: [{ id: 'surg-exchange', label: 'Information Exchange', order: 315 }],
+    patientTabs: [{ id: 'surg-exchange', label: 'Surgery Information Exchange', order: 345 }],
   },
   // ── Oncology (Phase 8, mCODE-aligned) ─────────────────────────────────
   // Specialty-gated. One top-level tab hosts the cancer journey
@@ -280,7 +283,7 @@ export const MODULE_REGISTRY: ModuleDescriptor[] = [
     id: 'oncology.information-exchange',
     specialty: 'oncology',
     displayName: 'Oncology Information Exchange',
-    patientTabs: [{ id: 'onco-exchange', label: 'Information Exchange', order: 335 }],
+    patientTabs: [{ id: 'onco-exchange', label: 'Oncology Information Exchange', order: 335 }],
   },
   // ── Endocrinology ──────────────────────────────────────────────────────
   // Specialty-gated. The glucose flowsheet is the primary surface
@@ -295,7 +298,7 @@ export const MODULE_REGISTRY: ModuleDescriptor[] = [
     id: 'endocrinology.information-exchange',
     specialty: 'endocrinology',
     displayName: 'Endo Information Exchange',
-    patientTabs: [{ id: 'endo-exchange', label: 'Information Exchange', order: 185 }],
+    patientTabs: [{ id: 'endo-exchange', label: 'Endo Information Exchange', order: 185 }],
   },
 
   // Viva (the patient-facing app) is `core` so every specialty can

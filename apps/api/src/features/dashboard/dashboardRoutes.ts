@@ -5,9 +5,13 @@ import { requireRoles } from '../../middleware/rbacMiddleware';
 import { CASE_MANAGER_ROLES, CLINICAL_ROLES } from '../../shared/roleGroups';
 import {
   getClinicianDashboard,
+  getDashboardRouteDiscovery,
+  getDashboardPreferences,
+  getResolvedDashboard,
   getManagerDashboard,
   getTeamDashboard,
   getTeamDashboardScopes,
+  updateDashboardPreferences,
 } from './dashboardController';
 
 const router = Router();
@@ -30,6 +34,41 @@ const TEAM_DASHBOARD_ROLES = Array.from(
     'admin',
     'superadmin',
   ]),
+);
+
+const ROOT_DASHBOARD_ROLES = Array.from(
+  new Set([
+    ...DASHBOARD_CLINICIAN_ROLES,
+    ...TEAM_DASHBOARD_ROLES,
+  ]),
+);
+
+// GET /api/v1/dashboard/clinician
+router.get('/preferences', getDashboardPreferences);
+router.put('/preferences', updateDashboardPreferences);
+
+// Stable discovery/compat aliases for older clients and ad-hoc ops
+// probes. These endpoints intentionally resolve to the caller's role-
+// safe dashboard surface instead of 404ing.
+router.get(
+  '/',
+  requireRoles(ROOT_DASHBOARD_ROLES),
+  getResolvedDashboard,
+);
+router.get(
+  '/my',
+  requireRoles(ROOT_DASHBOARD_ROLES),
+  getResolvedDashboard,
+);
+router.get(
+  '/metrics',
+  requireRoles(ROOT_DASHBOARD_ROLES),
+  getResolvedDashboard,
+);
+router.get(
+  '/role',
+  requireRoles(ROOT_DASHBOARD_ROLES),
+  getDashboardRouteDiscovery,
 );
 
 // GET /api/v1/dashboard/clinician

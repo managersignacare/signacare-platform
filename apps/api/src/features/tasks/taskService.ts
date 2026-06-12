@@ -17,6 +17,7 @@ import { AppError } from '../../shared/errors';
 import { requirePatientRelationship } from '../../shared/authGuards';
 import type {
   TaskCreateDTO,
+  TaskMonitoringSummary,
   TaskUpdateDTO,
   TaskResponse,
   TaskListQuery,
@@ -140,6 +141,19 @@ export async function getTask(auth: AuthContext, taskId: string): Promise<TaskRe
   const patientId = (row as { patient_id?: string | null }).patient_id;
   if (patientId) await requirePatientRelationship(auth, patientId);
   return mapTask(row);
+}
+
+export async function getTaskMonitoringSummary(
+  auth: AuthContext,
+  filters: TaskListQuery,
+): Promise<TaskMonitoringSummary> {
+  if (filters.patientId) {
+    await requirePatientRelationship(auth, filters.patientId);
+  }
+  const scopedTeamIds = filters.teamScope === 'mine'
+    ? await taskRepo.findActiveTeamIdsForStaff(auth.clinicId, auth.staffId)
+    : undefined;
+  return taskRepo.summarize(auth.clinicId, filters, scopedTeamIds);
 }
 
 export async function updateTask(

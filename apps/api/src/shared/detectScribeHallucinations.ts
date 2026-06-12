@@ -59,6 +59,13 @@ export interface ScribeStructuredNote {
   allergies?: Array<{
     substance: string;
   }>;
+  /**
+   * Final clinician-facing note text after the formatting pass. Used to
+   * detect post-format drift where the renderer mutates a verified
+   * medication dose or invents one that never appeared in the
+   * transcript/extraction layer.
+   */
+  noteText?: string;
 }
 
 export type HallucinationKind = 'medication' | 'diagnosis' | 'allergy';
@@ -94,6 +101,7 @@ const DOSE_SUFFIX_TOKENS = [
 ];
 
 const DOSE_NUMBER_RE = /[\d.]+/;
+const DOSE_CAPTURE_RE = /(\d+(?:\.\d+)?)\s*(mg|mcg|microgram|micrograms|g|gram|grams|ml|millilitre|millilitres|iu|unit|units)\b/i;
 
 /**
  * Reduce a medication string to its root term for transcript lookup.
@@ -131,6 +139,19 @@ export function extractMedicationRoot(raw: string): string {
   return tokens.slice(0, end).join(' ');
 }
 
+function extractDoseSnippet(raw: string): string | null {
+  const match = raw.match(DOSE_CAPTURE_RE);
+  if (!match) return null;
+  return `${match[1]} ${match[2].toLowerCase()}`;
+}
+
+function normalizeDose(raw: string | null | undefined): string | null {
+  if (typeof raw !== 'string') return null;
+  const match = raw.trim().toLowerCase().match(DOSE_CAPTURE_RE);
+  if (!match) return null;
+  return `${match[1]} ${match[2]}`;
+}
+
 /**
  * Normalise a transcript for substring search. Collapses whitespace
  * and lowercases. Keeps punctuation so "olanzapine," still matches
@@ -154,6 +175,22 @@ function transcriptContains(transcript: string, term: string): boolean {
   return re.test(transcript);
 }
 
+function findMedicationDosesInText(text: string, root: string): string[] {
+  if (!text.trim() || !root.trim()) return [];
+
+  const escapedRoot = root.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const mentionRe = new RegExp(
+    `\\b${escapedRoot}\\b[^\\n.;:]{0,80}?${DOSE_CAPTURE_RE.source}`,
+    'ig',
+  );
+  const doses = new Set<string>();
+  for (const match of text.matchAll(mentionRe)) {
+    const captured = `${match[1]} ${String(match[2]).toLowerCase()}`;
+    doses.add(captured);
+  }
+  return [...doses];
+}
+
 /**
  * Run the detector. Pure function — no I/O, no DB. Callers wire it
  * into the scribe pipeline at the step where the LLM has returned
@@ -169,15 +206,27 @@ export function detectScribeHallucinations(
   note: ScribeStructuredNote,
 ): HallucinationReport {
   const normalisedTranscript = normaliseTranscript(transcript);
+  const normalisedNoteText = normaliseTranscript(note.noteText ?? '');
   const findings: HallucinationFinding[] = [];
+  const findingKeys = new Set<string>();
+
+  function pushFinding(finding: HallucinationFinding): void {
+    const key = `${finding.kind}|${finding.value}|${finding.rootTerm}|${finding.reason}`;
+    if (findingKeys.has(key)) return;
+    findingKeys.add(key);
+    findings.push(finding);
+  }
 
   for (const med of note.medications ?? []) {
     const name = (med.name ?? '').trim();
     if (!name) continue;
     const root = extractMedicationRoot(name);
+    const normalizedEmbeddedDose = normalizeDose(extractDoseSnippet(name));
+    const normalizedExplicitDose = normalizeDose(med.dose);
+    const normalizedExpectedDose = normalizedExplicitDose ?? normalizedEmbeddedDose;
     const rootFound = transcriptContains(normalisedTranscript, root);
     if (!rootFound) {
-      findings.push({
+      pushFinding({
         kind: 'medication',
         value: name,
         rootTerm: root,
@@ -190,23 +239,55 @@ export function detectScribeHallucinations(
     // Separately check the dose string — an LLM can keep the
     // correct medication name but invent a dose. If the dose is
     // present in the note but nowhere in the transcript, flag it.
-    if (med.dose) {
-      const dose = med.dose.trim();
-      const doseLower = dose.toLowerCase();
+    if (normalizedExpectedDose) {
+      const dose = normalizedExpectedDose;
       // Dose should appear in the transcript either as-is OR with
       // the number alone. "20mg" in note → accept "20 mg" or "20"
       // in transcript as matching evidence.
-      const number = doseLower.match(DOSE_NUMBER_RE)?.[0] ?? '';
+      const number = dose.match(DOSE_NUMBER_RE)?.[0] ?? '';
       const hasDose =
-        normalisedTranscript.includes(doseLower) ||
+        normalisedTranscript.includes(dose) ||
         (number && transcriptContains(normalisedTranscript, number));
       if (!hasDose) {
-        findings.push({
+        pushFinding({
           kind: 'medication',
           value: `${name} ${dose}`,
           rootTerm: dose,
           reason: `Dose "${dose}" for ${name} is not substantiated by the transcript.`,
         });
+      }
+    }
+
+    if (normalisedNoteText) {
+      const renderedDoses = findMedicationDosesInText(normalisedNoteText, root)
+        .map(normalizeDose)
+        .filter((dose): dose is string => Boolean(dose));
+
+      for (const renderedDose of renderedDoses) {
+        if (normalizedExpectedDose && renderedDose !== normalizedExpectedDose) {
+          pushFinding({
+            kind: 'medication',
+            value: `${name} -> ${renderedDose}`,
+            rootTerm: root,
+            reason: `Formatted note states ${renderedDose} for ${name}, but the verified extraction was ${normalizedExpectedDose}.`,
+          });
+          continue;
+        }
+
+        if (!normalizedExpectedDose) {
+          const number = renderedDose.match(DOSE_NUMBER_RE)?.[0] ?? '';
+          const hasRenderedDoseEvidence =
+            normalisedTranscript.includes(renderedDose)
+            || (number && transcriptContains(normalisedTranscript, number));
+          if (!hasRenderedDoseEvidence) {
+            pushFinding({
+              kind: 'medication',
+              value: `${name} -> ${renderedDose}`,
+              rootTerm: root,
+              reason: `Formatted note states ${renderedDose} for ${name}, but that dose is not substantiated by the transcript.`,
+            });
+          }
+        }
       }
     }
   }

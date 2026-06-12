@@ -34,8 +34,7 @@
 //   - apps/api/src/features/roles/psychiatristFeatureRoutes.ts
 //     `/voice/quick-memo` — tracked as BUG-424b cascade.
 //   - apps/api/src/mcp/scribeStreaming.ts — tracked as BUG-424c.
-//   - apps/api/src/features/llm/streamingTranscribeRoutes.ts (which
-//     additionally posts to a non-existent /transcribe path) —
+//   - apps/api/src/features/llm/streamingTranscribeRoutes.ts —
 //     tracked as BUG-424c (streaming partial-transcript audit class).
 // A future contributor reading "SSoT for Whisper ASR" should NOT
 // assume universal coverage until those cascades close.
@@ -77,6 +76,14 @@ const WHISPER_MODEL_NAME_DEFAULT = process.env.WHISPER_MODEL ?? 'large-v3-turbo'
  * reuse it.
  */
 export const WHISPER_MODEL_VERSION_PATTERN = /^[a-zA-Z0-9._\-:]+@(sha256:[a-f0-9]{64}|unknown)$/;
+
+function assertClinicalWhisperModelVersion(version: string): void {
+  if (process.env.NODE_ENV === 'production' && version.endsWith('@unknown')) {
+    throw new Error(
+      'WHISPER_MODEL_VERSION_UNKNOWN: clinical ASR requires a concrete Whisper model digest in production',
+    );
+  }
+}
 
 interface WhisperHealthResponse {
   status?: string;
@@ -248,6 +255,7 @@ export async function parseWhisperVersionFromResponse(
     typeof data.model_version === 'string' && WHISPER_MODEL_VERSION_PATTERN.test(data.model_version)
       ? data.model_version
       : await getWhisperModelVersion();
+  assertClinicalWhisperModelVersion(whisperModelVersion);
   return { whisperModel, whisperModelVersion };
 }
 
@@ -267,6 +275,7 @@ export async function recordWhisperAsrInteractionSafely(
   args: RecordWhisperAsrInteractionArgs,
 ): Promise<void> {
   try {
+    assertClinicalWhisperModelVersion(args.modelVersion);
     await recordWhisperAsrInteraction(args);
   } catch (err) {
     logger.error(

@@ -74,7 +74,7 @@ export const ALL_MODULES: Array<{ key: string; label: string; description: strin
   { key: 'group_therapy', label: 'Group Therapy', description: 'Group sessions, attendance tracking' },
   { key: 'escalations', label: 'Escalations', description: 'Clinical escalations, ISBAR' },
   { key: 'shift_handover', label: 'Shift Handover', description: 'Nursing handover, clinical summaries' },
-  { key: 'outcome_measures', label: 'Outcome Measures', description: 'HoNOS, K10, DASS, clinical rating scales' },
+  { key: 'outcome_measures', label: 'Outcome Measures', description: 'HoNOS, K10/K10+, LSP-16 and NOCC outcome reporting' },
   { key: 'risk_assessment', label: 'Risk Assessment', description: 'Risk assessments, safety planning' },
   { key: 'pathways', label: 'Treatment Pathways', description: 'Structured digital care pathways (CBT, DBT, ACT, EMDR, CAT, schema)' },
   { key: 'workflows', label: 'Workflow Builder', description: 'Automated business process workflows' },

@@ -4,7 +4,11 @@ import { clinicalNoteRepository } from './clinicalNote.repository';
 import type { ClinicalNoteRow } from './clinicalNote.repository';
 import { createAutoContactRecord } from '../contacts/autoContactRecord';
 import { AppError } from '../../shared/errors';
-import { requirePermission } from '../../shared/authGuards';
+import {
+  requireClinicalAccessRole,
+  requirePatientRelationship,
+  requirePermissionOrClinicalLeadershipOverride,
+} from '../../shared/authGuards';
 import { db } from '../../db/db';
 import { logger } from '../../utils/logger';
 import { writeAuditLog } from '../../utils/audit';
@@ -61,19 +65,25 @@ export const clinicalNoteService = {
     patientId: string,
     episodeId?: string,
   ): Promise<ClinicalNoteRow[]> {
-    requirePermission(auth, 'note:read');
+    requireClinicalAccessRole(auth);
+    await requirePermissionOrClinicalLeadershipOverride(auth, 'note:read');
+    await requirePatientRelationship(auth, patientId);
     return clinicalNoteRepository.listByPatient(auth.clinicId, patientId, episodeId);
   },
 
   async getById(auth: AuthContext, id: string): Promise<ClinicalNoteRow> {
-    requirePermission(auth, 'note:read');
+    requireClinicalAccessRole(auth);
+    await requirePermissionOrClinicalLeadershipOverride(auth, 'note:read');
     const note = await clinicalNoteRepository.findById(auth.clinicId, id);
     if (!note) throw new AppError('Note not found', 404, 'NOTE_NOT_FOUND');
+    await requirePatientRelationship(auth, note.patientId);
     return note;
   },
 
   async create(auth: AuthContext, dto: CreateNoteDTO): Promise<ClinicalNoteRow> {
-    requirePermission(auth, 'note:create');
+    requireClinicalAccessRole(auth);
+    await requirePermissionOrClinicalLeadershipOverride(auth, 'note:create');
+    await requirePatientRelationship(auth, dto.patientId);
     let resolvedEpisodeId = dto.episodeId;
     if (!resolvedEpisodeId && dto.patientId) {
       const activeEp = await db('episodes')
@@ -142,9 +152,11 @@ export const clinicalNoteService = {
     dto: UpdateNoteDTO,
     expectedLockVersion?: number,
   ): Promise<ClinicalNoteRow> {
-    requirePermission(auth, 'note:create');
+    requireClinicalAccessRole(auth);
+    await requirePermissionOrClinicalLeadershipOverride(auth, 'note:create');
     const existing = await clinicalNoteRepository.findById(auth.clinicId, id);
     if (!existing) throw new AppError('Note not found', 404, 'NOTE_NOT_FOUND');
+    await requirePatientRelationship(auth, existing.patientId);
     if (existing.status === 'signed') throw new AppError('Signed notes cannot be edited', 409, 'NOTE_SIGNED');
     // Author check: only the author or admin/superadmin can edit a draft
     if (existing.authorId !== auth.staffId && !['admin', 'superadmin'].includes(auth.role)) {
@@ -187,9 +199,11 @@ export const clinicalNoteService = {
   },
 
   async sign(auth: AuthContext, id: string, opts: { reviewedAndAdopted?: boolean } = {}): Promise<ClinicalNoteRow> {
-    requirePermission(auth, 'note:create');
+    requireClinicalAccessRole(auth);
+    await requirePermissionOrClinicalLeadershipOverride(auth, 'note:create');
     const existing = await clinicalNoteRepository.findById(auth.clinicId, id);
     if (!existing) throw new AppError('Note not found', 404, 'NOTE_NOT_FOUND');
+    await requirePatientRelationship(auth, existing.patientId);
     if (existing.status === 'signed') throw new AppError('Note already signed', 409, 'NOTE_ALREADY_SIGNED');
     const enforceAiDraftAttestation = await shouldEnforceAiDraftSignAttestation(auth);
 
@@ -265,9 +279,11 @@ export const clinicalNoteService = {
   },
 
   async amend(auth: AuthContext, id: string, dto: CreateNoteDTO): Promise<ClinicalNoteRow> {
-    requirePermission(auth, 'note:create');
+    requireClinicalAccessRole(auth);
+    await requirePermissionOrClinicalLeadershipOverride(auth, 'note:create');
     const original = await clinicalNoteRepository.findById(auth.clinicId, id);
     if (!original) throw new AppError('Note not found', 404, 'NOTE_NOT_FOUND');
+    await requirePatientRelationship(auth, original.patientId);
     if (original.status !== 'signed') throw new AppError('Only signed notes can be amended', 409, 'NOTE_NOT_SIGNED');
     await snapshotNoteVersion(original, auth.staffId, 'amend');
     // Signed note payload is immutable; amendments are represented as
@@ -296,9 +312,11 @@ export const clinicalNoteService = {
   },
 
   async softDelete(auth: AuthContext, id: string): Promise<void> {
-    requirePermission(auth, 'note:create');
+    requireClinicalAccessRole(auth);
+    await requirePermissionOrClinicalLeadershipOverride(auth, 'note:create');
     const existing = await clinicalNoteRepository.findById(auth.clinicId, id);
     if (!existing) throw new AppError('Note not found', 404, 'NOTE_NOT_FOUND');
+    await requirePatientRelationship(auth, existing.patientId);
     if (existing.status === 'signed') throw new AppError('Signed notes cannot be deleted', 409, 'NOTE_SIGNED');
     await clinicalNoteRepository.softDelete(auth.clinicId, id);
 

@@ -11,7 +11,7 @@ import { requireClinicModuleEnabled } from '../../middleware/clinicModuleMiddlew
 import { requireModuleRead, requireModuleWrite } from '../../middleware/moduleAccessMiddleware';
 import { requireRoles } from '../../middleware/rbacMiddleware';
 import { MODULE_KEYS } from '../../shared/moduleKeys';
-import { extractScribeActions } from '../../mcp/scribeEnhancements';
+import { extractScribeActions } from '../../shared/scribeActionExtractor';
 import { CLINICAL_AI_DISCLAIMER } from '../../shared/llmDisclaimer';
 import { buildAuthContext } from '../../shared/buildAuthContext';
 import { requirePatientRelationship } from '../../shared/authGuards';
@@ -129,13 +129,14 @@ router.post(
         .filter((a) => a.type === 'appointment')
         .map((a) => {
           const timeframeText = (a.details.timeframe ?? 'TBA').trim();
-          const sourceSnippet = a.description.trim();
+          const sourceSnippet = (a.details.source ?? a.description).trim();
+          const mode = a.details.mode as 'unspecified' | 'in_person' | 'telehealth' | 'phone' | undefined;
           return {
             draftId: randomUUID(),
             timeframeText,
             suggestedDate: suggestedDateFromTimeframe(timeframeText),
             appointmentType: /mha/i.test(sourceSnippet) ? 'MHA review' : 'Clinical follow-up',
-            mode: followUpModeFromText(sourceSnippet),
+            mode: mode ?? followUpModeFromText(sourceSnippet),
             rationale: sourceSnippet,
             sourceSnippet,
           };

@@ -134,10 +134,10 @@ export interface TrainingExample {
  * Only exports examples where the user edited the output (= corrections)
  * or rated 4-5 stars (= good examples).
  *
- * JOINs `llm_interactions` to recover the `feature` (action), `model_name`,
- * and the `metadata.inputText` stored alongside the AI call. The input text
- * is NOT on ai_training_feedback itself — it lives on the interaction row
- * that triggered the feedback.
+ * JOINs `llm_interactions` to recover the `feature` (action) and
+ * `model_name`. A matching encrypted `llm_prompts_outputs` row with a
+ * non-null consent_id is mandatory; post-hoc/null-consent feedback is never
+ * exported into adapter/fine-tuning corpora.
  */
 interface ExportRow {
   feedback_type: string | null;
@@ -152,7 +152,10 @@ interface ExportRow {
 export async function exportTrainingData(clinicId: string): Promise<TrainingExample[]> {
   const rows = await db('ai_training_feedback as atf')
     .leftJoin('llm_interactions as lli', 'lli.id', 'atf.interaction_id')
+    .innerJoin('llm_prompts_outputs as lpo', 'lpo.llm_interaction_id', 'lli.id')
     .where('atf.clinic_id', clinicId)
+    .whereNotNull('lpo.consent_id')
+    .where('lpo.encryption_status', 'ENCRYPTED')
     .where(function () {
       this.whereNotNull('atf.corrected_output')       // User corrections
         .orWhere('atf.rating', '>=', 4)               // High-rated outputs

@@ -31,6 +31,7 @@ export interface CorrespondenceLettersRow {
   signature_data?: string | null;
   signed_by_id?: string | null;
   signed_at?: string | null;
+  search_tsv?: unknown | null;
 }
 
 export const CORRESPONDENCE_LETTERS_COLUMNS = [
@@ -60,6 +61,7 @@ export const CORRESPONDENCE_LETTERS_COLUMNS = [
   'signature_data',
   'signed_by_id',
   'signed_at',
+  'search_tsv',
 ] as const;
 
 export type CorrespondenceLettersColumn = typeof CORRESPONDENCE_LETTERS_COLUMNS[number];

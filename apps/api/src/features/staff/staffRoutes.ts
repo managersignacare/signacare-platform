@@ -1,4 +1,5 @@
 // apps/api/src/routes/staffRoutes.ts
+import { isPrescriberSystemRole } from '@signacare/shared';
 import { Router, NextFunction, Request, Response } from "express";
 import { z } from "zod";
 import {
@@ -159,14 +160,7 @@ staffRouter.get("/me", async (req: Request, res: Response, next: NextFunction) =
     if (!disciplineName) {
       disciplineName = (row.discipline as string | null | undefined) ?? null;
     }
-    let isPrescribingDisciplineEligible = false;
-    if (disciplineName) {
-      const eligibility = await db.raw<{ rows: Array<{ eligible: boolean }> }>(
-        'SELECT is_prescribing_eligible_discipline(?) AS eligible',
-        [disciplineName],
-      );
-      isPrescribingDisciplineEligible = eligibility.rows?.[0]?.eligible === true;
-    }
+    const hasPrescribingPrivileges = isPrescriberSystemRole(row.role as string | null | undefined);
 
     const specialties = await db<StaffSpecialtyRow>('staff_specialties as ss')
       .join('specialties as sp', 'sp.code', 'ss.specialty_code')
@@ -201,7 +195,8 @@ staffRouter.get("/me", async (req: Request, res: Response, next: NextFunction) =
       qualifications: row.qualifications ?? null,
       specialisation: row.specialisation ?? null,
       settingsProfileTabVisible,
-      isPrescribingDisciplineEligible,
+      hasPrescribingPrivileges,
+      isPrescribingDisciplineEligible: hasPrescribingPrivileges,
       specialties: specialties.map((s) => ({ code: s.code, display: s.display, isPrimary: !!s.is_primary })),
       enabledSpecialties: enabledSpecialties.map((s) => ({ code: s.code, display: s.display })),
     });

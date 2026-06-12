@@ -367,6 +367,16 @@ describe.skipIf(!READY)('BUG-035 — /ambient-note consent + relationship gate',
     expect(blobMock.put).toHaveBeenCalledTimes(1);
     expect(ambientMock.processAmbientAudio).toHaveBeenCalledTimes(1);
 
+    const processCall = ambientMock.processAmbientAudio.mock.calls[0];
+    const optionsArg = processCall?.[2] as {
+      auth?: { clinicId: string; staffId: string; patientId?: string };
+    } | undefined;
+    expect(optionsArg?.auth).toMatchObject({
+      clinicId,
+      staffId: adminStaffId,
+      patientId,
+    });
+
     const audit = await withClinicRls(clinicId, (trx) => (
       trx('audit_log')
         .where({ clinic_id: clinicId, operation: 'AMBIENT_NOTE_RECORDING_STARTED', record_id: consentId })

@@ -110,14 +110,17 @@ describe('uploadsTenantGuard', () => {
     expect(res.statusCode).toBe(404);
   });
 
-  it('returns 410 Gone when no DB row matches and backend is s3', async () => {
-    process.env.BLOB_STORAGE_BACKEND = 's3';
-    const req = buildReq({ path: '/attachments/2026/04/unknown.pdf', clinicId: 'clinic-A' });
-    const res = buildRes();
-    const next = vi.fn();
-    await uploadsTenantGuard()(req, res as unknown as Response, next as NextFunction);
-    expect(next).not.toHaveBeenCalled();
-    expect(res.statusCode).toBe(410);
-    expect((res.body as { error?: string } | undefined)?.error).toBe('gone_use_signed_url');
-  });
+  it.each(['s3', 'azure-blob'])(
+    'returns 410 Gone when no DB row matches and backend is %s',
+    async (backend) => {
+      process.env.BLOB_STORAGE_BACKEND = backend;
+      const req = buildReq({ path: '/attachments/2026/04/unknown.pdf', clinicId: 'clinic-A' });
+      const res = buildRes();
+      const next = vi.fn();
+      await uploadsTenantGuard()(req, res as unknown as Response, next as NextFunction);
+      expect(next).not.toHaveBeenCalled();
+      expect(res.statusCode).toBe(410);
+      expect((res.body as { error?: string } | undefined)?.error).toBe('gone_use_signed_url');
+    },
+  );
 });

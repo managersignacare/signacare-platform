@@ -12,8 +12,11 @@ import PhoneAndroidIcon from '@mui/icons-material/PhoneAndroid'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 // ClinicProfilePanel moved to Org Settings
 import { EditStaffCredentialsDialog } from '../../staff-settings/components/EditStaffCredentialsDialog'
-// ThresholdsPanel, IntegrationStatusPanel, CmiPanel, AiTrainingModule moved to Power/Org Settings
-// WorkflowBuilderSettingsPanel moved to Org Settings
+import { SidebarCustomisationPanel } from '../components/SettingsNavPanels'
+import { AsyncAiJobsSettingsPanel } from '../components/AsyncAiJobsSettingsPanel'
+// ThresholdsPanel moved to Org Settings; IntegrationStatusPanel, CmiPanel,
+// AiTrainingModule, WorkflowBuilder, Clinical Policies, Access Control,
+// Audit Log, and Backup Settings live in Power Settings.
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '../../../shared/services/apiClient'
 import {
@@ -29,6 +32,11 @@ import { useAuthStore } from '../../../shared/store/authStore'
 import { sharedModuleVisibilityKeys } from '../../../shared/queryKeys'
 import { useStaffSignature } from '../../../shared/components/ui/DigitalSignature'
 import SignatureCanvas from 'react-signature-canvas'
+import { useSearchParams } from 'react-router-dom'
+import {
+  readSettingsTabId,
+  type SettingsTabId,
+} from '../../../shared/navigation/settingsNavigation'
 
 import PaletteIcon from '@mui/icons-material/Palette'
 import { useThemeStore, THEME_OPTIONS, type ThemeId, THEME_PALETTES } from '../../../shared/theme/ThemeProvider'
@@ -49,8 +57,6 @@ import {
   type SendEmailResponse,
 } from './settingsPageSupport'
 
-type TabId = 'my-profile' | 'security' | 'appearance' | 'signature' | 'sidebar'
-
 interface SettingsProfileVisibilityResponse {
   settingsProfileTabVisible?: boolean;
 }
@@ -61,7 +67,7 @@ interface SettingsProfileVisibilityResponse {
 // the canonical MODULE_KEYS set the moduleAccessMiddleware
 // enforces, so the rows it produced were silently ignored at
 // request time. The panel has been removed and the "Access
-// Control" tab in Org Settings now mounts the shared
+// Control" tab in Power Settings now mounts the shared
 // ModuleAccessMatrix component — a single source of truth hitting
 // the typo-proof canonical keys.
 // See apps/web/src/features/staff-settings/components/ModuleAccessMatrix.tsx
@@ -69,29 +75,57 @@ interface SettingsProfileVisibilityResponse {
 export { ModuleAccessMatrix as AccessControlPanel } from '../../staff-settings/components/ModuleAccessMatrix'
 
 export const SettingsPage: React.FC = () => {
-  const [tab, setTab] = React.useState<TabId>('my-profile')
+  const [searchParams, setSearchParams] = useSearchParams()
   const { data: profileVisibility } = useQuery<SettingsProfileVisibilityResponse>({
     queryKey: sharedModuleVisibilityKeys.myProfile(),
     queryFn: () => apiClient.get<SettingsProfileVisibilityResponse>('staff/me'),
     staleTime: 60_000,
   })
   const canViewMyProfileTab = profileVisibility?.settingsProfileTabVisible === true
+  const requestedTab = readSettingsTabId(searchParams.get('tab'), 'my-profile')
+  const tab: SettingsTabId =
+    !canViewMyProfileTab && requestedTab === 'my-profile'
+      ? 'security'
+      : requestedTab
 
   React.useEffect(() => {
-    if (!canViewMyProfileTab && tab === 'my-profile') {
-      setTab('security')
+    const currentTab = searchParams.get('tab')
+    const expectedTab = tab === 'my-profile' ? null : tab
+
+    if (currentTab === expectedTab) {
+      return
     }
-  }, [canViewMyProfileTab, tab])
+
+    const nextSearchParams = new URLSearchParams(searchParams)
+    if (expectedTab) {
+      nextSearchParams.set('tab', expectedTab)
+    } else {
+      nextSearchParams.delete('tab')
+    }
+
+    setSearchParams(nextSearchParams, { replace: true })
+  }, [searchParams, setSearchParams, tab])
+
+  const handleTabChange = (_event: React.SyntheticEvent, nextTab: SettingsTabId) => {
+    const nextSearchParams = new URLSearchParams(searchParams)
+    if (nextTab === 'my-profile') {
+      nextSearchParams.delete('tab')
+    } else {
+      nextSearchParams.set('tab', nextTab)
+    }
+    setSearchParams(nextSearchParams)
+  }
 
   return (
     <Box p={3}>
       <Typography variant="h5" mb={2}>Settings</Typography>
-      <Tabs aria-label="Navigation tabs" value={tab} onChange={(_, v: TabId) => setTab(v)} sx={{ mb: 2 }} variant="scrollable" scrollButtons="auto">
+      <Tabs aria-label="Navigation tabs" value={tab} onChange={handleTabChange} sx={{ mb: 2 }} variant="scrollable" scrollButtons="auto">
         {canViewMyProfileTab && <Tab label="My Profile" value="my-profile" />}
         <Tab label="Account Security" value="security" />
         <Tab label="Appearance" value="appearance" />
         <Tab label="Digital Signature" value="signature" />
         <Tab label="Sidebar Customisation" value="sidebar" />
+        <Tab label="Async AI Jobs" value="async-ai-jobs" />
       </Tabs>
       <Divider sx={{ mb: 3 }} />
       {!canViewMyProfileTab && (
@@ -99,11 +133,12 @@ export const SettingsPage: React.FC = () => {
           Your profile subtab is disabled for this account. Ask a clinic admin to enable it if needed.
         </Alert>
       )}
-      {tab === 'my-profile' && <EditStaffCredentialsDialog open inline onClose={() => {}} />}
+      {tab === 'my-profile' && canViewMyProfileTab && <EditStaffCredentialsDialog open inline onClose={() => {}} />}
       {tab === 'security' && <MfaSecurityPanel />}
       {tab === 'appearance' && <AppearancePanel />}
       {tab === 'signature' && <SignatureSetupPanel />}
       {tab === 'sidebar' && <SidebarCustomisationPanel />}
+      {tab === 'async-ai-jobs' && <AsyncAiJobsSettingsPanel patientId={searchParams.get('patientId')} />}
     </Box>
   )
 }
@@ -1589,61 +1624,6 @@ export function AiTrainingContextPanel() {
           }} sx={{ bgcolor: '#327C8D' }}>Import</Button>
         </DialogActions>
       </Dialog>
-    </Box>
-  );
-}
-
-// ============ Sidebar Customisation Panel ============
-
-const SIDEBAR_HIDDEN_KEY = 'sidebar_hidden';
-const ALL_SIDEBAR_ITEMS = [
-  { group: 'Core', items: ['Dashboard', 'Patients', 'Referral Management', 'Tasks', 'Drafts', 'AI Assistant', 'Agentic Scribe'] },
-  { group: 'Clinical Lists', items: ['LAI', 'MH Act', 'Clozapine', '91-Day Review', 'Hot Spots', 'Handover'] },
-  { group: 'Workspace', items: ['Appointments', 'Bed Board', 'Reception'] },
-  { group: 'Admin', items: ['Reports', 'Audit', 'Templates', 'Billing', 'Exports', 'Resources'] },
-  { group: 'Settings', items: ['Settings', 'Org Settings', 'Staff Assignments'] },
-];
-
-function SidebarCustomisationPanel() {
-  const [hidden, setHidden] = React.useState<Set<string>>(() => {
-    try { const saved = localStorage.getItem(SIDEBAR_HIDDEN_KEY); return saved ? new Set(JSON.parse(saved)) : new Set(); }
-    catch { return new Set(); }
-  });
-
-  const toggle = (label: string) => {
-    const next = new Set(hidden);
-    next.has(label) ? next.delete(label) : next.add(label);
-    setHidden(next);
-    localStorage.setItem(SIDEBAR_HIDDEN_KEY, JSON.stringify([...next]));
-  };
-
-  const resetAll = () => { setHidden(new Set()); localStorage.removeItem(SIDEBAR_HIDDEN_KEY); };
-
-  return (
-    <Box>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-        <Box>
-          <Typography variant="h6" fontWeight={600}>Sidebar Customisation</Typography>
-          <Typography variant="body2" color="text.secondary">Toggle sidebar items on/off. Changes apply immediately.</Typography>
-        </Box>
-        <Button size="small" onClick={resetAll} sx={{ textTransform: 'none', color: '#327C8D' }}>Reset All</Button>
-      </Box>
-      {ALL_SIDEBAR_ITEMS.map(g => (
-        <Box key={g.group} sx={{ mb: 2 }}>
-          <Typography variant="caption" sx={{ fontWeight: 700, color: '#999', fontSize: 10, textTransform: 'uppercase', display: 'block', mb: 0.5 }}>{g.group}</Typography>
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-            {g.items.map(item => (
-              <Chip key={item} label={item} size="small"
-                variant={hidden.has(item) ? 'outlined' : 'filled'}
-                onClick={() => toggle(item)}
-                sx={{ cursor: 'pointer', fontSize: 11,
-                  ...(hidden.has(item) ? { color: '#999', borderColor: '#ddd' } : { bgcolor: '#EFF6FF', color: '#2563EB', border: '1px solid #93C5FD' }),
-                }} />
-            ))}
-          </Box>
-        </Box>
-      ))}
-      {hidden.size > 0 && <Typography variant="caption" color="text.secondary">{hidden.size} item{hidden.size > 1 ? 's' : ''} hidden</Typography>}
     </Box>
   );
 }

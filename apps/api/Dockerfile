@@ -67,6 +67,9 @@ COPY --from=builder /app/packages/shared/package.json ./packages/shared/
 COPY --from=builder /app/packages/shared/dist ./packages/shared/dist
 COPY --from=builder /app/apps/api/package.json ./apps/api/
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
+COPY apps/api/entrypoint.sh ./apps/api/entrypoint.sh
+
+RUN chmod +x /app/apps/api/entrypoint.sh
 
 # Run as the unprivileged 'node' user that ships in node:20-alpine.
 USER node
@@ -77,7 +80,6 @@ EXPOSE 4000
 
 ENV NODE_ENV=production
 
-# Direct node invocation against the compiled entry point. dotenv is loaded
-# at runtime so .env files inside the container still work; in production
-# the env vars usually come from the orchestrator (k8s, ECS, PM2) directly.
-CMD ["node", "-r", "dotenv/config", "dist/src/index.js"]
+# The startup hook runs deterministic compiled migrations before the API
+# boots, so staging/prod never depend on an out-of-band in-environment build.
+ENTRYPOINT ["./entrypoint.sh"]

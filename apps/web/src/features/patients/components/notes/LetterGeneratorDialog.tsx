@@ -19,6 +19,7 @@ import {
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import React, { useState } from 'react';
 import { apiClient } from '../../../../shared/services/apiClient';
+import { llmAiJobsApi } from '../../../../shared/services/llmAiJobsApi';
 import { useAuthStore } from '../../../../shared/store/authStore';
 import { escapeHtml } from '../../../../shared/utils/escapeHtml';
 import { ContactFormDialog } from './ContactFormDialog';
@@ -27,7 +28,6 @@ import type {
   ClinicLetterProfile,
   DiagnosisLetterRow,
   LetterDataResponse,
-  LlmLetterResponse,
   MedicationLetterRow,
   NoteCreateResponse,
   PatientLetterProfile,
@@ -249,19 +249,13 @@ export function LetterGeneratorDialog({
         'Generate ONLY the letter body content. Do NOT include letterhead, date, address, Re: line, Dear, or sign-off.',
       ].join('\n');
 
-      const resp = await apiClient.instance.post<LlmLetterResponse>(
-        'llm/clinical-ai',
-        {
+      const body =
+        await llmAiJobsApi.runClinicalAiJob({
           action: 'letter',
           data: promptData,
           patientId,
           enhance: false,
-        },
-        { timeout: 120_000 },
-      );
-
-      const body =
-        resp.data?.result ??
+        }) ??
         `I am writing to provide an update following the recent consultation on ${todayDate}.\n\n${noteContent}`;
       setLetterBody(body);
     } catch {

@@ -46,6 +46,11 @@ export interface AppointmentsRow {
   check_in_at?: string | null;
   checked_in_by_id?: string | null;
   lock_version: number;
+  outlook_change_key?: string | null;
+  outlook_last_synced_at?: string | null;
+  outlook_last_modified_at?: string | null;
+  outlook_sync_status: string;
+  outlook_sync_error?: string | null;
 }
 
 export const APPOINTMENTS_COLUMNS = [
@@ -90,6 +95,11 @@ export const APPOINTMENTS_COLUMNS = [
   'check_in_at',
   'checked_in_by_id',
   'lock_version',
+  'outlook_change_key',
+  'outlook_last_synced_at',
+  'outlook_last_modified_at',
+  'outlook_sync_status',
+  'outlook_sync_error',
 ] as const;
 
 export type AppointmentsColumn = typeof APPOINTMENTS_COLUMNS[number];

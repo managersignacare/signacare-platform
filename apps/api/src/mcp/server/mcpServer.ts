@@ -6,7 +6,7 @@
 import { randomUUID } from 'crypto';
 import type { Knex } from 'knex';
 import { appPoolRaw, db, rlsStore } from '../../db/db';
-import { callLocalLlm, listAvailableModels } from '../localLlmAgent';
+import { listAvailableModels } from '../localLlmAgent';
 import { loadPatientContext } from '../aiEnhancer';
 import { cachedQuery } from '../../utils/queryCache';
 import { logger } from '../../utils/logger';
@@ -27,6 +27,8 @@ import {
 } from './mcpToolCatalog';
 import { mapSequential } from './mcpCollection';
 import { writeToolAuditNonBlocking } from './mcpAudit';
+import { classifyWithHF } from '../huggingfaceService';
+import { generateClinicalAction } from '../../features/llm/modelRouter/modelRouter';
 
 // Knex .count('* as cnt') returns a row shape that's typed as `any`
 // by @types/knex (drivers emit either number or string). This local
@@ -66,6 +68,22 @@ const readDate = (value: unknown): Date | null => {
 };
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+type RoutedClinicalAction = Parameters<typeof generateClinicalAction>[0]['action'];
+const ROUTED_DOCUMENT_ACTIONS: Record<string, RoutedClinicalAction> = {
+  maudsley: 'maudsley',
+  isbar: 'isbar',
+  formulation: 'formulation',
+  '91day': '91day',
+  letter: 'letter',
+  discharge: 'discharge',
+  'med-summary': 'med-summary',
+  ambient: 'ambient',
+  'admin-report': 'admin-report',
+  'register-summary': 'register-summary',
+  'mhrt-report': 'mhrt-report',
+  certificate: 'certificate',
+};
 
 interface McpToolCall { name: string; arguments: Record<string, string | undefined>; }
 interface McpToolResult { content: { type: 'text'; text: string }[]; isError?: boolean; }
@@ -448,21 +466,26 @@ export async function handleToolCall(call: McpToolCall, auth: AuthContext): Prom
         }).join('\n') || 'No active alerts.');
       }
       case 'generate_clinical_document': {
-        const { clinicalAi } = await import('../localLlmAgent');
-        const fns: Record<string, (d: string, m?: string) => Promise<string>> = {
-          maudsley: clinicalAi.generateMaudsleySummary, isbar: clinicalAi.generateISBAR,
-          formulation: clinicalAi.generateFormulation, '91day': clinicalAi.generate91DayReview,
-          letter: (d, m) => clinicalAi.generateLetter(d, 'GP letter', m),
-          discharge: clinicalAi.generateDischargeSummary, 'med-summary': clinicalAi.generateMedSummary,
-          ambient: clinicalAi.processAmbientNotes,
-        };
         const action = readString(a.action);
-        const fn = fns[action];
-        return fn ? text(await fn(readString(a.data), a.model)) : error(`Unknown action: ${action}`);
+        const routedAction = ROUTED_DOCUMENT_ACTIONS[action];
+        if (!routedAction) return error(`Unknown action: ${action}`);
+        const routed = await generateClinicalAction({
+          clinicId: auth.clinicId,
+          action: routedAction,
+          data: readString(a.data),
+          templateType: action === 'letter' ? readString(a.templateType, 'GP letter') : undefined,
+          requestedModel: readOptionalString(a.model) ?? undefined,
+        });
+        return text(routed.text);
       }
       case 'classify_text': {
-        const r = await callLocalLlm({ prompt: readString(a.text), model: 'mentalbert' });
-        return text(r.text);
+        const r = await classifyWithHF(readString(a.text), 'mentalbert');
+        return text([
+          `Sentiment: ${r.sentiment}`,
+          `Risk level: ${r.riskLevel}`,
+          `Suicide risk: ${r.suicideRisk?.label ?? 'unavailable'}`,
+          `Top emotions: ${r.emotions.length > 0 ? r.emotions.slice(0, 3).map((emotion) => emotion.label).join(', ') : 'none detected'}`,
+        ].join('\n'));
       }
       case 'list_models': {
         const models = await listAvailableModels();

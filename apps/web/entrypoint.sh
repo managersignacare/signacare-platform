@@ -19,7 +19,11 @@ esac
 
 UPSTREAM="${UPSTREAM%/}"
 
-UPSTREAM_HOST="$(printf '%s' "$UPSTREAM" | sed 's#https\\?://##; s#/.*##')"
+UPSTREAM_HOST="$UPSTREAM"
+UPSTREAM_HOST="${UPSTREAM_HOST#http://}"
+UPSTREAM_HOST="${UPSTREAM_HOST#https://}"
+UPSTREAM_HOST="${UPSTREAM_HOST%%/*}"
+UPSTREAM_HOST="${UPSTREAM_HOST%%:*}"
 if [ -z "$UPSTREAM_HOST" ]; then
   echo "FATAL: Unable to parse API_UPSTREAM host from: $UPSTREAM" >&2
   exit 1

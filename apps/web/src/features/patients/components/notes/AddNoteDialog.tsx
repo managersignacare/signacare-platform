@@ -1,23 +1,13 @@
-import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
-import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
-import DescriptionIcon from '@mui/icons-material/Description';
-import LocalHospitalIcon from '@mui/icons-material/LocalHospital';
-import MailOutlineIcon from '@mui/icons-material/MailOutline';
-import MicIcon from '@mui/icons-material/Mic';
 import {
     Alert, Box, Button, Checkbox, Chip, CircularProgress, Collapse, Dialog, DialogActions, DialogContent,
-    DialogTitle, Divider, FormControl, FormControlLabel, Grid, InputLabel, Menu, MenuItem,
+    DialogTitle, Divider, FormControl, FormControlLabel, Grid, InputLabel, MenuItem,
     Select, Switch, TextField, Typography
 } from '@mui/material';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { apiClient } from '../../../../shared/services/apiClient';
+import { SignacareApiError } from '../../../../shared/services/apiClient';
 import { useAuthStore } from '../../../../shared/store/authStore';
-import type { AmbientNoteResult } from '../../../../shared/types/llmTypes';
-import { AiDraftSignAttestationCheckbox } from './AiDraftSignAttestationCheckbox';
-import { AmbientAiRecorder } from './AmbientAiRecorder';
-import { buildAddNoteScribeMeta } from './addNoteDialogScribeMeta';
-import { LetterGeneratorDialog } from './LetterGeneratorDialog';
 import {
   MACRO_IDS,
   MACRO_LABEL,
@@ -27,6 +17,7 @@ import {
   type MacroId,
 } from './noteMacros';
 import { ContactFormDialog } from './ContactFormDialog';
+import { DutyRelationshipDialog } from '../detail/DutyRelationshipDialog';
 import { MfaChallengeDialog } from '../../../../shared/components/ui/MfaChallengeDialog';
 import { DigitalSignatureDialog, useStaffSignature } from '../../../../shared/components/ui/DigitalSignature';
 import {
@@ -40,7 +31,6 @@ import { getErrorMessage } from './AddNoteDialogSupport';
 import {
   RECENT_RISK_ASSESSMENT_WINDOW_HOURS,
 } from '@signacare/shared';
-import { useAiDraftSignAttestation } from './useAiDraftSignAttestation';
 import { useFirstVisitChartReviewGate } from './useFirstVisitChartReviewGate';
 import { useRecentRiskAssessmentSignGate } from './useRecentRiskAssessmentSignGate';
 import type {
@@ -111,7 +101,7 @@ export function AddNoteDialog({ open, onClose, patientId, defaultEpisodeId, note
   const [title, setTitle] = useState('');
   const [content, setContent] = useState(defaultContent);
   // Note-content textarea ref + macro state. The textarea ref lets the
-  // /labs, /vitals, /meds, /problems trigger detector splice live data
+  // /labs, /vitals, /meds, /problems, /rating scale trigger detector splice live data
   // into the content at the cursor position without losing focus or
   // forcing the user to rebuild their cursor location.
   const contentRef = useRef<HTMLTextAreaElement | null>(null);
@@ -120,13 +110,11 @@ export function AddNoteDialog({ open, onClose, patientId, defaultEpisodeId, note
   const [foiExempt, setFoiExempt] = useState(false);
   const [didNotAttend, setDidNotAttend] = useState(false);
 
-  // ── Scribe State ──
-  const [mode, setMode] = useState<'write' | 'scribe'>('scribe');
-  const [scribeResult, setScribeResult] = useState<AmbientNoteResult | null>(null);
-
   // ── Contact Form State ──
   const [contactFormOpen, setContactFormOpen] = useState(false);
   const [saveError, setSaveError] = useState('');
+  const [dutyDialogOpen, setDutyDialogOpen] = useState(false);
+  const [retryStatusAfterDutyRelationship, setRetryStatusAfterDutyRelationship] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
   // ── MFA + Signature State ──
@@ -139,19 +127,6 @@ export function AddNoteDialog({ open, onClose, patientId, defaultEpisodeId, note
   // MFA only for prescriptions, ECT, TMS, discharge summaries
   const MFA_REQUIRED_TYPES = ['prescription', 'ect', 'tms', 'discharge', 'discharge_summary'];
   const requiresMfa = MFA_REQUIRED_TYPES.includes(noteType);
-  const isAiDraftNote = scribeResult !== null;
-  const {
-    reviewedAndAdopted,
-    requiresAiDraftAttestation,
-    canSign,
-    onReviewedAndAdoptedChange,
-    ensureCanSignAiDraft,
-    resetReviewedAndAdopted,
-  } = useAiDraftSignAttestation({
-    isAiDraftNote,
-    saveError,
-    setSaveError,
-  });
   const {
     requiresFirstVisitChartReview,
     canSignFirstVisitChartReview,
@@ -183,9 +158,6 @@ export function AddNoteDialog({ open, onClose, patientId, defaultEpisodeId, note
   });
 
   const handleSignWithMfa = () => {
-    if (!ensureCanSignAiDraft()) {
-      return;
-    }
     if (!ensureCanSignFirstVisitChartReview(setSaveError)) {
       return;
     }
@@ -203,10 +175,6 @@ export function AddNoteDialog({ open, onClose, patientId, defaultEpisodeId, note
     setSignDialogOpen(true);
   };
   const handleSignatureConfirmed = (_sig: string) => {
-    if (!ensureCanSignAiDraft()) {
-      setSignDialogOpen(false);
-      return;
-    }
     if (!ensureCanSignFirstVisitChartReview(setSaveError)) {
       setSignDialogOpen(false);
       return;
@@ -219,15 +187,26 @@ export function AddNoteDialog({ open, onClose, patientId, defaultEpisodeId, note
     saveMut.mutate('signed');
   };
 
-  // ── Letter Generation State ──
-  const [letterMenuAnchor, setLetterMenuAnchor] = useState<null | HTMLElement>(null);
-  const [letterDialogOpen, setLetterDialogOpen] = useState(false);
-  const [letterRecipientType, setLetterRecipientType] = useState<'provider' | 'patient' | 'support_person'>('provider');
-  const [letterSelectedTypes, setLetterSelectedTypes] = useState<Set<string>>(new Set());
-  const [_letterContent, setLetterContent] = useState('');
-  const [_letterGenerating, _setLetterGenerating] = useState(false);
-  const [_letterSaved, setLetterSaved] = useState(false);
-  const [_letterContactOpen, _setLetterContactOpen] = useState(false);
+  React.useEffect(() => {
+    if (!open) {
+      return;
+    }
+    setEpisodeId(defaultEpisodeId || '');
+    setTemplateId('');
+    setTitle('');
+    setContent(defaultContent);
+    setFoiContent('');
+    setFoiExempt(false);
+    setDidNotAttend(false);
+    setContactFormOpen(false);
+    setSaveError('');
+    setSaveSuccess(false);
+    setDutyDialogOpen(false);
+    setRetryStatusAfterDutyRelationship(null);
+    setReviewedRecentLabs(false);
+    setReviewedRecentImaging(false);
+    setReviewedRecentMedications(false);
+  }, [defaultContent, defaultEpisodeId, open, setReviewedRecentImaging, setReviewedRecentLabs, setReviewedRecentMedications]);
 
   // Auto-select first active episode — runs whenever episodes load
   React.useEffect(() => {
@@ -280,27 +259,15 @@ export function AddNoteDialog({ open, onClose, patientId, defaultEpisodeId, note
     }
   }, [open, defaultTemplate, templateId, defaultContent]);
 
-  // When scribe completes, populate the note content AND store the result
-  const handleScribeReady = useCallback((noteText: string) => {
-    setContent(prev => prev ? prev + '\n\n' + noteText : noteText);
-    // Auto-set title if empty
-    if (!title) setTitle('Clinical Note (AI Scribe)');
-  }, [title]);
-
   const saveMut = useMutation({
-    mutationFn: (status: string) => {
-      const scribeMeta = buildAddNoteScribeMeta(scribeResult);
-      return apiClient.post(`patients/${patientId}/notes`, {
+    mutationFn: (status: string) =>
+      apiClient.post(`patients/${patientId}/notes`, {
         episodeId: episodeId || undefined, templateId: templateId || undefined,
         title: title.trim(), noteType, content: content.trim(),
         foiContent: foiExempt ? foiContent.trim() : undefined, foiExempt,
         status, didNotAttend,
-        isAiDraft: isAiDraftNote,
-        reviewedAndAdopted: status === 'signed' ? reviewedAndAdopted : undefined,
         firstVisitChartReview: buildFirstVisitChartReviewPayload(status),
-        ...(scribeMeta ? { scribeMeta } : {}),
-      });
-    },
+      }),
     onSuccess: async () => {
       // Force refetch (not just invalidate) so data is visible immediately
       await qc.refetchQueries({ queryKey: patientsKeys.notes(patientId) });
@@ -310,16 +277,22 @@ export function AddNoteDialog({ open, onClose, patientId, defaultEpisodeId, note
       qc.invalidateQueries({ queryKey: patientReferralsKeys.unifiedContacts(patientId) });
       qc.invalidateQueries({ queryKey: outcomeMeasuresKeys.byPatient(patientId) });
       setSaveError('');
+      setDutyDialogOpen(false);
+      setRetryStatusAfterDutyRelationship(null);
       setSaveSuccess(true);
       // Reset form fields for next note
       setTitle(''); setContent(''); setTemplateId(''); setFoiContent(''); setFoiExempt(false); setDidNotAttend(false);
       resetFirstVisitChartReview();
-      resetReviewedAndAdopted();
-      setScribeResult(null); setLetterContent(''); setLetterSaved(false); setLetterSelectedTypes(new Set());
       // Show contact form after saving (for clinical encounters)
       setContactFormOpen(true);
     },
-    onError: (err: unknown) => {
+    onError: (err: unknown, status) => {
+      if (err instanceof SignacareApiError && err.code === 'NO_PATIENT_RELATIONSHIP') {
+        setDutyDialogOpen(true);
+        setRetryStatusAfterDutyRelationship(status);
+      } else {
+        setRetryStatusAfterDutyRelationship(null);
+      }
       setSaveError(getErrorMessage(err, 'Failed to save note. Please try again.'));
     },
   });
@@ -329,41 +302,13 @@ export function AddNoteDialog({ open, onClose, patientId, defaultEpisodeId, note
     <Dialog aria-labelledby="dialog-title" open={open && !contactFormOpen} onClose={onClose} maxWidth="md" fullWidth
       slotProps={{ paper: { sx: { maxHeight: '92vh' } } }}>
       <DialogTitle id="dialog-title" sx={{ fontFamily: 'Albert Sans, sans-serif', fontWeight: 700, pb: 1 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2 }}>
           <Typography variant="h6" fontWeight={700} fontFamily="Albert Sans, sans-serif">
             {noteType === 'message' ? 'Send Message' : noteType === 'report' ? 'Write Report' : noteType === 'letter' ? 'Write Letter' : 'Add Clinical Note'}
           </Typography>
-          {/* Mode toggle: Write vs AI Scribe */}
-          <Box sx={{ display: 'flex', bgcolor: '#f5f0eb', borderRadius: 2, p: 0.25 }}>
-            <Button
-              size="small"
-              startIcon={<DescriptionIcon sx={{ fontSize: 16 }} />}
-              onClick={() => setMode('write')}
-              sx={{
-                fontSize: 12, textTransform: 'none', borderRadius: 1.5, px: 2, minHeight: 32,
-                bgcolor: mode === 'write' ? '#fff' : 'transparent',
-                color: mode === 'write' ? '#3D484B' : '#999',
-                fontWeight: mode === 'write' ? 600 : 400,
-                boxShadow: mode === 'write' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
-                '&:hover': { bgcolor: mode === 'write' ? '#fff' : '#f0ebe4' },
-              }}>
-              Write
-            </Button>
-            <Button
-              size="small"
-              startIcon={<LocalHospitalIcon sx={{ fontSize: 16 }} />}
-              onClick={() => setMode('scribe')}
-              sx={{
-                fontSize: 12, textTransform: 'none', borderRadius: 1.5, px: 2, minHeight: 32,
-                bgcolor: mode === 'scribe' ? '#327C8D' : 'transparent',
-                color: mode === 'scribe' ? '#fff' : '#999',
-                fontWeight: mode === 'scribe' ? 600 : 400,
-                boxShadow: mode === 'scribe' ? '0 1px 3px rgba(0,0,0,0.15)' : 'none',
-                '&:hover': { bgcolor: mode === 'scribe' ? '#2a6a79' : '#f0ebe4' },
-              }}>
-              AI Scribe
-            </Button>
-          </Box>
+          <Typography variant="caption" color="text.secondary" sx={{ maxWidth: 320, textAlign: 'right' }}>
+            AI Assistant and Medical Scribe are available from the main sidebar.
+          </Typography>
         </Box>
       </DialogTitle>
       <Divider />
@@ -404,65 +349,10 @@ export function AddNoteDialog({ open, onClose, patientId, defaultEpisodeId, note
 
         <Divider />
 
-        {/* ═══ AI SCRIBE SECTION (when scribe mode selected) ═══ */}
-        {mode === 'scribe' && (
-          <Box sx={{ px: 3, py: 2, bgcolor: '#f8f6f3', borderBottom: '1px solid', borderColor: 'divider' }}>
-            <AmbientAiRecorder
-              onTranscriptReady={handleScribeReady}
-              patientId={patientId}
-              onResultReady={setScribeResult}
-            />
-
-            {/* Scribe result summary chips */}
-            {scribeResult && (
-              <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', mt: 1.5, pt: 1.5, borderTop: '1px solid #e8e3dc' }}>
-                {scribeResult.questScore && (
-                  <Chip size="small" label={`QUEST: ${scribeResult.questScore.grade}`}
-                    sx={{ fontSize: 10, height: 22, fontWeight: 700,
-                      bgcolor: scribeResult.questScore.grade === 'A' ? '#E8F5E9' : scribeResult.questScore.grade === 'B' ? '#E3F2FD' : '#FFF3E0',
-                      color: scribeResult.questScore.grade === 'A' ? '#2E7D32' : scribeResult.questScore.grade === 'B' ? '#1565C0' : '#E65100' }} />
-                )}
-                {scribeResult.riskAssessment && (
-                  <Chip size="small" label={`Risk: ${scribeResult.riskAssessment.overallLevel}`}
-                    sx={{ fontSize: 10, height: 22, fontWeight: 600,
-                      bgcolor: scribeResult.riskAssessment.overallLevel === 'critical' ? '#FFEBEE' : scribeResult.riskAssessment.overallLevel === 'high' ? '#FFF3E0' : '#E8F5E9',
-                      color: scribeResult.riskAssessment.overallLevel === 'critical' ? '#D32F2F' : scribeResult.riskAssessment.overallLevel === 'high' ? '#E65100' : '#2E7D32' }} />
-                )}
-                {(scribeResult.icd10Suggestions?.length ?? 0) > 0 && (
-                  <Chip size="small" variant="outlined" label={`ICD-10: ${scribeResult.icd10Suggestions!.map(c => c.code).join(', ')}`}
-                    sx={{ fontSize: 10, height: 22, fontFamily: 'monospace' }} />
-                )}
-                {(scribeResult.outcomeMeasures?.length ?? 0) > 0 && (
-                  scribeResult.outcomeMeasures!.map(m => (
-                    <Chip key={m.instrument} size="small" variant="outlined"
-                      label={`${m.instrument}: ${m.score} (${m.severity})`}
-                      sx={{ fontSize: 10, height: 22 }} />
-                  ))
-                )}
-                {(scribeResult.verifiedMedications?.length ?? 0) > 0 && (
-                  <Chip size="small" variant="outlined" label={`${scribeResult.verifiedMedications!.length} meds verified`}
-                    sx={{ fontSize: 10, height: 22 }} />
-                )}
-                {(scribeResult.scribeActions?.length ?? 0) > 0 && (
-                  <Chip size="small" variant="outlined" label={`${scribeResult.scribeActions!.length} actions`}
-                    sx={{ fontSize: 10, height: 22, color: '#1565C0' }} />
-                )}
-                {scribeResult.interpreterUsed && (
-                  <Chip size="small" label="Interpreter" icon={<MicIcon sx={{ fontSize: 12 }} />}
-                    sx={{ fontSize: 10, height: 22, bgcolor: '#E3F2FD', color: '#1565C0' }} />
-                )}
-                <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10, alignSelf: 'center', ml: 'auto' }}>
-                  Scribe data saved with note
-                </Typography>
-              </Box>
-            )}
-          </Box>
-        )}
-
         {/* ═══ NOTE CONTENT ═══ */}
         <Box sx={{ px: 3, py: 2 }}>
           {/* Macro toolbar — clinicians can either click the chip or
-              type the trigger ("/labs ", "/vitals ", "/meds ", "/problems ")
+              type the trigger ("/labs ", "/vitals ", "/meds ", "/problems ", "/rating scale ")
               followed by a space inside the textarea. Both paths fetch
               live data and splice it in at the cursor. */}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 1, flexWrap: 'wrap' }}>
@@ -513,7 +403,7 @@ export function AddNoteDialog({ open, onClose, patientId, defaultEpisodeId, note
             label="Note Content"
             fullWidth
             multiline
-            rows={mode === 'scribe' ? 10 : 14}
+            rows={14}
             value={content}
             inputRef={contentRef}
             onChange={async (e) => {
@@ -634,7 +524,22 @@ export function AddNoteDialog({ open, onClose, patientId, defaultEpisodeId, note
       </DialogContent>
       {saveError && (
         <Box sx={{ px: 3, pb: 1 }}>
-          <Alert role="alert" severity="error" sx={{ fontSize: 12 }} onClose={() => setSaveError('')}>{saveError}</Alert>
+          <Alert
+            role="alert"
+            severity="error"
+            sx={{ fontSize: 12 }}
+            onClose={() => {
+              setSaveError('');
+              setDutyDialogOpen(false);
+            }}
+            action={retryStatusAfterDutyRelationship ? (
+              <Button color="inherit" size="small" onClick={() => setDutyDialogOpen(true)}>
+                Add duty relationship
+              </Button>
+            ) : undefined}
+          >
+            {saveError}
+          </Alert>
         </Box>
       )}
       {saveSuccess && !contactFormOpen && (
@@ -646,56 +551,12 @@ export function AddNoteDialog({ open, onClose, patientId, defaultEpisodeId, note
       <DialogActions sx={{ px: 3, py: 2, justifyContent: 'space-between' }}>
         <Button onClick={onClose} sx={{ color: 'text.secondary' }}>Cancel</Button>
         <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-          <AiDraftSignAttestationCheckbox
-            visible={requiresAiDraftAttestation}
-            checked={reviewedAndAdopted}
-            onChange={onReviewedAndAdoptedChange}
-          />
-          {/* Generate Letter dropdown — multi-select with checkboxes */}
-          <Button size="small" variant="outlined" endIcon={<ArrowDropDownIcon />}
-            onClick={(e) => setLetterMenuAnchor(e.currentTarget)}
-            disabled={!content.trim()}
-            sx={{ borderColor: '#1565C0', color: '#1565C0', textTransform: 'none', fontSize: 12 }}>
-            <MailOutlineIcon sx={{ fontSize: 16, mr: 0.5 }} /> Generate Letter{letterSelectedTypes.size > 0 ? ` (${letterSelectedTypes.size})` : ''}
-          </Button>
-          <Menu anchorEl={letterMenuAnchor} open={Boolean(letterMenuAnchor)}
-            onClose={() => setLetterMenuAnchor(null)}>
-            {([
-              { key: 'provider', icon: <LocalHospitalIcon sx={{ fontSize: 16, color: '#327C8D' }} />, label: 'Provider (GP/Specialist)' },
-              { key: 'patient', icon: <DescriptionIcon sx={{ fontSize: 16, color: '#b8621a' }} />, label: 'Patient' },
-              { key: 'support_person', icon: <MailOutlineIcon sx={{ fontSize: 16, color: '#7B1FA2' }} />, label: 'Support Person / Carer' },
-            ] as const).map(opt => (
-              <MenuItem key={opt.key} onClick={() => {
-                const next = new Set(letterSelectedTypes);
-                next.has(opt.key) ? next.delete(opt.key) : next.add(opt.key);
-                setLetterSelectedTypes(next);
-              }}>
-                <Checkbox size="small" checked={letterSelectedTypes.has(opt.key)} sx={{ p: 0.5, mr: 1 }} />
-                {opt.icon}
-                <Typography variant="body2" sx={{ ml: 1, fontSize: 12 }}>{opt.label}</Typography>
-              </MenuItem>
-            ))}
-            <Divider />
-            <MenuItem onClick={() => {
-              if (letterSelectedTypes.size === 0) return;
-              const first = [...letterSelectedTypes][0] as 'provider' | 'patient' | 'support_person';
-              setLetterRecipientType(first);
-              setLetterDialogOpen(true);
-              setLetterMenuAnchor(null);
-            }} disabled={letterSelectedTypes.size === 0}>
-              <AutoAwesomeIcon sx={{ fontSize: 16, mr: 1, color: '#1565C0' }} />
-              <Typography variant="body2" fontWeight={600} sx={{ fontSize: 12, color: '#1565C0' }}>
-                Generate {letterSelectedTypes.size > 0 ? `${letterSelectedTypes.size} Letter${letterSelectedTypes.size > 1 ? 's' : ''}` : 'Letters'}
-              </Typography>
-            </MenuItem>
-          </Menu>
-
           <Button variant="outlined" onClick={() => saveMut.mutate('draft')} disabled={!title.trim() || saveMut.isPending}
             sx={{ borderColor: '#327C8D', color: '#327C8D' }}>
             {saveMut.isPending ? <CircularProgress role="progressbar" aria-label="Loading" size={16} /> : 'Save as Draft'}
           </Button>
           <Button variant="contained" onClick={handleSignWithMfa}
-            disabled={!title.trim() || saveMut.isPending || !canSign || !canSignFirstVisitChartReview || !canSignRecentRiskAssessment || isCheckingRecentRiskAssessment}
+            disabled={!title.trim() || saveMut.isPending || !canSignFirstVisitChartReview || !canSignRecentRiskAssessment || isCheckingRecentRiskAssessment}
             sx={{ bgcolor: '#b8621a', '&:hover': { bgcolor: '#d6741f' } }}>
             {saveMut.isPending ? <CircularProgress role="progressbar" aria-label="Loading" size={16} sx={{ color: '#fff' }} /> : 'Save & Sign'}
           </Button>
@@ -734,21 +595,20 @@ export function AddNoteDialog({ open, onClose, patientId, defaultEpisodeId, note
       initialNoteTitle={title.trim() || noteType}
       initialEpisodeId={episodeId}
     />
-    {/* Letter Generator Dialog — only mount when open to prevent crashes */}
-    {letterDialogOpen && <LetterGeneratorDialog
-      open={letterDialogOpen}
-      onClose={() => { setLetterDialogOpen(false); setLetterContent(''); setLetterSaved(false); }}
+    <DutyRelationshipDialog
+      open={dutyDialogOpen}
       patientId={patientId}
-      noteContent={content}
-      noteTitle={title}
-      recipientType={letterRecipientType}
-      episodeId={episodeId}
-      onSaved={() => {
-        setLetterDialogOpen(false);
-        qc.invalidateQueries({ queryKey: patientsKeys.notes(patientId) });
-        qc.invalidateQueries({ queryKey: patientReferralsKeys.unifiedContacts(patientId) });
+      onClose={() => setDutyDialogOpen(false)}
+      onCreated={() => {
+        setSaveError('');
+        const retryStatus = retryStatusAfterDutyRelationship;
+        setRetryStatusAfterDutyRelationship(null);
+        setDutyDialogOpen(false);
+        if (retryStatus) {
+          saveMut.mutate(retryStatus);
+        }
       }}
-    />}
+    />
     </>
   );
 }

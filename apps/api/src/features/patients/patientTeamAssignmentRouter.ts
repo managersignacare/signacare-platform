@@ -186,7 +186,7 @@ patientTeamAssignmentRouter.get('/team-assignments', async (req: Request, res: R
     const orgUnitIds = [
       ...new Set(
         rows
-          .map((r) => r.org_unit_id)
+          .map((r) => openEpisodeByPatient.get(r.patient_id)?.team_id ?? r.org_unit_id)
           .filter((id): id is string => typeof id === 'string' && id.length > 0),
       ),
     ];
@@ -223,6 +223,8 @@ patientTeamAssignmentRouter.get('/team-assignments', async (req: Request, res: R
 
     const enriched = rows.map((r) => {
       const openEpisode = openEpisodeByPatient.get(r.patient_id);
+      const effectiveOrgUnitId = openEpisode?.team_id ?? r.org_unit_id ?? null;
+      const effectiveOrgUnitName = openEpisode?.team_name ?? r.org_unit_name ?? null;
       const assignmentClinicianId =
         typeof r.primary_clinician_id === 'string'
         && typeof r.clinician_name === 'string'
@@ -238,6 +240,8 @@ patientTeamAssignmentRouter.get('/team-assignments', async (req: Request, res: R
         ...r,
         assignment_id: r.assignment_id ?? null,
         assignmentId: r.assignment_id ?? null,
+        org_unit_id: effectiveOrgUnitId,
+        org_unit_name: effectiveOrgUnitName,
         episode_id: r.episode_id ?? openEpisode?.id ?? null,
         open_episode_id: openEpisode?.id ?? null,
         open_episode_team_id: openEpisode?.team_id ?? null,
@@ -249,7 +253,7 @@ patientTeamAssignmentRouter.get('/team-assignments', async (req: Request, res: R
           || openEpisode?.primary_clinician_name
           || openEpisode?.key_worker_name
           || '',
-        mdt: r.org_unit_id ? (mdtByUnit.get(r.org_unit_id) ?? []) : [],
+        mdt: effectiveOrgUnitId ? (mdtByUnit.get(effectiveOrgUnitId) ?? []) : [],
         key_worker_id: openEpisode?.key_worker_id ?? null,
         key_worker_name: openEpisode?.key_worker_name ?? '',
       };

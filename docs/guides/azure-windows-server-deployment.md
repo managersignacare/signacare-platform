@@ -1,5 +1,11 @@
 # Signacare EMR — Azure Windows Server Deployment Runbook
 
+> **Legacy / reference only:** This Windows VM runbook is not the active
+> Signacare production deployment lane. Use the Linux App Service lane in
+> `deploy/azure/main.bicep` unless a Windows-only requirement is explicitly
+> approved and documented. See
+> [`docs/operations/deployment-learnings.md`](../operations/deployment-learnings.md).
+
 **Target:** Windows Server 2022 Datacenter VM (IaaS) hosting the full Signacare stack on a single VM.
 **Tier:** Dev / Test (single-VM, manual deploy)
 **Region:** `australiaeast` (Australian Data Residency)

@@ -5,6 +5,7 @@
 //   - Mental Health and Wellbeing Act 2022 (Victoria) — MHT 3 Treatment Order Report
 //   - NDIS Access Request Supporting Evidence Form 1.1 (April 2020)
 //   - NDIA GP/Psychiatrist Support Letter Template
+import type { AiTextGenerationModelAlias, ContextDocumentType } from '@signacare/shared';
 
 export type DocumentType =
   | 'mht_treatment_order'
@@ -19,6 +20,9 @@ export interface DocumentTemplate {
   type: DocumentType;
   name: string;
   description: string;
+  alias: AiTextGenerationModelAlias;
+  contextDocumentType: ContextDocumentType;
+  maxTokens: number;
   systemPrompt: string;
 }
 
@@ -29,6 +33,9 @@ export const DOCUMENT_TEMPLATES: Record<DocumentType, DocumentTemplate> = {
     type: 'mht_treatment_order',
     name: 'MHT Treatment Order Report',
     description: 'Mental Health Tribunal report for a compulsory Treatment Order hearing (Victoria, MHW Act 2022)',
+    alias: 'court_report_reasoning',
+    contextDocumentType: 'mht-treatment-order',
+    maxTokens: 4096,
     systemPrompt: `You are a clinical document assistant for a mental health EMR, helping psychiatrists and treating teams write Mental Health Tribunal (Treatment Order) reports under the Mental Health and Wellbeing Act 2022 (Victoria, Australia).
 
 LEGAL FRAMEWORK — Mental Health and Wellbeing Act 2022 (Victoria):
@@ -153,6 +160,9 @@ Output the completed report as formatted Markdown. Use the patient data provided
     type: 'ndis_access_letter',
     name: 'NDIS Access Support Letter',
     description: 'GP or psychiatrist letter supporting an NDIS access request, covering diagnosis permanence and functional impact',
+    alias: 'best_clinical',
+    contextDocumentType: 'ndis-access-letter',
+    maxTokens: 3072,
     systemPrompt: `You are a clinical document assistant helping GPs and psychiatrists write NDIS Access Request Support Letters for patients with permanent disabilities or mental health conditions.
 
 The letter must address NDIA requirements: diagnosis permanence and functional impact across daily life domains.
@@ -229,6 +239,9 @@ Output the completed letter as formatted Markdown. Use the patient data provided
     type: 'ndis_supporting_evidence',
     name: 'NDIS Supporting Evidence Form',
     description: 'Pre-filled draft of NDIS Access Request Supporting Evidence Form 1.1 — Sections 2 (impairments) and 3 (functional impact)',
+    alias: 'best_clinical',
+    contextDocumentType: 'ndis-supporting-evidence',
+    maxTokens: 3072,
     systemPrompt: `You are a clinical document assistant helping health professionals complete the NDIS Access Request Supporting Evidence Form (Form 1.1, April 2020), Sections 2 and 3.
 
 Generate a pre-filled draft based on the patient information provided.
@@ -351,6 +364,9 @@ Output the completed form as formatted Markdown. Use the patient data provided t
     type: 'gp_letter',
     name: 'GP Letter',
     description: 'Clinical correspondence to the patient\'s General Practitioner — medication review, treatment update, or request for information',
+    alias: 'best_clinical',
+    contextDocumentType: 'gp-letter',
+    maxTokens: 2048,
     systemPrompt: `You are a clinical correspondence assistant for an Australian public mental health service. Generate a professional letter to the patient's GP.
 
 FORMAT — Follow this exact structure (based on Good Health Mental Health Service letterhead):
@@ -404,6 +420,9 @@ CRITICAL: Only include medications and clinical information from the patient dat
     type: 'pharmacy_letter',
     name: 'Pharmacy Letter',
     description: 'Letter to community pharmacy regarding medication changes — new medications, dose changes, or cessations',
+    alias: 'best_clinical',
+    contextDocumentType: 'pharmacy-letter',
+    maxTokens: 1536,
     systemPrompt: `You are a clinical correspondence assistant for an Australian public mental health service. Generate a concise letter to the patient's pharmacy about medication changes.
 
 FORMAT — Follow this exact structure:
@@ -456,6 +475,9 @@ RULES:
     type: 'ndis_support_letter',
     name: 'NDIS Support Letter',
     description: 'Comprehensive letter supporting a patient\'s NDIS application — diagnosis permanence, functional impact across all domains, and support needs',
+    alias: 'best_clinical',
+    contextDocumentType: 'ndis-support-letter',
+    maxTokens: 3072,
     systemPrompt: `You are a clinical correspondence assistant for an Australian public mental health service. Generate a comprehensive NDIS support letter.
 
 FORMAT — Follow this exact structure (based on real NDIS support letters from Good Health Mental Health Service):
@@ -537,6 +559,9 @@ RULES:
     type: 'ndis_review_letter',
     name: 'NDIS Review Letter',
     description: 'Letter advocating for NDIS package review — requesting additional funding or adding a new disability to an existing package',
+    alias: 'best_clinical',
+    contextDocumentType: 'ndis-review-letter',
+    maxTokens: 3072,
     systemPrompt: `You are a clinical correspondence assistant for an Australian public mental health service. Generate a letter advocating for a review of the patient's existing NDIS package.
 
 FORMAT — Follow this exact structure:

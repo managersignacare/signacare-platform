@@ -35,11 +35,11 @@
  *     a denial (defensive). Operators must run the backfill before
  *     enabling this guard in production with legacy data.
  *
- *   - When BLOB_STORAGE_BACKEND=s3, files no longer live on the local
- *     disk at all. The static serve becomes a stale-data risk. We add a
- *     hard 410 (Gone) for any /uploads/<key> that does not resolve via
- *     the DB — this means the local serve is effectively dead in the
- *     S3 deployment, which is what the original DEFERRED-D wanted.
+ *   - When BLOB_STORAGE_BACKEND is a cloud backend, files no longer live
+ *     on the local disk at all. The static serve becomes a stale-data risk.
+ *     We add a hard 410 (Gone) for any /uploads/<key> that does not resolve
+ *     via the DB — this means the local serve is effectively dead in cloud
+ *     deployments, which is what the original DEFERRED-D wanted.
  *
  * Performance: one indexed SELECT per static-file request. The
  * patient_attachments tables already have indexes on storage_key
@@ -133,10 +133,10 @@ export function uploadsTenantGuard() {
 
       const row = await findOwningRow(decoded);
       if (!row) {
-        // Unknown key. With BLOB_STORAGE_BACKEND=s3 this is the expected
-        // path because attachments live in S3, not on local disk. Return
-        // 410 Gone to make the dual-mode handoff visible to clients.
-        if ((process.env.BLOB_STORAGE_BACKEND ?? 'local').toLowerCase() === 's3') {
+        // Unknown key. With cloud storage this is the expected path because
+        // attachments live remotely, not on local disk. Return 410 Gone to
+        // make the dual-mode handoff visible to clients.
+        if ((process.env.BLOB_STORAGE_BACKEND ?? 'local').toLowerCase() !== 'local') {
           res.status(410).json({ error: 'gone_use_signed_url' });
           return;
         }

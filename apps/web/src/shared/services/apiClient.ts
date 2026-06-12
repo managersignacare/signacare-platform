@@ -45,6 +45,41 @@ function isClinicalAiEndpoint(url: string | undefined): boolean {
   return /(^|\/)llm\/clinical-ai(?:$|[/?#])/.test(url);
 }
 
+export const DEFAULT_API_TIMEOUT_MS = 30_000;
+const DEFAULT_LONG_RUNNING_AI_TIMEOUT_MS = 10 * 60 * 1000;
+const MAX_LONG_RUNNING_AI_TIMEOUT_MS = 30 * 60 * 1000;
+
+function resolveLongRunningAiTimeoutMs(): number {
+  const raw = import.meta.env.VITE_LONG_RUNNING_AI_TIMEOUT_MS;
+  const parsed = Number.parseInt(String(raw ?? ''), 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_LONG_RUNNING_AI_TIMEOUT_MS;
+  return Math.min(parsed, MAX_LONG_RUNNING_AI_TIMEOUT_MS);
+}
+
+export const LONG_RUNNING_AI_TIMEOUT_MS = resolveLongRunningAiTimeoutMs();
+
+export function isLongRunningAiEndpoint(url: string | undefined): boolean {
+  if (!url) return false;
+  const path = url.startsWith('http')
+    ? (() => {
+        try { return new URL(url).pathname; } catch { return url; }
+      })()
+    : url;
+  return /(^|\/)(llm|scribe|voice)(?:\/|$)/.test(path);
+}
+
+export function formatApiErrorMessage(params: {
+  status: number;
+  url: string;
+  bodyError?: string;
+  fallbackMessage: string;
+}): string {
+  if (params.status === 499 && isLongRunningAiEndpoint(params.url)) {
+    return 'The AI request connection closed before generation completed. Retry through the async AI job workflow so the result is not lost if the browser or Azure proxy disconnects.';
+  }
+  return params.bodyError ?? params.fallbackMessage ?? 'An unexpected error occurred';
+}
+
 function isMutationMethod(method: string | undefined): boolean {
   const normalized = (method ?? '').toLowerCase();
   return normalized === 'post' || normalized === 'put' || normalized === 'patch' || normalized === 'delete';
@@ -54,7 +89,7 @@ function isMutationMethod(method: string | undefined): boolean {
 const instance: AxiosInstance = axios.create({
   baseURL: import.meta.env.VITE_API_URL as string,
   withCredentials: true, // send HTTP-only cookies
-  timeout: 30_000,
+  timeout: DEFAULT_API_TIMEOUT_MS,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -99,9 +134,14 @@ instance.interceptors.request.use(
     if (config.data instanceof FormData) {
       delete config.headers['Content-Type'];
     }
-    // Dynamic timeout for long-running AI endpoints
-    if (config.url?.includes('/llm/') || config.url?.includes('/scribe/') || config.url?.includes('/voice/')) {
-      config.timeout = 180_000; // 3 minutes for AI operations
+    // Dynamic timeout for long-running AI endpoints. Most callers use
+    // relative URLs such as `llm/clinical-ai`, so match normalized API paths
+    // rather than requiring a leading slash.
+    if (
+      isLongRunningAiEndpoint(config.url) &&
+      (config.timeout == null || config.timeout === DEFAULT_API_TIMEOUT_MS)
+    ) {
+      config.timeout = LONG_RUNNING_AI_TIMEOUT_MS;
     }
     // BUG-395 — auto-inject a conversationId into every /llm/clinical-ai
     // POST. The backend schema requires conversationId; when patientId is
@@ -177,7 +217,12 @@ instance.interceptors.response.use(
 
     return Promise.reject(
       new SignacareApiError(
-        body?.error ?? error.message ?? 'An unexpected error occurred',
+        formatApiErrorMessage({
+          status,
+          url: reqUrl,
+          bodyError: body?.error,
+          fallbackMessage: error.message ?? 'An unexpected error occurred',
+        }),
         body?.code ?? 'UNKNOWN_ERROR',
         status,
         body?.details,

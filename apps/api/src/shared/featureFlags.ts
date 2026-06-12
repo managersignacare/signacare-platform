@@ -216,9 +216,18 @@ export async function listFeatureFlags(clinicId: string | null): Promise<Array<{
   scope: 'clinic' | 'global';
 }>> {
   // Pull both global rows and per-clinic rows. Per-clinic shadows global.
-  const globalRows = await db<FeatureFlagRow>('feature_flags').whereNull('clinic_id');
+  //
+  // Use the owner connection for parity with isFeatureEnabled(). The
+  // request-scoped db proxy runs under tenant RLS and hides clinic_id NULL
+  // global rows, which makes frontend bootstrap omit globally enabled flags
+  // even while backend route guards resolve them as enabled.
+  const globalRows = await dbAdmin<FeatureFlagRow>('feature_flags').whereNull('clinic_id');
   const tenantRows = clinicId
-    ? await db<FeatureFlagRow>('feature_flags').where({ clinic_id: clinicId })
+    ? rlsStore.getStore()
+      ? await dbAdmin<FeatureFlagRow>('feature_flags').where({ clinic_id: clinicId })
+      : await withTenantContext(clinicId, async () => (
+        dbAdmin<FeatureFlagRow>('feature_flags').where({ clinic_id: clinicId })
+      ))
     : [];
   const merged = new Map<string, { row: FeatureFlagRow; scope: 'clinic' | 'global' }>();
   for (const row of globalRows) merged.set(row.name, { row, scope: 'global' });

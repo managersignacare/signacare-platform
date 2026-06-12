@@ -18,6 +18,8 @@ apps/api/uploads/audio/
 # Local Claude settings are machine-specific and may contain secrets.
 # Keep per-user config out of git.
 .claude/settings.local.json
+# Runtime scheduler lock file — ephemeral local state, never source.
+.claude/scheduled_tasks.lock
 
 # Dependencies
 node_modules/

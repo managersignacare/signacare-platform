@@ -13,12 +13,16 @@
  */
 
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { callLocalLlm } from '../localLlmAgent';
 import { MCP_TOOLS } from './mcpToolCatalog';
 import { handleToolCall } from './mcpServer';
 import { logger } from '../../utils/logger';
-import type { AiStructuredScope, AuthContext } from '@signacare/shared';
+import type { AiStructuredScope, AuthContext, RoutedModelExecution } from '@signacare/shared';
 import { requirePatientRelationship } from '../../shared/authGuards';
+import {
+  resolveLockedRuntimeSelection,
+  routeTextGeneration,
+  type LockedAiRuntimeSelection,
+} from '../../features/llm/modelRouter/modelRouter';
 
 /**
  * BUG-281 — AuthContext propagation for the aiAgent call chain.
@@ -530,6 +534,18 @@ interface AgentResult {
   modelVersion?: string;
   /** BUG-037 — requested temperature passed into the LLM (not echoed by Ollama). */
   requestedTemperature?: number;
+  /** Runtime-aware execution details for provider-neutral audit paths. */
+  execution?: RoutedModelExecution;
+  /** Local fallback trace when a requested local model degraded to default. */
+  fallbackFromModelName?: string | null;
+}
+
+function buildRequestedLocalModel(
+  runtimeSelection: LockedAiRuntimeSelection,
+  explicitModel?: string,
+): string | undefined {
+  if (runtimeSelection.backend !== 'local_ollama') return undefined;
+  return explicitModel?.trim() || undefined;
 }
 
 export async function runAgent(
@@ -562,7 +578,8 @@ async function runAgentInner(
     };
   }
 
-  const agentModel = model ?? 'llama3.2';
+  const runtimeSelection = await resolveLockedRuntimeSelection(auth.clinicId);
+  const requestedLocalModel = buildRequestedLocalModel(runtimeSelection, model);
 
   // Gate on requirePatientRelationship BEFORE any tool dispatch so
   // every downstream handler operates under a verified relationship.
@@ -608,7 +625,13 @@ async function runAgentInner(
 
   // Step 2: LLM agent loop
   try {
-    return await runLlmAgentLoop(query, context, agentModel, auth.aiScope);
+    return await runLlmAgentLoop(
+      query,
+      context,
+      runtimeSelection,
+      requestedLocalModel,
+      auth.aiScope,
+    );
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     logger.error({ err: msg }, '[Agent] LLM agent loop failed');
@@ -628,7 +651,8 @@ async function runAgentInner(
 async function runLlmAgentLoop(
   query: string,
   context: { clinicId: string; patientId?: string },
-  agentModel: string,
+  runtimeSelection: LockedAiRuntimeSelection,
+  requestedLocalModel: string | undefined,
   scope?: AiStructuredScope,
 ): Promise<AgentResult> {
   const messages: { role: string; content: string }[] = [];
@@ -647,25 +671,34 @@ async function runLlmAgentLoop(
   // handler can record the final-iteration model_version and requested
   // temperature in llm_interactions. Agent loops may span multiple calls;
   // we audit the terminal call that produced the returned answer.
+  let lastExecution: RoutedModelExecution | undefined;
   let lastModelVersion: string | undefined;
   let lastRequestedTemperature: number | undefined;
+  let lastFallbackFromModelName: string | null = null;
 
   for (let i = 0; i < MAX_ITERATIONS; i++) {
     const conversationText = messages.map(m =>
       m.role === 'user' ? `User: ${m.content}` : m.role === 'tool' ? `Tool Result:\n${m.content}` : `Assistant: ${m.content}`
     ).join('\n\n');
 
-    const llmResp = await callLocalLlm({
+    const llmResp = await routeTextGeneration({
+      clinicId: context.clinicId,
+      runtimeSelection,
+      alias: 'fast_clinical',
+      allowLocalStyleAdapter: false,
       system: AGENT_SYSTEM_PROMPT,
       prompt: conversationText,
-      model: agentModel,
+      requestedModel: requestedLocalModel,
       temperature: 0.1, // Lower temp = less creative = fewer hallucinations
       maxTokens: 3000,
+      action: 'agent',
     });
 
     const responseText = llmResp.text;
-    lastModelVersion = llmResp.modelVersion;
-    lastRequestedTemperature = llmResp.requestedTemperature;
+    lastExecution = llmResp.execution;
+    lastModelVersion = llmResp.execution.modelVersion ?? undefined;
+    lastRequestedTemperature = 0.1;
+    lastFallbackFromModelName = llmResp.fallbackFromModelName ?? null;
     if (!responseText || responseText.includes('[AI unavailable')) throw new Error('LLM not available');
 
     messages.push({ role: 'assistant', content: responseText });
@@ -703,14 +736,41 @@ async function runLlmAgentLoop(
 
     // If we have tool results, format the answer
     if (toolCalls.length > 0) {
-      return { answer: responseText, toolCalls, iterations: i + 1, model: agentModel, modelVersion: lastModelVersion, requestedTemperature: lastRequestedTemperature };
+      return {
+        answer: responseText,
+        toolCalls,
+        iterations: i + 1,
+        model: lastExecution?.modelName ?? requestedLocalModel ?? 'unknown',
+        modelVersion: lastModelVersion,
+        requestedTemperature: lastRequestedTemperature,
+        execution: lastExecution,
+        fallbackFromModelName: lastFallbackFromModelName,
+      };
     }
 
     // No tools called and no hallucination (probably a general knowledge question)
-    return { answer: responseText, toolCalls, iterations: i + 1, model: agentModel, modelVersion: lastModelVersion, requestedTemperature: lastRequestedTemperature };
+    return {
+      answer: responseText,
+      toolCalls,
+      iterations: i + 1,
+      model: lastExecution?.modelName ?? requestedLocalModel ?? 'unknown',
+      modelVersion: lastModelVersion,
+      requestedTemperature: lastRequestedTemperature,
+      execution: lastExecution,
+      fallbackFromModelName: lastFallbackFromModelName,
+    };
   }
 
-  return { answer: messages[messages.length - 1]?.content ?? 'Max iterations reached.', toolCalls, iterations: MAX_ITERATIONS, model: agentModel, modelVersion: lastModelVersion, requestedTemperature: lastRequestedTemperature };
+  return {
+    answer: messages[messages.length - 1]?.content ?? 'Max iterations reached.',
+    toolCalls,
+    iterations: MAX_ITERATIONS,
+    model: lastExecution?.modelName ?? requestedLocalModel ?? 'unknown',
+    modelVersion: lastModelVersion,
+    requestedTemperature: lastRequestedTemperature,
+    execution: lastExecution,
+    fallbackFromModelName: lastFallbackFromModelName,
+  };
 }
 
 // ── Fallback ────────────────────────────────────────────────────────────────

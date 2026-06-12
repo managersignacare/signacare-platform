@@ -307,6 +307,7 @@ async function computeSignalSnapshot(
 
   const outcomeRows = await db('outcome_measures')
     .where({ clinic_id: clinicId, patient_id: patientId })
+    .whereNull('deleted_at')
     .whereNotNull('total_score')
     .whereRaw("LOWER(COALESCE(template_name, measure_type, '')) IN (?, ?, ?, ?)", [
       'phq-9',
@@ -798,6 +799,7 @@ export const stepCareService = {
 
     const outcomeRows = await dbAdmin('outcome_measures')
       .where({ clinic_id: clinicId })
+      .whereNull('deleted_at')
       .whereNotNull('total_score')
       .whereRaw("LOWER(COALESCE(template_name, measure_type, '')) IN (?, ?, ?, ?)", [
         'phq-9',

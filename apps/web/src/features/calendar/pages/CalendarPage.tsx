@@ -25,11 +25,18 @@ import {
   FormControl,
   InputLabel,
   MenuItem,
+  Paper,
   Select,
   Stack,
+  ToggleButton,
+  ToggleButtonGroup,
   Typography,
 } from '@mui/material';
+import { useQuery } from '@tanstack/react-query';
 import { useCurrentUser } from '../../auth/hooks/useCurrentUser';
+import { AppointmentCalendar } from '../../appointments/components/AppointmentCalendar';
+import { appointmentApi } from '../../appointments/services/appointmentApi';
+import { appointmentKeys } from '../../appointments/queryKeys';
 import { useCalendarBlocks } from '../hooks/useCalendarBlocks';
 import {
   useCalendarPreferences,
@@ -39,11 +46,21 @@ import { useTodayView } from '../hooks/useTodayView';
 import { AvailabilityGridEditor } from '../components/AvailabilityGridEditor';
 import { TodayContactsView } from '../components/TodayContactsView';
 import { ICalSubscribeCard } from '../components/ICalSubscribeCard';
+import { staffSettingsApi } from '../../staff-settings/services/staffSettingsApi';
+import { staffSettingsKeys } from '../../staff-settings/queryKeys';
 
 const SLOT_OPTIONS = [15, 20, 30, 45, 60] as const;
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
+}
+
+function monthBounds(isoDate: string): { from: string; to: string; monthDate: Date } {
+  const monthDate = new Date(`${isoDate}T00:00:00`);
+  const first = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
+  const last = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0);
+  const toIso = (value: Date) => value.toISOString().slice(0, 10);
+  return { from: toIso(first), to: toIso(last), monthDate };
 }
 
 const CalendarPage: React.FC = () => {
@@ -52,7 +69,51 @@ const CalendarPage: React.FC = () => {
   const prefs = useCalendarPreferences();
   const updatePrefs = useUpdateCalendarPreferences();
   const [date, setDate] = useState<string>(todayIso());
+  const [scope, setScope] = useState<'mine' | 'team'>('mine');
   const today = useTodayView({ date });
+  const { from, to, monthDate } = monthBounds(date);
+
+  const teamAssignments = useQuery({
+    queryKey: staffSettingsKeys.teamAssignments(me?.id),
+    queryFn: () => staffSettingsApi.getTeamAssignments(me?.id),
+    enabled: Boolean(me?.id),
+    staleTime: 60_000,
+  });
+  const activeTeams = (teamAssignments.data ?? []).filter((assignment) => assignment.isActive);
+  const [selectedTeamId, setSelectedTeamId] = useState<string>('');
+
+  const myMonthlyAppointments = useQuery({
+    queryKey: appointmentKeys.list({ clinicianId: me?.id, from, to, limit: '200' }),
+    queryFn: () =>
+      appointmentApi.list({
+        clinicianId: me?.id,
+        from: `${from}T00:00:00.000Z`,
+        to: `${to}T23:59:59.999Z`,
+        limit: '200',
+      }),
+    enabled: Boolean(me?.id),
+    staleTime: 30_000,
+  });
+
+  const clinicMonthlyAppointments = useQuery({
+    queryKey: appointmentKeys.list({ from, to, limit: '200', offset: '0' }),
+    queryFn: () =>
+      appointmentApi.list({
+        from: `${from}T00:00:00.000Z`,
+        to: `${to}T23:59:59.999Z`,
+        limit: '200',
+        offset: '0',
+      }),
+    enabled: scope === 'team',
+    staleTime: 30_000,
+  });
+
+  const displayedAppointments = scope === 'mine'
+    ? (myMonthlyAppointments.data ?? [])
+    : (clinicMonthlyAppointments.data ?? []).filter((appointment) => {
+      const effectiveTeamId = selectedTeamId || activeTeams[0]?.orgUnitId;
+      return effectiveTeamId ? appointment.teamId === effectiveTeamId : false;
+    });
 
   if (meLoading || !me) {
     return (
@@ -117,6 +178,52 @@ const CalendarPage: React.FC = () => {
                 blocks={blocks.data}
                 preferences={prefs.data}
               />
+              <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 2 }}>
+                <Stack spacing={2}>
+                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ xs: 'flex-start', sm: 'center' }}>
+                    <Typography variant="h6" sx={{ flex: 1 }}>
+                      Scheduled Appointments
+                    </Typography>
+                    <ToggleButtonGroup
+                      size="small"
+                      exclusive
+                      value={scope}
+                      onChange={(_, value: 'mine' | 'team' | null) => {
+                        if (value) setScope(value);
+                      }}
+                    >
+                      <ToggleButton value="mine">Mine</ToggleButton>
+                      <ToggleButton value="team">My Team</ToggleButton>
+                    </ToggleButtonGroup>
+                    {scope === 'team' ? (
+                      <FormControl size="small" sx={{ minWidth: 220 }}>
+                        <InputLabel>Team</InputLabel>
+                        <Select
+                          value={selectedTeamId || activeTeams[0]?.orgUnitId || ''}
+                          label="Team"
+                          onChange={(e) => setSelectedTeamId(String(e.target.value))}
+                        >
+                          {activeTeams.map((assignment) => (
+                            <MenuItem key={assignment.id} value={assignment.orgUnitId}>
+                              {assignment.orgUnitName}
+                            </MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
+                    ) : null}
+                  </Stack>
+                  {(scope === 'mine' ? myMonthlyAppointments.isLoading : clinicMonthlyAppointments.isLoading) ? (
+                    <Box display="flex" justifyContent="center" py={4}>
+                      <CircularProgress />
+                    </Box>
+                  ) : (
+                    <AppointmentCalendar
+                      appointments={displayedAppointments}
+                      month={monthDate}
+                    />
+                  )}
+                </Stack>
+              </Paper>
               <ICalSubscribeCard />
             </Stack>
           ) : (

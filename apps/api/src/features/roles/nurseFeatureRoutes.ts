@@ -15,10 +15,8 @@ import { requirePatientRelationship } from '../../shared/authGuards';
 // DOUBLE-DOSING harm class. The schema enforces canonical names; the
 // mapper enforces canonical response casing per CLAUDE.md §5.2.
 import { MedicationAdministrationCreateSchema } from '@signacare/shared';
-import {
-  mapMedicationAdministrationRowToResponse,
-  type MedicationAdministrationRow,
-} from './medicationAdministrationMapper';
+import { mapMedicationAdministrationRowToResponse, type MedicationAdministrationRow } from './medicationAdministrationMapper';
+import { buildConsultantApprovalError, deriveEctTmsRiskLevel, isEctOrTmsAssessmentType, mapEctTmsApprovalErrorToResponse, mapNursingAssessmentRowToResponse, validateEctTmsAssessmentWriter, withConsultantApprovalMetadata } from './nurseEctTmsApprovalSupport';
 
 // Local Zod schema for observation updates (Phase R3b / CLAUDE.md §12).
 // `values` is the JSONB payload clinicians record during a structured
@@ -652,8 +650,6 @@ router.delete(
   },
 );
 
-// ── Nursing Assessments CRUD (NEWS2, fluid balance, falls risk, wound care) ─
-// GET /nursing-assessments
 router.get(
   '/nursing-assessments',
   requireRoles([...NURSE_ROLES]),
@@ -675,28 +671,39 @@ router.get(
   },
 );
 
-// POST /nursing-assessments
 router.post(
   '/nursing-assessments',
   requireRoles([...NURSE_ROLES]),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const {
-        patientId, assessmentType, scores, totalScore, riskLevel,
-        values, notes, assessedAt,
-      } = req.body;
+      const { patientId, assessmentType, scores, totalScore, riskLevel, values, notes, assessedAt } = req.body;
 
       if (!patientId || !assessmentType) {
         res.status(400).json({ error: 'patientId and assessmentType are required' });
         return;
       }
 
-      // Auto-assign active episode if not provided
       let resolvedEpisodeId = req.body.episodeId || null;
       if (!resolvedEpisodeId) {
         const activeEp = await db('episodes').where({ patient_id: patientId, clinic_id: req.clinicId, status: 'open' }).whereNull('deleted_at').orderBy('created_at', 'desc').first();
         resolvedEpisodeId = activeEp?.id ?? null;
       }
+
+      const role = req.user?.role;
+      if (isEctOrTmsAssessmentType(assessmentType)) {
+        const validation = validateEctTmsAssessmentWriter(role);
+        if (!validation.ok) {
+          res.status(403).json(mapEctTmsApprovalErrorToResponse(validation.error));
+          return;
+        }
+      }
+
+      const approvalAwareScores = isEctOrTmsAssessmentType(assessmentType)
+        ? withConsultantApprovalMetadata(scores || {}, role, req.user?.id)
+        : (scores || {});
+      const approvalAwareRiskLevel = isEctOrTmsAssessmentType(assessmentType)
+        ? deriveEctTmsRiskLevel(role)
+        : (riskLevel || null);
 
       const [row] = await db('nursing_assessments')
         .insert({
@@ -705,9 +712,9 @@ router.post(
           patient_id: patientId,
           episode_id: resolvedEpisodeId,
           assessment_type: assessmentType,
-          scores: JSON.stringify(scores || {}),
+          scores: JSON.stringify(approvalAwareScores),
           total_score: totalScore || null,
-          risk_level: riskLevel || null,
+          risk_level: approvalAwareRiskLevel,
           assessment_data: JSON.stringify(values || {}),
           notes: notes || null,
           staff_id: req.user?.id ?? null,
@@ -717,12 +724,60 @@ router.post(
         })
         .returning(NURSING_ASSESSMENT_COLUMNS);
 
-      res.status(201).json(row);
+      res.status(201).json(mapNursingAssessmentRowToResponse(row));
     } catch (err) { next(err); }
   },
 );
 
-// PUT /nursing-assessments/:id
+router.post(
+  '/nursing-assessments/:id/consultant-approve',
+  requireRoles([...CLINICAL_ROLES]),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const approvalError = buildConsultantApprovalError(req.user?.role);
+      if (approvalError) {
+        res.status(403).json(mapEctTmsApprovalErrorToResponse(approvalError));
+        return;
+      }
+
+      const existing = await db('nursing_assessments')
+        .where({ id: req.params.id, clinic_id: req.clinicId })
+        .first();
+      if (!existing) { res.status(404).json({ error: 'Not found' }); return; }
+      if (!isEctOrTmsAssessmentType(String(existing.assessment_type ?? ''))) {
+        res.status(400).json({ error: 'Only ECT/TMS forms can be consultant-approved through this workflow', code: 'ECT_TMS_APPROVAL_NOT_APPLICABLE' });
+        return;
+      }
+
+      const auth = buildAuthContext(req, String(existing.patient_id));
+      await requirePatientRelationship(auth, String(existing.patient_id));
+
+      const scores = existing.scores && typeof existing.scores === 'object'
+        ? { ...(existing.scores as Record<string, unknown>) }
+        : {};
+      const approvedScores = {
+        ...scores,
+        approvalStatus: 'approved',
+        approvalRequired: false,
+        approvedByStaffId: req.user?.id ?? null,
+        approvedAt: new Date().toISOString(),
+        approvedRole: req.user?.role ?? null,
+      };
+
+      const [row] = await db('nursing_assessments')
+        .where({ id: req.params.id, clinic_id: req.clinicId })
+        .update({
+          scores: JSON.stringify(approvedScores),
+          risk_level: 'approved',
+          updated_at: db.fn.now(),
+        })
+        .returning(NURSING_ASSESSMENT_COLUMNS);
+
+      res.json(mapNursingAssessmentRowToResponse(row));
+    } catch (err) { next(err); }
+  },
+);
+
 router.put(
   '/nursing-assessments/:id',
   requireRoles([...NURSE_ROLES]),
@@ -753,12 +808,11 @@ router.put(
         .returning(NURSING_ASSESSMENT_COLUMNS);
 
       if (!row) { res.status(404).json({ error: 'Not found' }); return; }
-      res.json(row);
+      res.json(mapNursingAssessmentRowToResponse(row));
     } catch (err) { next(err); }
   },
 );
 
-// DELETE /nursing-assessments/:id
 router.delete(
   '/nursing-assessments/:id',
   requireRoles([...NURSE_ROLES]),
@@ -773,15 +827,6 @@ router.delete(
   },
 );
 
-// ── Phone Triage — Nurse Clinical Review ───────────────────────────────────
-// Tier 1.4 (CRIT-H2 / GAP-B2). Nurse-only PATCH that sets the structured
-// clinical_risk_flags jsonb column on an existing phone_triage row. The
-// receptionist POST/PUT at /phone-triage writes only receptionist_summary;
-// risk findings NEVER traverse the receptionist write-path, preventing
-// cross-role overwrite + leakage of clinical risk text to non-clinical
-// staff. Patient-relationship check is gated ONLY when the row has a
-// linked patient_id (call-line triage may predate patient registration).
-//
 // PATCH /phone-triage/:id/clinical-triage
 router.patch(
   '/phone-triage/:id/clinical-triage',

@@ -32,6 +32,7 @@ export const CorrespondenceLettersResponseScaffoldSchema = z.object({
   signatureData: z.string().nullable().optional(),
   signedById: z.string().uuid().nullable().optional(),
   signedAt: z.string().datetime().nullable().optional(),
+  searchTsv: z.unknown().nullable().optional(),
 });
 
 export type CorrespondenceLettersResponseScaffold = z.infer<typeof CorrespondenceLettersResponseScaffoldSchema>;

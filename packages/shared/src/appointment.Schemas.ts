@@ -22,6 +22,13 @@ export const AppointmentTypeSchema = z.enum([
   'clinical_review',
 ]);
 
+export const AppointmentModeSchema = z.enum([
+  'direct',
+  'telehealth',
+  'videoconference',
+  'other',
+]);
+
 export const CreateAppointmentDTO = z.object({
   patientId: z.string().uuid(),
   clinicianId: z.string().uuid().optional(),
@@ -33,6 +40,7 @@ export const CreateAppointmentDTO = z.object({
   startTime: z.string(),
   endTime: z.string(),
   type: AppointmentTypeSchema.optional(),
+  mode: AppointmentModeSchema.optional(),
   notes: z.string().max(5000).optional(),
   telehealthDetails: z
     .object({
@@ -55,6 +63,7 @@ export const UpdateAppointmentDTO = z.object({
   startTime: z.string().datetime().optional(),
   endTime: z.string().datetime().optional(),
   type: AppointmentTypeSchema.optional(),
+  mode: AppointmentModeSchema.optional(),
   notes: z.string().max(5000).optional(),
   telehealthDetails: z
     .object({
@@ -82,8 +91,13 @@ export const AppointmentResponse = z.object({
   endTime: z.string().datetime(),
   status: AppointmentStatusSchema,
   type: AppointmentTypeSchema,
+  mode: AppointmentModeSchema.nullable().optional(),
   patientResponse: z.enum(['attending', 'not_attending']).nullable().optional(),
   notes: z.string().nullable().optional(),
+  teamId: z.string().uuid().nullable().optional(),
+  teamName: z.string().nullable().optional(),
+  attendeeStaffIds: z.array(z.string().uuid()).optional(),
+  attendeeStaffNames: z.array(z.string()).optional(),
   telehealthLink: z.string().nullable().optional(),
   telehealthProvider: z.string().nullable().optional(),
   telehealthPasscode: z.string().nullable().optional(),
@@ -111,6 +125,7 @@ export const AppointmentSearchDTO = z.object({
 // Type aliases for all schemas
 export type AppointmentStatus = z.infer<typeof AppointmentStatusSchema>;
 export type AppointmentType = z.infer<typeof AppointmentTypeSchema>;
+export type AppointmentMode = z.infer<typeof AppointmentModeSchema>;
 export type CreateAppointmentDTO = z.infer<typeof CreateAppointmentDTO>;
 export type UpdateAppointmentDTO = z.infer<typeof UpdateAppointmentDTO>;
 export type AppointmentResponse = z.infer<typeof AppointmentResponse>;

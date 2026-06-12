@@ -20,7 +20,7 @@
 ### Session
 - Session expires after 60 minutes of inactivity (15 minutes without interaction)
 - A warning dialog appears 2 minutes before expiry
-- During AI Scribe recording, session extends to 75 minutes
+- During active AI Scribe recording or processing, the app keeps the session alive automatically so long interviews are not interrupted by idle logout
 - Click "Extend Session" to reset the timer
 
 ---

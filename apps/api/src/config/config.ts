@@ -31,8 +31,18 @@ const envSchema = z.object({
   // Cookie
   COOKIE_DOMAIN: z.string().optional(),
   // Local LLM (Ollama)
+  OLLAMA_URL: z.string().optional(),
   OLLAMA_BASE_URL: z.string().optional().default('http://localhost:11434'),
   OLLAMA_MODEL: z.string().optional().default('llama3.2'),
+  AZURE_OPENAI_ENDPOINT: z.string().url().optional(),
+  AZURE_OPENAI_API_KEY: z.string().optional(),
+  AZURE_OPENAI_AUTH_MODE: z.enum(['managed_identity', 'api_key']).optional().default('managed_identity'),
+  AZURE_OPENAI_API_VERSION: z.string().optional().default('2025-01-01-preview'),
+  AZURE_OPENAI_DEPLOYMENT_FAST_CLINICAL: z.string().optional(),
+  AZURE_OPENAI_DEPLOYMENT_BEST_CLINICAL: z.string().optional(),
+  AZURE_OPENAI_DEPLOYMENT_FAST_CLINICAL_VERSION: z.string().optional(),
+  AZURE_OPENAI_DEPLOYMENT_BEST_CLINICAL_VERSION: z.string().optional(),
+  AZURE_OPENAI_PRIVATE_NETWORK_ENFORCED: z.enum(['true', 'false']).optional().default('false'),
   // Rate limiting
   LLM_RATE_LIMIT: z.coerce.number().int().positive().optional(),
   // Azure / O365
@@ -57,6 +67,9 @@ const envSchema = z.object({
   PHI_ENCRYPTION_KEYRING_JSON: z.string().optional(),
   PHI_ENCRYPTION_ACTIVE_KEY_VERSION: z.string().optional(),
   BLIND_INDEX_KEY: z.string().length(64).regex(/^[a-f0-9]+$/i, 'Must be 64 hex chars').optional(),
+  PATIENT_APP_DEDUPE_PEPPER: z.string().length(64).regex(/^[a-f0-9]+$/i, 'Must be 64 hex chars').optional(),
+  PATIENT_APP_DEDUPE_PEPPER_VERSION: z.string().regex(/^v\d+$/i).optional(),
+  PATIENT_APP_DEFAULT_CLINIC_ID: z.string().trim().min(1).optional(),
   SESSION_SECRET: z.string().min(32).optional(),
   // SMART-on-FHIR launch + bulk-export download URLs are embedded
   // into OAuth redirect URIs, `iss` parameters, and
@@ -95,6 +108,9 @@ if (env.NODE_ENV !== 'test') {
   if (!env.BLIND_INDEX_KEY) {
     missing.push('BLIND_INDEX_KEY');
   }
+  if (env.NODE_ENV === 'production' && !env.PATIENT_APP_DEDUPE_PEPPER) {
+    missing.push('PATIENT_APP_DEDUPE_PEPPER');
+  }
   if (missing.length > 0) {
     // eslint-disable-next-line no-console
     console.error(`❌ Missing required runtime secrets for apps/api: ${missing.join(', ')}`);
@@ -113,6 +129,7 @@ if (env.NODE_ENV === "production") {
   if (!env.API_BASE_URL) warnings.push("API_BASE_URL not set — SMART-on-FHIR redirects + bulk-export URLs will fall back to http://localhost:4000 which is almost certainly wrong in prod");
   if (!env.PHI_ENCRYPTION_KEY && !env.PHI_ENCRYPTION_KEYRING_JSON) warnings.push("PHI encryption key not set — patient PHI will NOT be encrypted at rest");
   if (!env.BLIND_INDEX_KEY) warnings.push("BLIND_INDEX_KEY not set — patient search by encrypted fields will fail (patient creation will crash)");
+  if (!env.PATIENT_APP_DEDUPE_PEPPER) warnings.push("PATIENT_APP_DEDUPE_PEPPER not set — public registration dedupe will fail closed in production");
   if (!env.SESSION_SECRET) warnings.push("SESSION_SECRET not set — session security weakened");
   if (warnings.length > 0) {
     console.warn("⚠️  Production warnings:\n  - " + warnings.join("\n  - "));
@@ -146,8 +163,19 @@ export const config = {
   },
   REDIS_URL: env.REDIS_URL,
   ollama: {
-    baseUrl: env.OLLAMA_BASE_URL,
+    baseUrl: env.OLLAMA_URL ?? env.OLLAMA_BASE_URL,
     model: env.OLLAMA_MODEL,
+  },
+  azureOpenAi: {
+    endpoint: env.AZURE_OPENAI_ENDPOINT ?? null,
+    apiKey: env.AZURE_OPENAI_API_KEY ?? null,
+    authMode: env.AZURE_OPENAI_AUTH_MODE,
+    apiVersion: env.AZURE_OPENAI_API_VERSION,
+    fastClinicalDeployment: env.AZURE_OPENAI_DEPLOYMENT_FAST_CLINICAL ?? null,
+    bestClinicalDeployment: env.AZURE_OPENAI_DEPLOYMENT_BEST_CLINICAL ?? null,
+    fastClinicalModelVersion: env.AZURE_OPENAI_DEPLOYMENT_FAST_CLINICAL_VERSION ?? null,
+    bestClinicalModelVersion: env.AZURE_OPENAI_DEPLOYMENT_BEST_CLINICAL_VERSION ?? null,
+    privateNetworkEnforced: env.AZURE_OPENAI_PRIVATE_NETWORK_ENFORCED === 'true',
   },
   O365_TENANT_ID: env.O365_TENANT_ID,
   O365_CLIENT_ID: env.O365_CLIENT_ID,

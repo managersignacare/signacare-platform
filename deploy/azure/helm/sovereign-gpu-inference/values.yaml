@@ -1,0 +1,49 @@
+replicaCount: 1
+
+image:
+  repository: signacarecr.azurecr.io/signacare-ollama-sovereign
+  digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+  pullPolicy: IfNotPresent
+
+runtime:
+  engine: ollama
+  modelName: llama3.2:signacare-35f39aa1
+  modelManifestSha256: sha256:35f39aa10ab6344466b66afa2681446fc66e9631e013b047068177842d9afc58
+  modelManifestPath: /tmp/ollama-model-manifest.json
+
+service:
+  port: 11434
+
+resources:
+  requests:
+    cpu: "2"
+    memory: 8Gi
+    nvidia.com/gpu: "1"
+  limits:
+    cpu: "4"
+    memory: 16Gi
+    nvidia.com/gpu: "1"
+
+nodeSelector:
+  signacare.io/pool: inference
+  signacare.io/gpu: "true"
+
+tolerations:
+  - key: signacare.io/lane
+    operator: Equal
+    value: inference
+    effect: NoSchedule
+
+podLabels:
+  signacare.io/component: sovereign-gpu-inference
+
+networkPolicy:
+  enabled: true
+  allowedIngress:
+    namespaceSelector: {}
+    podSelector:
+      matchLabels:
+        signacare.io/ai-client: "true"
+
+podDisruptionBudget:
+  minAvailable: 1

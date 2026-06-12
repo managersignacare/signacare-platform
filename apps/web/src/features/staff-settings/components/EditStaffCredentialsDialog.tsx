@@ -9,7 +9,7 @@ import {
 } from '@mui/material';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
-import { ALL_SPECIALTIES, SPECIALTY_DISPLAY, type SpecialtyType } from '@signacare/shared';
+import { ALL_SPECIALTIES, SPECIALTY_DISPLAY, isPrescriberSystemRole, type SpecialtyType } from '@signacare/shared';
 import { apiClient } from '../../../shared/services/apiClient';
 import { useDisciplines } from '../hooks/useStaffSettings';
 import { staffProfileKeys, staffPrescriberKeys, staffKeys } from '../queryKeys';
@@ -81,6 +81,7 @@ export function EditStaffCredentialsDialog({ open, onClose, onSaved, staffId, cl
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const { data: disciplineOptions } = useDisciplines();
+  const roleGrantsPrescribing = isPrescriberSystemRole(form.role ?? null);
 
   useEffect(() => {
     if (!data) return;
@@ -97,6 +98,13 @@ export function EditStaffCredentialsDialog({ open, onClose, onSaved, staffId, cl
     setPhiProvider(data.specialisation ?? '');
     setPhiNumber(data.hpii ?? '');
   }, [data]);
+
+  useEffect(() => {
+    setIsPrescriber(roleGrantsPrescribing);
+    if (!roleGrantsPrescribing) {
+      setForm((prev) => ({ ...prev, prescriberNumber: '' }));
+    }
+  }, [roleGrantsPrescribing]);
 
   const saveMut = useMutation({
     mutationFn: (payload: Partial<StaffData>) =>
@@ -309,12 +317,11 @@ export function EditStaffCredentialsDialog({ open, onClose, onSaved, staffId, cl
             </Typography>
             <Grid container spacing={2}>
               <Grid size={{ xs: 12 }}>
-                <FormControlLabel
-                  control={<Switch checked={isPrescriber} onChange={(_, value) => setIsPrescriber(value)} size="small" />}
-                  label={<Typography variant="body2">This staff member is an authorised prescriber</Typography>}
-                />
+                <Alert severity={roleGrantsPrescribing ? 'info' : 'warning'}>
+                  Prescribing privileges now come from the selected system role. Only prescriber consultant, registrar, HMO, and nurse practitioner roles can prescribe.
+                </Alert>
               </Grid>
-              {isPrescriber && (
+              {roleGrantsPrescribing && (
                 <Grid size={{ xs: 12, sm: 6 }}>
                   <TextField label="PBS Prescriber Number" fullWidth size="small" value={form.prescriberNumber ?? ''} onChange={e => set('prescriberNumber', e.target.value)}
                     placeholder="e.g. 1234567A" helperText="Required for PBS prescriptions" />

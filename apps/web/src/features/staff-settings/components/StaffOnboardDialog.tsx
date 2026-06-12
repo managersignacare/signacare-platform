@@ -32,6 +32,7 @@ import {
   type StaffCreateResponse,
 } from '../pages/staffAssignmentsPageSupport'
 import {
+  isPrescriberSystemRole,
   STAFF_PROVIDER_TYPES,
   STAFF_SYSTEM_ROLES,
   type StaffProviderNumber,
@@ -63,6 +64,14 @@ export function StaffOnboardDialog({ open, clinicId, isSuperadmin, onClose }: St
   const [phiNumber, setPhiNumber] = React.useState('')
   const [saving, setSaving] = React.useState(false)
   const { data: disciplineOptions } = useDisciplines(isSuperadmin ? clinicId : undefined)
+  const roleGrantsPrescribing = isPrescriberSystemRole(role)
+
+  React.useEffect(() => {
+    setIsPrescriber(roleGrantsPrescribing)
+    if (!roleGrantsPrescribing) {
+      setPrescriberNumber('')
+    }
+  }, [roleGrantsPrescribing])
 
   const addProviderNumber = () => {
     setProviderNumbers(prev => [...prev, { number: '', location: '', type: 'Medicare' }])
@@ -185,12 +194,11 @@ export function StaffOnboardDialog({ open, clinicId, isSuperadmin, onClose }: St
 
           <Grid size={{ xs: 12 }}><Divider><Typography variant="caption">Prescriber Details</Typography></Divider></Grid>
           <Grid size={{ xs: 12 }}>
-            <FormControlLabel
-              control={<Switch checked={isPrescriber} onChange={(_, v) => setIsPrescriber(v)} size="small" />}
-              label={<Typography variant="body2">This staff member is an authorised prescriber</Typography>}
-            />
+            <Alert severity={roleGrantsPrescribing ? 'info' : 'warning'}>
+              Prescribing privileges now come from the selected system role. Only prescriber consultant, registrar, HMO, and nurse practitioner roles can prescribe.
+            </Alert>
           </Grid>
-          {isPrescriber && (
+          {roleGrantsPrescribing && (
             <Grid size={{ xs: 12, sm: 6 }}>
               <TextField label="PBS Prescriber Number" fullWidth size="small" value={prescriberNumber}
                 onChange={e => setPrescriberNumber(e.target.value)} placeholder="e.g. 1234567A"

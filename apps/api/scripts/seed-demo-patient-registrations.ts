@@ -87,6 +87,26 @@ const PATIENT_NAME_POOL: readonly DemoPerson[] = [
   { givenName: 'Marcus', familyName: 'Donovan' },
   { givenName: 'Hannah', familyName: 'Reid' },
   { givenName: 'Victor', familyName: 'Lam' },
+  { givenName: 'Sienna', familyName: 'Wallace' },
+  { givenName: 'Jordan', familyName: 'Ali' },
+  { givenName: 'Maya', familyName: 'Bishop' },
+  { givenName: 'Oliver', familyName: 'Khan' },
+  { givenName: 'Talia', familyName: 'Morgan' },
+  { givenName: 'Isaac', familyName: 'Chen' },
+  { givenName: 'Ava', familyName: 'Douglas' },
+  { givenName: 'Leo', familyName: 'Sharma' },
+  { givenName: 'Freya', familyName: 'Olsen' },
+  { givenName: 'Caleb', familyName: 'Singh' },
+  { givenName: 'Nora', familyName: 'Parker' },
+  { givenName: 'Samuel', familyName: 'Hughes' },
+  { givenName: 'Elena', familyName: 'Rao' },
+  { givenName: 'Mason', familyName: 'Brooks' },
+  { givenName: 'Ruby', familyName: 'Fisher' },
+  { givenName: 'Julian', familyName: 'Stone' },
+  { givenName: 'Imogen', familyName: 'Price' },
+  { givenName: 'Nathan', familyName: 'Ward' },
+  { givenName: 'Zoe', familyName: 'Patel' },
+  { givenName: 'Hamish', familyName: 'Grant' },
 ];
 
 const SUPPORT_NAME_POOL: readonly DemoPerson[] = [
@@ -205,7 +225,8 @@ function buildDemoPatients(): DemoPatientRegistration[] {
     const address = pickCycled(ADDRESS_POOL, index);
     const fund = pickCycled(HEALTH_FUNDS, index);
     const relationship = pickCycled(RELATIONSHIPS, index);
-    const dateOfBirth = `19${80 + index}-${String((index % 12) + 1).padStart(2, '0')}-${String((index % 27) + 1).padStart(2, '0')}`;
+    const birthYear = 1980 + index;
+    const dateOfBirth = `${birthYear}-${String((index % 12) + 1).padStart(2, '0')}-${String((index % 27) + 1).padStart(2, '0')}`;
     const gpProviderNumber = `GP${String(700000 + index).padStart(6, '0')}`;
     const specialistProviderNumber = `SP${String(810000 + index).padStart(6, '0')}`;
     const interpreterRequired = index % 2 === 0;

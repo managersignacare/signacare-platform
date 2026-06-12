@@ -18,6 +18,7 @@ import { useQuery } from '@tanstack/react-query';
 import {
   ALL_SPECIALTIES,
   SPECIALTY_DISPLAY,
+  type AppointmentMode,
   type SpecialtyType,
   type AppointmentType,
 } from '@signacare/shared';
@@ -41,6 +42,11 @@ interface AppointmentApiRow {
   clinicianId: string | null;
   status: string;
   type: string;
+  mode?: AppointmentMode | null;
+  teamId?: string | null;
+  teamName?: string | null;
+  attendeeStaffIds?: string[];
+  attendeeStaffNames?: string[];
   telehealthLink?: string | null;
   specialtyCode?: SpecialtyType | null;
 }
@@ -73,7 +79,6 @@ function getErrorMessage(err: unknown, fallback: string): string {
 }
 
 function useStaffLookup() { return useQuery({ queryKey: appointmentKeys.staffLookup(), queryFn: () => apiClient.get<StaffLookupRow[]>('staff/lookup'), staleTime: 5 * 60 * 1000 }); }
-function useAppointmentModes() { return useQuery({ queryKey: appointmentKeys.staffSettingsAppointmentModes(), queryFn: () => apiClient.get<{ modes: { id: string; name: string; isActive: boolean }[] }>('staff-settings/appointment-modes').then(r => r.modes), staleTime: 5 * 60 * 1000 }); }
 type CalView = 'day' | 'workweek' | 'week' | 'list';
 
 interface Appointment {
@@ -103,13 +108,6 @@ const APPOINTMENT_TYPE_OPTIONS: Array<{ value: AppointmentType; label: string }>
   { value: 'group', label: 'Group Session' },
   { value: 'telehealth', label: 'Telehealth' },
 ];
-const APPOINTMENT_TYPE_LABEL_BY_VALUE: Record<AppointmentType, string> = APPOINTMENT_TYPE_OPTIONS.reduce(
-  (acc, option) => {
-    acc[option.value] = option.label;
-    return acc;
-  },
-  {} as Record<AppointmentType, string>,
-);
 const MBS_ITEMS = [
   '291 — Initial consultation (< 45 min)', '293 — Initial consultation (> 45 min)',
   '296 — Group psychotherapy', '300 — Subsequent attendance (< 15 min)', '302 — Subsequent attendance (15-30 min)',
@@ -135,6 +133,19 @@ const APPT_TYPE_LABELS: Record<string, string> = {
   initial: 'Initial Assessment', follow_up: 'Follow-up', assessment: 'Assessment',
   telehealth: 'Telehealth', group: 'Group Session', clinical_review: 'Clinical Review',
 };
+const APPOINTMENT_MODE_OPTIONS: Array<{ value: AppointmentMode; label: string }> = [
+  { value: 'direct', label: 'Direct' },
+  { value: 'telehealth', label: 'Telehealth' },
+  { value: 'videoconference', label: 'Videoconference' },
+  { value: 'other', label: 'Other' },
+];
+
+function appointmentModeLabel(mode?: AppointmentMode | null, telehealthLink?: string | null): string {
+  if (mode) {
+    return APPOINTMENT_MODE_OPTIONS.find((option) => option.value === mode)?.label ?? mode;
+  }
+  return telehealthLink ? 'Videoconference' : 'Direct';
+}
 
 export const AppointmentsPage = () => {
   const { data: tree } = useOrgTree();
@@ -184,10 +195,10 @@ export const AppointmentsPage = () => {
       startTime: start.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', hour12: false }),
       endTime: end.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', hour12: false }),
       clinicianName,
-      teamName: '',
+      teamName: a.teamName ?? '',
       status: a.status,
       type: a.type,
-      mode: a.type === 'telehealth' || a.telehealthLink ? 'Telehealth (Video)' : 'In Person',
+      mode: appointmentModeLabel(a.mode, a.telehealthLink),
       specialtyCode: a.specialtyCode ?? undefined,
     };
   }), [rawAppts, staffList]);
@@ -195,9 +206,10 @@ export const AppointmentsPage = () => {
   const filtered = useMemo(() => {
     let appts = appointments;
     if (clinicianFilter) appts = appts.filter(a => a.clinicianName.includes(clinicianFilter));
+    if (teamFilter) appts = appts.filter(a => a.teamName.includes(teamFilter));
     if (specialtyFilter) appts = appts.filter(a => a.specialtyCode === specialtyFilter);
     return appts;
-  }, [appointments, clinicianFilter, specialtyFilter]);
+  }, [appointments, clinicianFilter, specialtyFilter, teamFilter]);
 
   const weekDates = useMemo(() => getWeekDates(currentDate, view === 'week'), [currentDate, view]);
 
@@ -324,9 +336,20 @@ function ListView({ appointments }: ListViewProps) {
 
 // ============ Episode & MDT Selector (used inside dialog) ============
 
-interface EpisodeAndMdtSelectorProps { patientId: string; inviteEmails: string; setInviteEmails: (v: string) => void }
-function EpisodeAndMdtSelector({ patientId, inviteEmails, setInviteEmails }: EpisodeAndMdtSelectorProps) {
-  const [episodeId, setEpisodeId] = useState('');
+interface EpisodeAndMdtSelectorProps {
+  patientId: string;
+  episodeId: string;
+  setEpisodeId: (value: string) => void;
+  additionalClinicianIds: string[];
+  setAdditionalClinicianIds: React.Dispatch<React.SetStateAction<string[]>>;
+}
+function EpisodeAndMdtSelector({
+  patientId,
+  episodeId,
+  setEpisodeId,
+  additionalClinicianIds,
+  setAdditionalClinicianIds,
+}: EpisodeAndMdtSelectorProps) {
 
   const { data: episodes } = useQuery({
     queryKey: appointmentKeys.episodeActiveForAppt(patientId),
@@ -347,15 +370,16 @@ function EpisodeAndMdtSelector({ patientId, inviteEmails, setInviteEmails }: Epi
     enabled: !!episodeId,
   });
 
-  // Prepopulate invite emails from MDT when episode is selected
+  // Suggest MDT members as co-clinicians when the episode is selected.
   React.useEffect(() => {
-    if (alloc?.mdt?.length) {
-      const mdtNames = alloc.mdt.map(m => m.staffname).filter(Boolean);
-      if (mdtNames.length && !inviteEmails) {
-        setInviteEmails(mdtNames.join(', '));
-      }
+    if (!alloc?.mdt?.length || additionalClinicianIds.length > 0) return;
+    const suggestedIds = alloc.mdt
+      .map((member) => member.staffid)
+      .filter((staffId): staffId is string => typeof staffId === 'string' && staffId.length > 0);
+    if (suggestedIds.length > 0) {
+      setAdditionalClinicianIds(Array.from(new Set(suggestedIds)));
     }
-  }, [alloc, inviteEmails, setInviteEmails]);
+  }, [alloc, additionalClinicianIds.length, setAdditionalClinicianIds]);
 
   return (
     <>
@@ -379,13 +403,10 @@ function EpisodeAndMdtSelector({ patientId, inviteEmails, setInviteEmails }: Epi
 
 // ============ Full Appointment Dialog (with patient search) ============
 function NewAppointmentDialog({ open, onClose, flatUnits, staffList }: { open: boolean; onClose: () => void; flatUnits: { id: string; name: string }[]; staffList: { id: string; givenName: string; familyName: string }[] }) {
-  const { data: modes } = useAppointmentModes();
-
   const [saving, setSaving] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState<PatientOption | null>(null);
   const selectedPatientId = selectedPatient?.id ?? '';
 
-  const [title, setTitle] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [startTime, setStartTime] = useState('09:00');
   const [duration, setDuration] = useState(30);
@@ -396,10 +417,11 @@ function NewAppointmentDialog({ open, onClose, flatUnits, staffList }: { open: b
   // episode → clinician primary specialty → mental_health when omitted.
   const [specialty, setSpecialty] = useState<SpecialtyType | ''>('');
   const [apptType, setApptType] = useState<AppointmentType>('clinical_review');
-  const [mode, setMode] = useState('');
+  const [mode, setMode] = useState<AppointmentMode>('direct');
   const [telehealthLink, setTelehealthLink] = useState('');
+  const [episodeId, setEpisodeId] = useState('');
   const [mbsItem, setMbsItem] = useState('');
-  const [inviteEmails, setInviteEmails] = useState('');
+  const [additionalClinicianIds, setAdditionalClinicianIds] = useState<string[]>([]);
   const [reminders, setReminders] = useState<string[]>(['1 day before']);
   const [notes, setNotes] = useState('');
   const [sendPatientReminder, setSendPatientReminder] = useState(true);
@@ -410,8 +432,12 @@ function NewAppointmentDialog({ open, onClose, flatUnits, staffList }: { open: b
     setEndTime(`${String(Math.floor(totalMin / 60)).padStart(2, '0')}:${String(totalMin % 60).padStart(2, '0')}`);
   }, [startTime, duration]);
 
-  const isTelehealth = mode?.toLowerCase().includes('telehealth');
+  const isTelehealth = mode === 'telehealth' || mode === 'videoconference';
   const handleReminderToggle = (r: string) => setReminders(prev => prev.includes(r) ? prev.filter(x => x !== r) : [...prev, r]);
+  const formatStaffName = (staffId: string) => {
+    const staff = staffList.find((row) => row.id === staffId);
+    return staff ? `${staff.givenName} ${staff.familyName}` : staffId;
+  };
 
   return (
     <Dialog aria-labelledby="dialog-title" open={open} onClose={onClose} maxWidth="md" fullWidth>
@@ -426,17 +452,24 @@ function NewAppointmentDialog({ open, onClose, flatUnits, staffList }: { open: b
           </Grid>
 
           {/* Episode dropdown — loads active episodes for selected patient */}
-          {selectedPatientId && <EpisodeAndMdtSelector patientId={selectedPatientId} inviteEmails={inviteEmails} setInviteEmails={setInviteEmails} />}
+          {selectedPatientId && (
+            <EpisodeAndMdtSelector
+              patientId={selectedPatientId}
+              episodeId={episodeId}
+              setEpisodeId={setEpisodeId}
+              additionalClinicianIds={additionalClinicianIds}
+              setAdditionalClinicianIds={setAdditionalClinicianIds}
+            />
+          )}
 
-          <Grid size={{ xs: 12, sm: 6 }}><FormControl fullWidth size="small"><InputLabel>Appointment Type</InputLabel><Select value={apptType} onChange={e => { const nextType = e.target.value as AppointmentType; setApptType(nextType); if (!title) setTitle(APPOINTMENT_TYPE_LABEL_BY_VALUE[nextType] ?? nextType); }} label="Appointment Type">{APPOINTMENT_TYPE_OPTIONS.map(t => <MenuItem key={t.value} value={t.value}>{t.label}</MenuItem>)}</Select></FormControl></Grid>
-          <Grid size={{ xs: 12, sm: 6 }}><TextField label="Title *" fullWidth size="small" value={title} onChange={e => setTitle(e.target.value)} /></Grid>
+          <Grid size={{ xs: 12, sm: 6 }}><FormControl fullWidth size="small"><InputLabel>Appointment Type</InputLabel><Select value={apptType} onChange={e => setApptType(e.target.value as AppointmentType)} label="Appointment Type">{APPOINTMENT_TYPE_OPTIONS.map(t => <MenuItem key={t.value} value={t.value}>{t.label}</MenuItem>)}</Select></FormControl></Grid>
 
           <Grid size={{ xs: 12, sm: 3 }}><TextField label="Date" type="date" fullWidth size="small" value={date} onChange={e => setDate(e.target.value)} slotProps={{ inputLabel: { shrink: true } }} /></Grid>
           <Grid size={{ xs: 6, sm: 3 }}><TextField label="Start Time" type="time" fullWidth size="small" value={startTime} onChange={e => setStartTime(e.target.value)} slotProps={{ inputLabel: { shrink: true } }} /></Grid>
           <Grid size={{ xs: 6, sm: 3 }}><FormControl fullWidth size="small"><InputLabel>Duration</InputLabel><Select value={duration} onChange={e => setDuration(Number(e.target.value))} label="Duration">{DURATIONS.map(d => <MenuItem key={d} value={d}>{d} min</MenuItem>)}</Select></FormControl></Grid>
           <Grid size={{ xs: 6, sm: 3 }}><TextField label="End Time" type="time" fullWidth size="small" value={endTime} onChange={e => setEndTime(e.target.value)} slotProps={{ inputLabel: { shrink: true } }} /></Grid>
 
-          <Grid size={{ xs: 12, sm: 6 }}><FormControl fullWidth size="small"><InputLabel>Mode</InputLabel><Select value={mode} onChange={e => setMode(e.target.value)} label="Mode"><MenuItem value="">—</MenuItem>{(modes ?? []).filter(m => m.isActive).map(m => <MenuItem key={m.id} value={m.name}>{m.name}</MenuItem>)}</Select></FormControl></Grid>
+          <Grid size={{ xs: 12, sm: 6 }}><FormControl fullWidth size="small"><InputLabel>Mode</InputLabel><Select value={mode} onChange={e => setMode(e.target.value as AppointmentMode)} label="Mode">{APPOINTMENT_MODE_OPTIONS.map(option => <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>)}</Select></FormControl></Grid>
           {isTelehealth && <Grid size={{ xs: 12, sm: 6 }}><TextField label="Telehealth Link" fullWidth size="small" value={telehealthLink} onChange={e => setTelehealthLink(e.target.value)} placeholder="https://meet.example.com/..." /></Grid>}
 
           <Grid size={{ xs: 12, sm: 4 }}><FormControl fullWidth size="small"><InputLabel>Clinician</InputLabel><Select value={clinician} onChange={e => setClinician(e.target.value)} label="Clinician"><MenuItem value="">—</MenuItem>{staffList.map(s => <MenuItem key={s.id} value={s.id}>{s.givenName} {s.familyName}</MenuItem>)}</Select></FormControl></Grid>
@@ -444,7 +477,26 @@ function NewAppointmentDialog({ open, onClose, flatUnits, staffList }: { open: b
           <Grid size={{ xs: 12, sm: 4 }}><FormControl fullWidth size="small"><InputLabel>Team / Unit</InputLabel><Select value={team} onChange={e => setTeam(e.target.value)} label="Team / Unit"><MenuItem value="">—</MenuItem>{flatUnits.map(u => <MenuItem key={u.id} value={u.id}>{u.name}</MenuItem>)}</Select></FormControl></Grid>
 
           <Grid size={{ xs: 12, sm: 6 }}><FormControl fullWidth size="small"><InputLabel>MBS Item</InputLabel><Select value={mbsItem} onChange={e => setMbsItem(e.target.value)} label="MBS Item"><MenuItem value="">— None —</MenuItem>{MBS_ITEMS.map(m => <MenuItem key={m} value={m}>{m}</MenuItem>)}</Select></FormControl></Grid>
-          <Grid size={{ xs: 12, sm: 6 }}><TextField label="Invite Others (emails)" fullWidth size="small" value={inviteEmails} onChange={e => setInviteEmails(e.target.value)} placeholder="dr.smith@example.com" /></Grid>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <FormControl fullWidth size="small">
+              <InputLabel>Additional clinicians</InputLabel>
+              <Select
+                multiple
+                value={additionalClinicianIds}
+                onChange={(e) => setAdditionalClinicianIds(typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value)}
+                label="Additional clinicians"
+                renderValue={(selected) => (selected as string[]).map(formatStaffName).join(', ')}
+              >
+                {staffList
+                  .filter((staff) => staff.id !== clinician)
+                  .map((staff) => (
+                    <MenuItem key={staff.id} value={staff.id}>
+                      {staff.givenName} {staff.familyName}
+                    </MenuItem>
+                  ))}
+              </Select>
+            </FormControl>
+          </Grid>
 
           <Grid size={{ xs: 12 }}>
             <Typography variant="subtitle2" sx={{ mb: 0.5 }}>Reminders</Typography>
@@ -465,7 +517,7 @@ function NewAppointmentDialog({ open, onClose, flatUnits, staffList }: { open: b
       <Divider />
       <DialogActions sx={{ px: 3, py: 2 }}>
         <Button onClick={onClose}>Cancel</Button>
-        <Button variant="contained" disabled={!title.trim() || !selectedPatientId || saving}
+        <Button variant="contained" disabled={!selectedPatientId || saving}
           onClick={async () => {
             setSaving(true);
             try {
@@ -474,15 +526,15 @@ function NewAppointmentDialog({ open, onClose, flatUnits, staffList }: { open: b
               await apiClient.post('appointments', {
                 patientId: selectedPatientId,
                 clinicianId: clinician || undefined,
+                episodeId: episodeId || undefined,
                 specialtyCode: specialty || undefined,
                 startTime: startIso,
                 endTime: endIso,
                 type: apptType,
-                title: title.trim() || undefined,
                 mode: mode || undefined,
-                teamId: team || undefined,
-                mbsItem: mbsItem || undefined,
                 notes: notes || undefined,
+                attendeeStaffIds: additionalClinicianIds.filter((staffId) => staffId !== clinician),
+                ...(telehealthLink ? { telehealthDetails: { telehealthLink } } : {}),
               });
               onClose();
             } catch (err: unknown) {

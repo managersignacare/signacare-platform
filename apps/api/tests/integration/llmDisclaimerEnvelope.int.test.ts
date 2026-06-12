@@ -34,22 +34,10 @@ vi.mock('../../src/mcp/aiEnhancer', () => ({
 }));
 
 const localLlmMock = vi.hoisted(() => ({
-  clinicalAi: {
-    classifyText: vi.fn(),
-    generateMaudsleySummary: vi.fn(),
-    generateISBAR: vi.fn(),
-    generateFormulation: vi.fn(),
-    generate91DayReview: vi.fn(),
-    generateLetter: vi.fn(),
-    processAmbientNotes: vi.fn(),
-    generateAdminReport: vi.fn(),
-    generateRegistrationSummary: vi.fn(),
-    generateDischargeSummary: vi.fn(),
-    generateMedSummary: vi.fn(),
-  },
+  callLocalLlm: vi.fn(),
 }));
 vi.mock('../../src/mcp/localLlmAgent', () => ({
-  clinicalAi: localLlmMock.clinicalAi,
+  callLocalLlm: localLlmMock.callLocalLlm,
 }));
 
 // llmService.processSuggestion is called by /suggest. Mock it so we don't
@@ -210,7 +198,12 @@ describe.skipIf(!(await isIntegrationReady()))('BUG-038 clinical-disclaimer enve
   });
 
   it('T3 — /clinical-ai direct path (no patientId) carries canonical disclaimer', async () => {
-    localLlmMock.clinicalAi.classifyText.mockResolvedValueOnce('{"sentiment":"neutral"}');
+    localLlmMock.callLocalLlm.mockResolvedValueOnce({
+      text: '{"sentiment":"neutral"}',
+      model: 'mock-local-model',
+      tokensUsed: 64,
+      modelVersion: 'mock-local-model',
+    });
 
     const res = await request(app)
       .post('/api/v1/llm/clinical-ai')

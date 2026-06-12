@@ -1,0 +1,64 @@
+{
+  "$schema": "./corpus-manifest.schema.json",
+  "schemaVersion": "1.0.0",
+  "name": "signacare-asr-bench-seed",
+  "description": "Reproducible seed corpus for the Signacare ASR benchmark. Each entry pins an audio path (relative to the corpus root supplied via --corpus-root), the duration bucket the operator brief enumerates (5m / 15m / 60m), the reference transcript (verbatim, no PHI), and the seed used by the harness to randomise nothing — every run is deterministic in clip order so successive runs are diff-able.",
+  "phaseContext": "Phase 7 — ASR benchmark + performance upgrade lane",
+  "durationBuckets": ["5m", "15m", "60m"],
+  "clips": [
+    {
+      "id": "seed-5m-01",
+      "durationBucket": "5m",
+      "audioPath": "fixtures/seed-5m-01.wav",
+      "referenceTranscriptPath": "fixtures/seed-5m-01.reference.txt",
+      "seed": 1,
+      "phiClass": "synthetic",
+      "notes": "Synthetic dialog — adult community psychiatry intake. No real patient data."
+    },
+    {
+      "id": "seed-5m-02",
+      "durationBucket": "5m",
+      "audioPath": "fixtures/seed-5m-02.wav",
+      "referenceTranscriptPath": "fixtures/seed-5m-02.reference.txt",
+      "seed": 2,
+      "phiClass": "synthetic",
+      "notes": "Synthetic dialog — review encounter with medication titration."
+    },
+    {
+      "id": "seed-15m-01",
+      "durationBucket": "15m",
+      "audioPath": "fixtures/seed-15m-01.wav",
+      "referenceTranscriptPath": "fixtures/seed-15m-01.reference.txt",
+      "seed": 3,
+      "phiClass": "synthetic",
+      "notes": "Synthetic dialog — psychiatric review with risk assessment."
+    },
+    {
+      "id": "seed-15m-02",
+      "durationBucket": "15m",
+      "audioPath": "fixtures/seed-15m-02.wav",
+      "referenceTranscriptPath": "fixtures/seed-15m-02.reference.txt",
+      "seed": 4,
+      "phiClass": "synthetic",
+      "notes": "Synthetic dialog — discharge planning + safety plan revision."
+    },
+    {
+      "id": "seed-60m-01",
+      "durationBucket": "60m",
+      "audioPath": "fixtures/seed-60m-01.wav",
+      "referenceTranscriptPath": "fixtures/seed-60m-01.reference.txt",
+      "seed": 5,
+      "phiClass": "synthetic",
+      "notes": "Synthetic dialog — long-form initial assessment + formulation."
+    },
+    {
+      "id": "seed-60m-02",
+      "durationBucket": "60m",
+      "audioPath": "fixtures/seed-60m-02.wav",
+      "referenceTranscriptPath": "fixtures/seed-60m-02.reference.txt",
+      "seed": 6,
+      "phiClass": "synthetic",
+      "notes": "Synthetic dialog — MDT case conference."
+    }
+  ]
+}

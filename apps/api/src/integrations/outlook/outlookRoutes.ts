@@ -2,11 +2,51 @@
 import { Router } from 'express';
 import axios from 'axios';
 import { config } from '../../config';
-import { db } from '../../db/db';
+import { db, dbAdmin } from '../../db/db';
 import { authMiddleware } from '../../middleware/authMiddleware';
 import { logger } from '../../utils/logger';
+import { outlookCalendarSyncService } from './outlookCalendarSyncService';
+import { z } from 'zod';
 
 export const outlookRoutes = Router();
+
+const OutlookCalendarSubscriptionStatusSchema = z.object({
+  connected: z.boolean(),
+  email: z.string().email().nullable(),
+  configured: z.boolean(),
+  subscription: z.object({
+    id: z.string().nullable().optional(),
+    status: z.string(),
+    expiresAt: z.string().datetime().nullable().optional(),
+  }).nullable(),
+});
+
+const OutlookOffice365StatusSchema = z.object({
+  configured: z.boolean(),
+  connected: z.boolean(),
+  email: z.string().nullable(),
+  features: z.object({
+    email: z.boolean(),
+    calendar: z.boolean(),
+    teams: z.boolean(),
+    sharepoint: z.boolean(),
+  }),
+});
+
+outlookRoutes.post('/calendar-sync/webhook', async (req, res, next) => {
+  const validationToken = req.query['validationToken'];
+  if (typeof validationToken === 'string' && validationToken.length > 0) {
+    res.status(200).type('text/plain').send(validationToken);
+    return;
+  }
+
+  try {
+    await outlookCalendarSyncService.handleWebhook(req.body ?? {});
+    res.status(202).json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
 
 outlookRoutes.use(authMiddleware);
 
@@ -34,6 +74,13 @@ outlookRoutes.get('/auth-callback', async (req, res, next) => {
   try {
     const code = req.query['code'] as string;
     const staffId = req.query['state'] as string;
+    const staff = await dbAdmin('staff')
+      .where({ id: staffId })
+      .first('id', 'clinic_id');
+    if (!staff?.id || !staff.clinic_id) {
+      res.status(404).json({ error: 'Staff member not found for Outlook callback.' });
+      return;
+    }
 
     const tokenUrl = `https://login.microsoftonline.com/${config.O365_TENANT_ID}/oauth2/v2.0/token`;
     const params = new URLSearchParams({
@@ -60,7 +107,7 @@ outlookRoutes.get('/auth-callback', async (req, res, next) => {
 
     const outlookEmail = meResp.data.mail ?? meResp.data.userPrincipalName;
 
-    await db('staff')
+    await dbAdmin('staff')
       .where({ id: staffId })
       .update({
         outlook_email: outlookEmail,
@@ -68,6 +115,16 @@ outlookRoutes.get('/auth-callback', async (req, res, next) => {
         outlook_token_expires_at: Date.now() + (expires_in - 60) * 1000,
         updated_at: new Date(),
       });
+
+    await outlookCalendarSyncService.ensureSubscriptionForStaff({
+      clinicId: String(staff.clinic_id),
+      ownerStaffId: staffId,
+    }).catch((error) => {
+      logger.warn(
+        { err: error, clinicId: staff.clinic_id, staffId },
+        'Outlook connected but calendar subscription bootstrap failed',
+      );
+    });
 
     res.redirect('/settings/integrations?outlook=connected');
   } catch (err) {
@@ -79,6 +136,10 @@ outlookRoutes.get('/auth-callback', async (req, res, next) => {
 outlookRoutes.delete('/disconnect', async (req, res, next) => {
   try {
     const staffId = req.user?.id as string;
+    const clinicId = req.clinicId;
+    await outlookCalendarSyncService.disconnectStaff(clinicId, staffId).catch((error) => {
+      logger.warn({ err: error, clinicId, staffId }, 'Outlook calendar subscription disconnect failed');
+    });
     await db('staff')
       .where({ id: staffId })
       .update({
@@ -97,15 +158,41 @@ outlookRoutes.delete('/disconnect', async (req, res, next) => {
 outlookRoutes.get('/status', async (req, res, _next) => {
   try {
     const staffId = req.user?.id as string;
-    const staff = await db('staff').where({ id: staffId }).first('outlook_email');
-    res.json({
-      connected: !!staff?.outlook_email,
-      email: staff?.outlook_email ?? null,
-      configured: !!(config.O365_CLIENT_ID && config.O365_TENANT_ID),
-    });
+    const syncStatus = await outlookCalendarSyncService.getStatus(req.clinicId, staffId);
+    res.json(OutlookCalendarSubscriptionStatusSchema.parse({
+      connected: syncStatus.connected,
+      email: syncStatus.email,
+      configured: syncStatus.configured,
+      subscription: syncStatus.subscription,
+    }));
   } catch {
     // Column might not exist yet
-    res.json({ connected: false, email: null, configured: !!(config.O365_CLIENT_ID && config.O365_TENANT_ID) });
+    res.json(OutlookCalendarSubscriptionStatusSchema.parse({
+      connected: false,
+      email: null,
+      configured: !!(config.O365_CLIENT_ID && config.O365_TENANT_ID),
+      subscription: null,
+    }));
+  }
+});
+
+outlookRoutes.post('/calendar-sync/resubscribe', async (req, res, next) => {
+  try {
+    const subscription = await outlookCalendarSyncService.ensureSubscriptionForStaff({
+      clinicId: req.clinicId,
+      ownerStaffId: req.user!.id,
+      forceResubscribe: true,
+    });
+    res.json({
+      ok: true,
+      subscription: {
+        id: subscription.external_subscription_id,
+        status: subscription.status,
+        expiresAt: subscription.expiration_utc.toISOString(),
+      },
+    });
+  } catch (err) {
+    next(err);
   }
 });
 
@@ -206,7 +293,7 @@ outlookRoutes.get('/o365-status', async (req, res, _next) => {
   try {
     const { isOffice365Configured } = await import('./office365Service');
     const staff = await db('staff').where({ id: req.user!.id }).first('outlook_email');
-    res.json({
+    res.json(OutlookOffice365StatusSchema.parse({
       configured: isOffice365Configured(),
       connected: !!staff?.outlook_email,
       email: staff?.outlook_email ?? null,
@@ -216,9 +303,19 @@ outlookRoutes.get('/o365-status', async (req, res, _next) => {
         teams: true,
         sharepoint: !!process.env.O365_SHAREPOINT_SITE,
       },
-    });
+    }));
   } catch {
-    res.json({ configured: false, connected: false, email: null, features: {} });
+    res.json(OutlookOffice365StatusSchema.parse({
+      configured: false,
+      connected: false,
+      email: null,
+      features: {
+        email: false,
+        calendar: false,
+        teams: false,
+        sharepoint: false,
+      },
+    }));
   }
 });
 

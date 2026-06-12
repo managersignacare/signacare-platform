@@ -6,8 +6,10 @@ import {
 } from '@mui/material';
 import { Visibility, VisibilityOff } from '@mui/icons-material';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiClient } from '../../../shared/services/apiClient';
+import { authApi } from '../services/authApi';
 import { useAuthStore } from '../../../store/authStore';
+import { authKeys } from '../queryKeys';
+import { useBrandingStore } from '../../../shared/store/brandingStore';
 
 interface ErrorWithMessage {
   response?: {
@@ -28,7 +30,8 @@ export default function ChangePasswordPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const isForced = searchParams.get('forced') === '1';
-  const logout = useAuthStore(s => s.logout);
+  const login = useAuthStore(s => s.login);
+  const resetBranding = useBrandingStore((s) => s.resetBranding);
   const queryClient = useQueryClient();
 
   const [currentPassword, setCurrentPassword] = useState('');
@@ -41,15 +44,16 @@ export default function ChangePasswordPage() {
   // @no-invalidate-needed: success path force-logs out and clears cache before navigation.
   const mutation = useMutation({
     mutationFn: (data: { currentPassword: string; newPassword: string }) =>
-      apiClient.post('auth/change-password', data),
-    onSuccess: () => {
+      authApi.changePassword(data),
+    onSuccess: (result) => {
       setSuccess(true);
-      // After forced password change, logout and redirect to login
+      queryClient.clear();
+      resetBranding();
+      login(result.user);
+      void queryClient.invalidateQueries({ queryKey: authKeys.all });
       setTimeout(() => {
-        queryClient.clear();
-        logout();
-        navigate('/login');
-      }, 2000);
+        navigate('/dashboard', { replace: true });
+      }, 1200);
     },
   });
 
@@ -79,7 +83,7 @@ export default function ChangePasswordPage() {
           </Typography>
 
           {success && (
-            <Alert severity="success" sx={{ mb: 2 }}>Password changed successfully. Redirecting to login...</Alert>
+            <Alert severity="success" sx={{ mb: 2 }}>Password changed successfully. Redirecting you to the dashboard...</Alert>
           )}
           {errorMsg && <Alert severity="error" sx={{ mb: 2 }}>{errorMsg}</Alert>}
 
@@ -89,6 +93,7 @@ export default function ChangePasswordPage() {
               type={showCurrent ? 'text' : 'password'}
               fullWidth autoFocus value={currentPassword}
               onChange={e => setCurrentPassword(e.target.value)}
+              autoComplete="current-password"
               InputProps={{
                 endAdornment: (
                   <InputAdornment position="end">
@@ -104,6 +109,7 @@ export default function ChangePasswordPage() {
               label="New Password" type={showNew ? 'text' : 'password'}
               fullWidth value={newPassword}
               onChange={e => setNewPassword(e.target.value)}
+              autoComplete="new-password"
               error={!!newPassword && !passwordValid}
               helperText={newPassword && !passwordValid ? 'Min 8 chars, 1 uppercase, 1 lowercase, 1 number, 1 special character' : ''}
               InputProps={{
@@ -121,6 +127,7 @@ export default function ChangePasswordPage() {
               label="Confirm New Password" type="password"
               fullWidth value={confirmPassword}
               onChange={e => setConfirmPassword(e.target.value)}
+              autoComplete="new-password"
               error={!!confirmPassword && !passwordsMatch}
               helperText={confirmPassword && !passwordsMatch ? 'Passwords do not match' : ''}
               sx={{ mb: 3 }}

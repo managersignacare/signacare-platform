@@ -1000,4 +1000,17 @@ describe('Phase 0b.1b-ii-A: for-of-of-const-string-array expansion (BUG-371 batc
       expect(ev.bodySource).toContain("t.integer('lock_version')");
     }
   });
+
+  it('uses schema-snapshot metadata instead of unknown for snapshot-only scalar columns', () => {
+    const clinicsType = fs.readFileSync(
+      path.resolve(__dirname, '../../apps/api/src/db/types/clinics.ts'),
+      'utf8',
+    );
+
+    expect(clinicsType).toContain('nominated_admin_staff_id?: string | null;');
+    expect(clinicsType).toContain('data_retention_years: number;');
+    expect(clinicsType).toContain('retention_purge_enabled: boolean;');
+    expect(clinicsType).not.toContain('nominated_admin_staff_id?: unknown | null;');
+    expect(clinicsType).not.toContain('data_retention_years?: unknown | null;');
+  });
 });

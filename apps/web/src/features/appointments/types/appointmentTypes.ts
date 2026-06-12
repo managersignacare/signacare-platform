@@ -9,16 +9,18 @@ import { AppointmentResponse, CreateAppointmentDTO } from '@signacare/shared';
 
 export type Appointment = AppointmentResponse;
 export type CreateAppointment = CreateAppointmentDTO;
-export type { AppointmentStatus } from '@signacare/shared';
+export type { AppointmentMode, AppointmentStatus } from '@signacare/shared';
 // Re-import locally for use in the getAppointmentStatusMeta() switch below.
 import type { AppointmentStatus } from '@signacare/shared';
 
 export type AppointmentFilters = {
-  clinicianStaffId?: string;
+  clinicianId?: string;
   patientId?: string;
   status?: string;
   from?: string;
   to?: string;
+  limit?: string;
+  offset?: string;
 };
 
 export const getAppointmentStatusMeta = (

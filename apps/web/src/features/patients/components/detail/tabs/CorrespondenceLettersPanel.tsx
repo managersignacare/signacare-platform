@@ -34,6 +34,7 @@ import DOMPurify from 'dompurify';
 import React, { useEffect, useState } from 'react';
 import { Letterhead } from '../../../../../shared/components/ui/Letterhead';
 import { apiClient } from '../../../../../shared/services/apiClient';
+import { llmAiJobsApi } from '../../../../../shared/services/llmAiJobsApi';
 import { unstyledButtonSx } from '../../../../../shared/styles/unstyledButton';
 import { openInNewWindow } from '../../../../../shared/utils/openInNewWindow';
 import { usePatient } from '../../../hooks/usePatient';
@@ -475,17 +476,13 @@ export function LettersPanel({
     if (!r || !p) return;
     setAiLoading(true);
     try {
-      const resp = await apiClient.instance.post<{ result: string }>(
-        'llm/clinical-ai',
-        {
-          action: 'letter',
-          data: `Generate a ${r.type === 'gp' ? 'GP letter' : 'clinical letter'} for patient ${patientFullName} (URNO: ${patientMrn}, DOB: ${patientDob}, Gender: ${patientGender}). Recipient: ${r.name} (${r.type}). GP: ${gpName} at ${gpPractice}.`,
-          patientId,
-          enhance: true,
-        },
-        { timeout: 180_000 },
-      );
-      setBody(resp.data.result);
+      const result = await llmAiJobsApi.runClinicalAiJob({
+        action: 'letter',
+        data: `Generate a ${r.type === 'gp' ? 'GP letter' : 'clinical letter'} for patient ${patientFullName} (URNO: ${patientMrn}, DOB: ${patientDob}, Gender: ${patientGender}). Recipient: ${r.name} (${r.type}). GP: ${gpName} at ${gpPractice}.`,
+        patientId,
+        enhance: true,
+      });
+      setBody(result);
     } catch {
       setBody(`${body}\n\n[AI generation failed — write manually]`);
     } finally {

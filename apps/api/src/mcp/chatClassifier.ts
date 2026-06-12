@@ -7,9 +7,10 @@
 //   - regex_keyword  — fast, deterministic. Matches prescribing verbs,
 //     dosage units, and controlled-drug names. No model call. Safe
 //     fallback; 10-50ms budget.
-//   - local_llm      — single-turn Ollama call with a structured
-//     prompt, more accurate on natural-language prompts but slower
-//     (200-800ms). Requires `chat-classifier-v1` Ollama model.
+//   - local_llm      — legacy mode name retained for compatibility.
+//     Implementation now routes a structured binary BLOCK/ALLOW prompt
+//     through the clinic's locked AI backend selection. More accurate
+//     on natural-language prompts but slower than regex fallback.
 //
 // Per-clinic mode is stored on clinic_settings.ai_chat_classifier_mode.
 // Callers use `classifyForClinic(clinicId, text)` which reads the
@@ -18,8 +19,12 @@
 // MUST be rejected by the calling handler + audit-logged.
 
 import logger from '../utils/logger';
-import { config } from '../config/config';
 import { db } from '../db/db';
+import {
+  resolveLockedRuntimeSelection,
+  routeTextGeneration,
+  type LockedAiRuntimeSelection,
+} from '../features/llm/modelRouter/modelRouter';
 
 export type ClassifierMode = 'regex_keyword' | 'local_llm';
 
@@ -35,6 +40,14 @@ export interface ClassifierResult {
   mode: ClassifierMode;
   matched: string | null;  // the token / phrase that triggered the block
 }
+
+const CHAT_CLASSIFIER_SYSTEM_PROMPT =
+  'You are a strict binary classifier for clinical chat prompts. ' +
+  'Return ONLY the string "BLOCK" or "ALLOW". ' +
+  'Return BLOCK if the prompt asks the AI to prescribe, initiate, ' +
+  'adjust, titrate, or discontinue a medication, OR if it specifies ' +
+  'a dosage regimen. Return ALLOW for all other clinical questions ' +
+  '(summaries, references, differential diagnosis discussions).';
 
 // ── Regex fallback lists ────────────────────────────────────────────────
 // Pattern: prescribing verbs that imply the AI is being asked to
@@ -83,33 +96,68 @@ function matchRegex(text: string): { reason: PrescribingReason; matched: string 
   return null;
 }
 
-// ── Local LLM path ──────────────────────────────────────────────────────
-async function callLocalLlmClassifier(text: string): Promise<{ blocked: boolean; matched: string | null } | null> {
-  const baseUrl = config.ollama?.baseUrl ?? 'http://localhost:11434';
-  const model = process.env.AI_CHAT_CLASSIFIER_MODEL ?? 'llama3.2:3b';
-  const prompt =
-    'You are a strict binary classifier for clinical chat prompts. ' +
-    'Return ONLY the string "BLOCK" or "ALLOW". ' +
-    'Return BLOCK if the prompt asks the AI to prescribe, initiate, ' +
-    'adjust, titrate, or discontinue a medication, OR if it specifies ' +
-    'a dosage regimen. Return ALLOW for all other clinical questions ' +
-    '(summaries, references, differential diagnosis discussions).\n\n' +
-    `Prompt: ${text.slice(0, 2000)}\n\nAnswer:`;
-  try {
-    const res = await fetch(`${baseUrl}/api/generate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model, prompt, stream: false }),
-    });
-    if (!res.ok) return null;
-    const data = (await res.json()) as { response?: string };
-    const answer = (data.response ?? '').trim().toUpperCase();
-    if (answer.startsWith('BLOCK')) return { blocked: true, matched: answer.slice(0, 120) };
+// ── Model-routed path ───────────────────────────────────────────────────
+function classifierRequestedLocalModel(
+  runtimeSelection: LockedAiRuntimeSelection,
+): string | undefined {
+  if (runtimeSelection.backend !== 'local_ollama') return undefined;
+  const requestedModel = process.env.AI_CHAT_CLASSIFIER_MODEL?.trim();
+  return requestedModel || undefined;
+}
+
+function parseModelClassifierAnswer(
+  answer: string,
+): { blocked: boolean; matched: string | null } | null {
+  const normalized = answer.trim().toUpperCase();
+  if (normalized.startsWith('BLOCK')) {
+    return { blocked: true, matched: answer.trim().slice(0, 120) || 'BLOCK' };
+  }
+  if (normalized.startsWith('ALLOW')) {
     return { blocked: false, matched: null };
+  }
+  return null;
+}
+
+async function callLocalLlmClassifier(
+  clinicId: string,
+  text: string,
+): Promise<{ blocked: boolean; matched: string | null } | null> {
+  const runtimeSelection = await resolveLockedRuntimeSelection(clinicId);
+  const prompt = `Prompt: ${text.slice(0, 2000)}\n\nAnswer:`;
+  try {
+    const response = await routeTextGeneration({
+      clinicId,
+      runtimeSelection,
+      alias: 'fast_clinical',
+      system: CHAT_CLASSIFIER_SYSTEM_PROMPT,
+      prompt,
+      temperature: 0,
+      maxTokens: 12,
+      requestedModel: classifierRequestedLocalModel(runtimeSelection),
+      action: 'classifier',
+      allowLocalStyleAdapter: false,
+    });
+    const parsed = parseModelClassifierAnswer(response.text);
+    if (parsed) return parsed;
+    logger.warn(
+      {
+        clinicId,
+        runtimeBackend: runtimeSelection.backend,
+        alias: response.execution.alias,
+        modelName: response.execution.modelName,
+        responsePreview: response.text.trim().slice(0, 120),
+      },
+      'chatClassifier: model-based classifier returned non-binary answer, falling back to regex',
+    );
+    return null;
   } catch (err) {
     logger.warn(
-      { err: err instanceof Error ? err.message : String(err) },
-      'chatClassifier: local_llm call failed, falling back to regex',
+      {
+        clinicId,
+        err: err instanceof Error ? err.message : String(err),
+        runtimeBackend: runtimeSelection.backend,
+      },
+      'chatClassifier: model-based classifier failed, falling back to regex',
     );
     return null;
   }
@@ -136,7 +184,7 @@ export async function classifyForClinic(
 ): Promise<ClassifierResult> {
   const mode = await getClassifierMode(clinicId);
   if (mode === 'local_llm') {
-    const llm = await callLocalLlmClassifier(text);
+    const llm = await callLocalLlmClassifier(clinicId, text);
     if (llm) {
       return {
         blocked: llm.blocked,
@@ -160,4 +208,10 @@ export async function classifyForClinic(
 }
 
 /** Exposed for unit tests + red-team harness. */
-export const _internal = { matchRegex, PRESCRIBING_VERBS, DOSAGE_PATTERNS, CONTROLLED_DRUGS };
+export const _internal = {
+  matchRegex,
+  parseModelClassifierAnswer,
+  PRESCRIBING_VERBS,
+  DOSAGE_PATTERNS,
+  CONTROLLED_DRUGS,
+};

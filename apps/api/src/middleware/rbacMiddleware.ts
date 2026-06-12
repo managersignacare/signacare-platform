@@ -1,4 +1,5 @@
 // apps/api/src/middleware/rbacMiddleware.ts
+import { roleSatisfiesRequirement } from '@signacare/shared';
 import type { Request, Response, NextFunction } from 'express';
 
 export function requireRole(...roles: string[]) {
@@ -13,7 +14,7 @@ export function requireRoles(roles: string[]) {
         .json({ error: 'Unauthenticated', code: 'UNAUTHENTICATED' });
       return;
     }
-    if (req.user.role === 'superadmin' || roles.includes(req.user.role)) {
+    if (roles.some((role) => roleSatisfiesRequirement(req.user!.role, role))) {
       next();
       return;
     }

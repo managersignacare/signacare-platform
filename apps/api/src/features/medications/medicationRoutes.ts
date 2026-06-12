@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { requireAuth } from '../../middleware/authMiddleware';
 import { requireRoles } from '../../middleware/rbacMiddleware';
-import { requireModuleRead } from '../../middleware/moduleAccessMiddleware';
+import { requireModuleRead, requireModuleWrite } from '../../middleware/moduleAccessMiddleware';
 import { MODULE_KEYS } from '../../shared/moduleKeys';
 import { idempotencyMiddleware } from '../../middleware/idempotencyMiddleware';
 import {
@@ -16,11 +16,11 @@ import {
 const router = Router();
 
 router.use(requireAuth);
-router.use(requireModuleRead(MODULE_KEYS.MEDICATIONS));
 
 // GET  /api/v1/patients/:patientId/medications
 router.get(
   '/patients/:patientId/medications',
+  requireModuleRead(MODULE_KEYS.MEDICATIONS),
   requireRoles(['clinician', 'admin', 'manager', 'superadmin']),
   listMedications,
 );
@@ -28,6 +28,7 @@ router.get(
 // GET  /api/v1/medications/:id
 router.get(
   '/:id',
+  requireModuleRead(MODULE_KEYS.MEDICATIONS),
   requireRoles(['clinician', 'admin', 'manager', 'superadmin']),
   getMedication,
 );
@@ -37,6 +38,7 @@ router.get(
 // failure without risking double-prescribing.
 router.post(
   '/',
+  requireModuleWrite(MODULE_KEYS.MEDICATIONS),
   requireRoles(['clinician', 'superadmin']),
   idempotencyMiddleware(),
   createMedication,
@@ -45,6 +47,7 @@ router.post(
 // PATCH /api/v1/medications/:id
 router.patch(
   '/:id',
+  requireModuleWrite(MODULE_KEYS.MEDICATIONS),
   requireRoles(['clinician', 'superadmin']),
   updateMedication,
 );
@@ -52,6 +55,7 @@ router.patch(
 // POST /api/v1/medications/:id/cease
 router.post(
   '/:id/cease',
+  requireModuleWrite(MODULE_KEYS.MEDICATIONS),
   requireRoles(['clinician', 'superadmin']),
   ceaseMedication,
 );
@@ -59,6 +63,7 @@ router.post(
 // DELETE /api/v1/medications/:id  (soft delete)
 router.delete(
   '/:id',
+  requireModuleWrite(MODULE_KEYS.MEDICATIONS),
   requireRoles(['superadmin']),
   deleteMedication,
 );

@@ -106,6 +106,37 @@ export class AuthService {
   private staffRepo = new StaffRepository();
   private authRepo = new AuthRepository();
 
+  private async createFreshSessionForUser(
+    user: AuthUser,
+    staffId: string,
+    clinicId: string,
+    ctx: LoginContext,
+  ): Promise<AuthResult> {
+    const refreshToken = issueRefreshToken(user);
+    const expiresAt = new Date(Date.now() + config.jwt.refreshTtlDays * 24 * 60 * 60 * 1000);
+
+    await this.authRepo.createSession({
+      id: uuidv4(),
+      staff_id: staffId,
+      clinic_id: clinicId,
+      refresh_token: refreshToken,
+      user_agent: ctx.userAgent ?? null,
+      ip_address: ctx.ipAddress ?? null,
+      expires_at: expiresAt,
+      created_at: new Date(),
+      updated_at: new Date(),
+      revoked_at: null,
+      lock_version: 1,
+      family_id: uuidv4(),
+    });
+
+    return {
+      accessToken: issueAccessToken(user),
+      refreshToken,
+      user,
+    };
+  }
+
   async login(dto: LoginDTO, ctx: LoginContext): Promise<LoginResult> {
     const staff = await this.staffRepo.findByEmail(dto.email);
     if (!staff) {
@@ -144,6 +175,8 @@ export class AuthService {
     const MFA_REQUIRED_ROLES = [
       'clinician', 'admin', 'superadmin', 'nurse',
       'receptionist', 'manager', 'referral_coordinator',
+      'prescriber_consultant', 'prescriber_registrar',
+      'prescriber_hmo', 'prescriber_nurse_practitioner',
     ];
     const requiresMfa =
       staff.mfa_enabled &&
@@ -165,27 +198,7 @@ export class AuthService {
     );
     // BUG-WF21-JWT-GHOST-SESSION:
     // persist refresh session FIRST; mint access JWT only after durable session insert.
-    const refreshToken = issueRefreshToken(user);
-
-    const expiresAt = new Date(Date.now() + config.jwt.refreshTtlDays * 24 * 60 * 60 * 1000);
-    // RFC 6819 §5.2.2.3: a fresh login starts a NEW session family.
-    // Subsequent refreshes propagate this id; a stolen token in the
-    // chain revokes the whole family.
-    await this.authRepo.createSession({
-      id: uuidv4(),
-      staff_id: staff.id,
-      clinic_id: staff.clinic_id,
-      refresh_token: refreshToken,
-      user_agent: ctx.userAgent ?? null,
-      ip_address: ctx.ipAddress ?? null,
-      expires_at: expiresAt,
-      created_at: new Date(),
-      updated_at: new Date(),
-      revoked_at: null,
-      lock_version: 1,
-      family_id: uuidv4(),
-    });
-    const accessToken = issueAccessToken(user);
+    const session = await this.createFreshSessionForUser(user, staff.id, staff.clinic_id, ctx);
 
     // GAP-20: Concurrent session limit — max 5 active sessions per user
     const MAX_SESSIONS = 5;
@@ -226,7 +239,7 @@ export class AuthService {
       { staffId: staff.id, clinicId: staff.clinic_id },
       "Staff logged in",
     );
-    return { accessToken, refreshToken, user };
+    return session;
   }
 
   async verifyMfa(dto: MFAVerifyDTO, ctx: LoginContext): Promise<AuthResult> {
@@ -339,31 +352,13 @@ export class AuthService {
     );
     // BUG-WF21-JWT-GHOST-SESSION:
     // persist refresh session FIRST; mint access JWT only after durable session insert.
-    const refreshToken = issueRefreshToken(user);
-
-    const expiresAt = new Date(Date.now() + config.jwt.refreshTtlDays * 24 * 60 * 60 * 1000);
-    await this.authRepo.createSession({
-      id: uuidv4(),
-      staff_id: staff.id,
-      clinic_id: staff.clinic_id,
-      refresh_token: refreshToken,
-      user_agent: ctx.userAgent ?? null,
-      ip_address: ctx.ipAddress ?? null,
-      expires_at: expiresAt,
-      created_at: new Date(),
-      updated_at: new Date(),
-      revoked_at: null,
-      lock_version: 1,
-      // RFC 6819 §5.2.2.3: fresh login → new family.
-      family_id: uuidv4(),
-    });
-    const accessToken = issueAccessToken(user);
+    const session = await this.createFreshSessionForUser(user, staff.id, staff.clinic_id, ctx);
 
     logger.info(
       { staffId: staff.id, clinicId: staff.clinic_id },
       "MFA verified",
     );
-    return { accessToken, refreshToken, user };
+    return session;
   }
 
   async refresh(refreshToken: string): Promise<AuthResult> {
@@ -459,7 +454,7 @@ export class AuthService {
     currentPassword: string,
     newPassword: string,
     ctx: { ipAddress?: string; userAgent?: string },
-  ): Promise<void> {
+  ): Promise<AuthResult> {
     // 1. Fetch the full staff record (including password_hash)
     const staff = await this.staffRepo.findByIdWithHash(staffId);
     if (!staff) {
@@ -528,6 +523,17 @@ export class AuthService {
       { staffId, clinicId },
       "Password changed",
     );
+
+    const user = buildAuthUser(
+      staff.id,
+      staff.clinic_id,
+      staff.role as Role,
+      staff.given_name,
+      staff.family_name,
+      staff.email,
+    );
+
+    return this.createFreshSessionForUser(user, staff.id, staff.clinic_id, ctx);
   }
 
   async revokeSessionsForStaff(staffId: string): Promise<void> {

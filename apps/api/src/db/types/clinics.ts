@@ -26,6 +26,14 @@ export interface ClinicsRow {
   hpio?: string | null;
   npds_conformance_id?: string | null;
   erx_etp1_site_id?: string | null;
+  nominated_admin_staff_id?: string | null;
+  delegated_admin_staff_id?: string | null;
+  data_retention_years: number;
+  retention_purge_enabled: boolean;
+  retention_purge_enabled_at?: string | null;
+  retention_purge_enabled_by_staff_id?: string | null;
+  retention_purge_manager_approved_by_staff_id?: string | null;
+  retention_purge_manager_approved_at?: string | null;
   session_idle_minutes?: number | null;
 }
 
@@ -51,6 +59,14 @@ export const CLINICS_COLUMNS = [
   'hpio',
   'npds_conformance_id',
   'erx_etp1_site_id',
+  'nominated_admin_staff_id',
+  'delegated_admin_staff_id',
+  'data_retention_years',
+  'retention_purge_enabled',
+  'retention_purge_enabled_at',
+  'retention_purge_enabled_by_staff_id',
+  'retention_purge_manager_approved_by_staff_id',
+  'retention_purge_manager_approved_at',
   'session_idle_minutes',
 ] as const;
 

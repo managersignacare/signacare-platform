@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "repoName": "signacare-viva",
+  "description": "Patient mobile repo for the Viva Flutter application.",
+  "authoritativeSource": "original-monorepo",
+  "repoScaffoldPath": "repo-split/scaffolds/signacare-viva",
+  "pathTransform": {
+    "stripPrefix": "apps/patient-app/"
+  },
+  "ownership": {
+    "include": [
+      "apps/patient-app/"
+    ],
+    "exclude": [
+      "apps/patient-app/.dart_tool/",
+      "apps/patient-app/.flutter-plugins-dependencies",
+      "apps/patient-app/.idea/",
+      "apps/patient-app/android/build/",
+      "apps/patient-app/build/",
+      "apps/patient-app/ios/.symlinks/",
+      "apps/patient-app/android/local.properties",
+      "apps/patient-app/android/viva_android.iml",
+      "apps/patient-app/viva.iml"
+    ]
+  }
+}

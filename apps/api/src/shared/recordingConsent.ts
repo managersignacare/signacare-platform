@@ -186,6 +186,39 @@ export async function verifyRecordingConsent(
   }
 }
 
+/**
+ * Async scribe jobs may legitimately finish after the initial recording
+ * attestation TTL, especially for long psychiatric interviews. This check is
+ * for queued job pickup/readback only: it proves the consent still belongs to
+ * the same clinic/patient and has not been revoked, without re-applying the
+ * capture-start TTL.
+ */
+export async function verifyRecordingConsentStillActive(
+  clinicId: string,
+  patientId: string,
+  consentId: string,
+): Promise<void> {
+  const row = await withConsentDbContext(clinicId, (consentDb) => (
+    consentDb('scribe_consents')
+      .where({ id: consentId, clinic_id: clinicId, patient_id: patientId })
+      .first('id', 'attested_at', 'revoked_at')
+  ));
+  if (!row || !row.attested_at) {
+    throw new HttpError(
+      403,
+      'CONSENT_REQUIRED',
+      'Recording consent not found for this patient in this clinic.',
+    );
+  }
+  if (row.revoked_at) {
+    throw new HttpError(
+      403,
+      'CONSENT_REVOKED',
+      'Recording consent has been revoked. Capture a fresh consent before recording.',
+    );
+  }
+}
+
 // BUG-274 — per-chunk revocation check with a tiny in-process cache so
 // every binary-frame arrival doesn't round-trip the DB. Cache TTL is
 // capped at CACHE_TTL_MS (2000ms by default) so a mid-session revoke

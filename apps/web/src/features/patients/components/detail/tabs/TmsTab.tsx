@@ -14,7 +14,14 @@ import {
     TableHead, TableRow, Tabs, TextField, Typography
 } from '@mui/material';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  canApproveEctTmsForms,
+  canCompleteEctTmsForms,
+  requiresConsultantApprovalForEctTms,
+} from '@signacare/shared';
 import React, { useState } from 'react';
+import LockIcon from '@mui/icons-material/Lock';
+import { useAuthStore } from '../../../../../shared/store/authStore';
 import { apiClient } from '../../../../../shared/services/apiClient';
 import { tmsKeys } from '../../../queryKeys';
 
@@ -395,6 +402,7 @@ function TmsSessionLogPanel({ patientId }: TmsSessionLogPanelProps) {
 interface TmsPrescriptionPanelProps { patientId: string }
 function TmsPrescriptionPanel({ patientId }: TmsPrescriptionPanelProps) {
   const qc = useQueryClient();
+  const userRole = useAuthStore(s => s.user?.role);
   const [form, setForm] = useState({
     psychiatrist: '', indication: '', protocol: 'Standard rTMS (10 Hz, L-DLPFC)',
     targetSite: 'Left DLPFC', coilType: 'Figure-8 coil',
@@ -407,10 +415,32 @@ function TmsPrescriptionPanel({ patientId }: TmsPrescriptionPanelProps) {
     onSuccess: () => qc.invalidateQueries({ queryKey: tmsKeys.prescriptionAll() }),
   });
 
+  if (!canCompleteEctTmsForms(userRole)) {
+    return (
+      <Alert severity="warning" icon={<LockIcon />}>
+        TMS forms can only be completed by psychiatry prescriber roles.
+      </Alert>
+    );
+  }
+
   return (
     <Paper variant="outlined" sx={{ p: 3 }}>
       <Typography variant="h6" fontWeight={700} sx={{ mb: 2 }}><DescriptionIcon sx={{ mr: 1, verticalAlign: 'middle', color: '#1565C0' }} />TMS Prescription</Typography>
       <Grid container spacing={2}>
+        {requiresConsultantApprovalForEctTms(userRole) && (
+          <Grid size={12}>
+            <Alert severity="info">
+              This TMS prescription will save as pending consultant approval.
+            </Alert>
+          </Grid>
+        )}
+        {canApproveEctTmsForms(userRole) && (
+          <Grid size={12}>
+            <Alert severity="success">
+              You are signed in as a prescriber consultant. Saving this TMS prescription records consultant approval immediately.
+            </Alert>
+          </Grid>
+        )}
         <Grid size={{ xs: 12, sm: 4 }}><TextField label="Treating Psychiatrist *" size="small" fullWidth value={form.psychiatrist} onChange={e => setForm(p => ({ ...p, psychiatrist: e.target.value }))} /></Grid>
         <Grid size={{ xs: 12, sm: 4 }}>
           <FormControl fullWidth size="small"><InputLabel>Indication *</InputLabel>
@@ -444,6 +474,7 @@ function TmsPrescriptionPanel({ patientId }: TmsPrescriptionPanelProps) {
 interface TmsConsentPanelProps { patientId: string }
 function TmsConsentPanel({ patientId }: TmsConsentPanelProps) {
   const qc = useQueryClient();
+  const userRole = useAuthStore(s => s.user?.role);
   const [form, setForm] = useState({
     consentDate: new Date().toISOString().slice(0, 10),
     consentedBy: '', risksExplained: true, benefitsExplained: true,
@@ -455,10 +486,25 @@ function TmsConsentPanel({ patientId }: TmsConsentPanelProps) {
     onSuccess: () => qc.invalidateQueries({ queryKey: tmsKeys.consentAll() }),
   });
 
+  if (!canCompleteEctTmsForms(userRole)) {
+    return (
+      <Alert severity="warning" icon={<LockIcon />}>
+        TMS consent forms can only be completed by psychiatry prescriber roles.
+      </Alert>
+    );
+  }
+
   return (
     <Paper variant="outlined" sx={{ p: 3 }}>
       <Typography variant="h6" fontWeight={700} sx={{ mb: 2 }}><CheckCircleIcon sx={{ mr: 1, verticalAlign: 'middle', color: '#1565C0' }} />TMS Consent</Typography>
       <Grid container spacing={2}>
+        {requiresConsultantApprovalForEctTms(userRole) && (
+          <Grid size={12}>
+            <Alert severity="info">
+              This TMS consent record will save as pending consultant approval.
+            </Alert>
+          </Grid>
+        )}
         <Grid size={{ xs: 12, sm: 4 }}><TextField label="Consent Date" type="date" size="small" fullWidth value={form.consentDate} onChange={e => setForm(p => ({ ...p, consentDate: e.target.value }))} slotProps={{ inputLabel: { shrink: true } }} /></Grid>
         <Grid size={{ xs: 12, sm: 4 }}><TextField label="Consented By" size="small" fullWidth value={form.consentedBy} onChange={e => setForm(p => ({ ...p, consentedBy: e.target.value }))} /></Grid>
         <Grid size={12}>

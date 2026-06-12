@@ -20,22 +20,10 @@ vi.mock('../../src/mcp/aiEnhancer', () => ({
 }));
 
 const localLlmMock = vi.hoisted(() => ({
-  clinicalAi: {
-    classifyText: vi.fn(),
-    generateMaudsleySummary: vi.fn(),
-    generateISBAR: vi.fn(),
-    generateFormulation: vi.fn(),
-    generate91DayReview: vi.fn(),
-    generateLetter: vi.fn(),
-    processAmbientNotes: vi.fn(),
-    generateAdminReport: vi.fn(),
-    generateRegistrationSummary: vi.fn(),
-    generateDischargeSummary: vi.fn(),
-    generateMedSummary: vi.fn(),
-  },
+  callLocalLlm: vi.fn(),
 }));
 vi.mock('../../src/mcp/localLlmAgent', () => ({
-  clinicalAi: localLlmMock.clinicalAi,
+  callLocalLlm: localLlmMock.callLocalLlm,
 }));
 
 import request from 'supertest';
@@ -81,7 +69,12 @@ describe.skipIf(!READY)('BUG-425 letter draft sensitive filter', () => {
   });
 
   it('sanitises direct letter path output (enhance=false)', async () => {
-    localLlmMock.clinicalAi.generateLetter.mockResolvedValueOnce(RAW_LETTER);
+    localLlmMock.callLocalLlm.mockResolvedValueOnce({
+      text: RAW_LETTER,
+      model: 'mock-local-model',
+      tokensUsed: 128,
+      modelVersion: 'mock-local-model',
+    });
 
     const res = await request(app)
       .post('/api/v1/llm/clinical-ai')
@@ -126,7 +119,12 @@ describe.skipIf(!READY)('BUG-425 letter draft sensitive filter', () => {
   });
 
   it('fails closed when letter action is requested without patientId', async () => {
-    localLlmMock.clinicalAi.generateLetter.mockResolvedValueOnce(RAW_LETTER);
+    localLlmMock.callLocalLlm.mockResolvedValueOnce({
+      text: RAW_LETTER,
+      model: 'mock-local-model',
+      tokensUsed: 128,
+      modelVersion: 'mock-local-model',
+    });
 
     const res = await request(app)
       .post('/api/v1/llm/clinical-ai')

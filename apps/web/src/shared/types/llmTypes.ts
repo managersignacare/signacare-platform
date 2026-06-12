@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { MseStructured } from '@signacare/shared';
 
 export const LLMSoapResponseSchema = z.object({
   subjective: z.string(),
@@ -43,6 +44,7 @@ export interface AmbientNoteResult {
     insight: string;
     judgement: string;
   };
+  mseStructured?: MseStructured;
   riskFlags: string[];
   suggestedDiagnosis: string[];
   medications?: Array<{
@@ -54,6 +56,9 @@ export interface AmbientNoteResult {
   summary: string;
   durationSeconds: number;
   model: string;
+  requestedModel?: string;
+  modelUsed?: string;
+  requiresClinicianReview?: boolean;
   format: string;
   pipeline?: 'medical-grade' | 'two-pass';
   pass1DurationMs?: number;
@@ -80,6 +85,10 @@ export interface AmbientNoteResult {
   interpreterUsed?: boolean;
   interpreterLanguage?: string;
   bilingualTranscript?: string;
+  llmFallbacks?: {
+    pass1?: string;
+    pass3?: string;
+  };
 }
 
 export interface VerifiedMedication {

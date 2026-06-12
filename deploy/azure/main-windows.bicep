@@ -1,5 +1,15 @@
 // deploy/azure/main-windows.bicep
 //
+// LEGACY / REFERENCE ONLY.
+//
+// This is not the active Signacare production deployment lane. The active Azure
+// Linux lane is deploy/azure/main.bicep plus deploy/azure/deploy.sh,
+// preflight-linux.sh, post-deploy-smoke.sh, and .github/workflows/azure-deploy.yml.
+//
+// Use this Windows VM template only when a Windows-only requirement is explicitly
+// approved and documented. See deploy/azure/windows-vm/README.md and
+// docs/operations/deployment-learnings.md before running it.
+//
 // Signacare EMR — Windows Server 2022 single-VM deployment (BUG-AZURE-WINDOWS-VM, 2026-05-03).
 //
 // Per-org clarification 2026-05-03: deployment target is Windows Server 2022

@@ -24,12 +24,18 @@ import {
   AppointmentSearchDTO,
   AppointmentResponse,
 } from '@signacare/shared';
-import { z, type ZodIssue } from 'zod';
+import { z } from 'zod';
 import {
   assertBookingGuardrails,
   clearQueuedAppointmentReminders,
+  enqueueAppointmentCalendarSync,
   emitAppointmentBookedNotification,
 } from './appointmentLifecycleSupport';
+import {
+  enrichAppointmentRows,
+  mapDbToResponse,
+  toResponseListSafe,
+} from './appointmentResponseMapper';
 
 type CreateAppointmentDTOType = z.infer<typeof CreateAppointmentDTO>;
 type UpdateAppointmentDTOType = z.infer<typeof UpdateAppointmentDTO>;
@@ -46,116 +52,6 @@ const allowedStatusTransitions: Record<AppointmentStatus, AppointmentStatus[]> =
   no_show:    [],
   rescheduled: ['scheduled', 'confirmed'],
 };
-
-
-function asIsoDateTime(
-  value: unknown,
-  fieldName: string,
-  appointmentId: unknown,
-): string {
-  if (value instanceof Date) return value.toISOString();
-  if (typeof value === 'string') {
-    const parsed = new Date(value);
-    if (!Number.isNaN(parsed.getTime())) return parsed.toISOString();
-  }
-  throw new AppError(
-    `Appointment response missing valid ${fieldName}`,
-    500,
-    'RESPONSE_SHAPE_ERROR',
-    { appointmentId, fieldName, valueType: typeof value },
-  );
-}
-
-function mapDbToResponse(row: Record<string, unknown>): AppointmentResponseType {
-  // BUG-458 — read real DB columns instead of fabricating null/false.
-  // The 7 columns (telehealth_provider/passcode, rescheduled_from_id,
-  // reminder_scheduled/sent/sent_at, outlook_event_id) exist on the
-  // appointments table and are now declared on AppointmentDb +
-  // returned by APPOINTMENT_COLUMNS in appointmentRepository.ts.
-  const reminderSentAt = row.reminder_sent_at as Date | null;
-  const start = row.appointment_start ?? row.start_time;
-  const end = row.appointment_end ?? row.end_time;
-  const type = (row.appointment_type ?? row.type) as AppointmentResponseType['type'] | undefined;
-  const candidate = {
-    id: row.id as string,
-    clinicId: row.clinic_id as string,
-    patientId: row.patient_id as string,
-    clinicianId: row.clinician_id as string,
-    episodeId: (row.episode_id as string | null) ?? null,
-    specialtyCode: (row.specialty_code as AppointmentResponseType['specialtyCode']) ?? null,
-    startTime: asIsoDateTime(start, 'start_time', row.id),
-    endTime: asIsoDateTime(end, 'end_time', row.id),
-    status: row.status as AppointmentStatus,
-    type,
-    patientResponse: (row.patient_response as 'attending' | 'not_attending' | null | undefined) ?? null,
-    notes: (row.notes as string | null) ?? null,
-    telehealthLink: (row.telehealth_url as string | null) ?? null,
-    telehealthProvider: (row.telehealth_provider as string | null) ?? null,
-    telehealthPasscode: (row.telehealth_passcode as string | null) ?? null,
-    cancellationReason: (row.cancellation_reason as string | null) ?? null,
-    rescheduledFromId: (row.rescheduled_from_id as string | null) ?? null,
-    reminderScheduled: Boolean(row.reminder_scheduled),
-    reminderSent: Boolean(row.reminder_sent),
-    reminderSentAt: reminderSentAt ? reminderSentAt.toISOString() : null,
-    outlookEventId: (row.outlook_event_id as string | null) ?? null,
-    createdAt: (row.created_at as Date).toISOString(),
-    updatedAt: (row.updated_at as Date).toISOString(),
-  };
-  // BUG-458 — fail-loud at the API boundary rather than ship drift to
-  // the UI. BUG-456 absorb-1 + BUG-457 precedent: emit-time Zod
-  // failures are server-side data-integrity issues (500), not
-  // request-validation failures (422 via the global ZodError handler).
-  // Carry appointmentId + zodIssues in `details` so RESPONSE_SHAPE_ERROR
-  // alerts in production pinpoint the row + failing field path.
-  const parsed = AppointmentResponse.safeParse(candidate);
-  if (!parsed.success) {
-    const issues: ZodIssue[] = parsed.error.issues;
-    throw new AppError(
-      'Appointment response shape failed schema validation',
-      500,
-      'RESPONSE_SHAPE_ERROR',
-      { appointmentId: row.id, zodIssues: issues },
-    );
-  }
-  return parsed.data;
-}
-
-/**
- * BUG-458 L3 absorb-1 — list-fragility helper, mirrors BUG-456 absorb-1
- * `toResponseListSafe` precedent in `medicationService.ts:153`.
- * Pre-absorb a single bad appointment row would 500 the entire
- * clinician's day-view calendar (rows.map(mapDbToResponse) throws on
- * the first bad row). That's a calendar-blackout regression for a
- * busy mental-health clinic.
- *
- * Post-absorb: per-row safeParse + structured pino warn on any row that
- * fails to map; bad rows are skipped, good rows ship. The single-
- * resource paths (getById, create, update, cancel) keep the strict
- * `mapDbToResponse` so an individual lookup of a corrupted row fails
- * loud.
- */
-export function toResponseListSafe(
-  rows: Array<Record<string, unknown>>,
-  clinicId: string,
-): AppointmentResponseType[] {
-  const out: AppointmentResponseType[] = [];
-  for (const r of rows) {
-    try {
-      out.push(mapDbToResponse(r));
-    } catch (err) {
-      logger.warn(
-        {
-          appointmentId: r.id as string | undefined,
-          clinicId,
-          err: err instanceof Error ? err.message : String(err),
-          kind: 'appointment_response_shape_skip',
-        },
-        'BUG-458: appointment row failed shape validation, skipped from list response',
-      );
-    }
-  }
-  return out;
-}
 
 export const appointmentService = {
   /**
@@ -191,6 +87,12 @@ export const appointmentService = {
     await assertBookingGuardrails(clinicId, start, end);
 
     const primaryClinicianId = dto.clinicianId ?? staffId;
+    const appointmentMode =
+      dto.mode
+      ?? (dto.telehealthDetails?.telehealthLink ? 'videoconference' : undefined)
+      ?? (dto.type === 'telehealth' ? 'telehealth' : 'direct');
+    const remoteMode =
+      appointmentMode === 'telehealth' || appointmentMode === 'videoconference';
 
     // Phase 13 PR5 — multi-attendee overlap. Every participating
     // clinician (primary + co_clinicians) must be free in the
@@ -237,8 +139,9 @@ export const appointmentService = {
       status: 'scheduled' as AppointmentStatus,
       type: dto.type ?? 'follow_up',
       appointment_type: dto.type ?? 'follow_up',
+      mode: appointmentMode,
       notes: dto.notes ?? null,
-      telehealth: dto.type === 'telehealth',
+      telehealth: remoteMode,
       telehealth_url: dto.telehealthDetails?.telehealthLink ?? null,
       cancellation_reason: null,
       cancelled_by_id: null,
@@ -291,8 +194,39 @@ export const appointmentService = {
       patientId: dto.patientId,
       startTimeIso: start.toISOString(),
     });
+    const extraAttendees = (dto.attendeeStaffIds ?? []).filter(
+      (id) => id !== primaryClinicianId,
+    );
+    await Promise.all(
+      extraAttendees.map((attendeeId) =>
+        emitAppointmentBookedNotification({
+          clinicId,
+          appointmentId: String(created['id']),
+          createdByStaffId: staffId,
+          clinicianId: attendeeId,
+          patientId: dto.patientId,
+          startTimeIso: start.toISOString(),
+        }),
+      ),
+    );
+    await enqueueAppointmentCalendarSync({
+      clinicId,
+      appointmentId: String(created['id']),
+      clinicianId: primaryClinicianId,
+      patientId: dto.patientId,
+      appointmentType: dto.type ?? 'follow_up',
+      mode: appointmentMode,
+      startTimeIso: start.toISOString(),
+      endTimeIso: end.toISOString(),
+      notes: dto.notes ?? null,
+      attendeeStaffIds: dto.attendeeStaffIds ?? [],
+      type: 'create',
+    });
 
-    return mapDbToResponse(created as unknown as Record<string, unknown>);
+    const [enriched] = await enrichAppointmentRows(clinicId, [
+      created as unknown as Record<string, unknown>,
+    ]);
+    return mapDbToResponse(enriched);
   },
 
   async createRecurring(
@@ -452,8 +386,14 @@ export const appointmentService = {
       appointment_end: end,
       type: dto.type ?? existing.type ?? existing.appointment_type ?? 'follow_up',
       appointment_type: dto.type ?? existing.appointment_type,
+      mode: dto.mode ?? existing.mode ?? null,
       notes: dto.notes ?? existing.notes,
       telehealth_url: dto.telehealthDetails?.telehealthLink ?? existing.telehealth_url,
+      telehealth:
+        (dto.mode ?? existing.mode) === 'telehealth'
+        || (dto.mode ?? existing.mode) === 'videoconference'
+        || dto.type === 'telehealth'
+        || existing.type === 'telehealth',
     };
 
     if (dto.clinicianId) {
@@ -531,7 +471,32 @@ export const appointmentService = {
       return next;
     });
 
-    return mapDbToResponse(updated as unknown as Record<string, unknown>);
+    await enqueueAppointmentCalendarSync({
+      clinicId,
+      appointmentId: id,
+      clinicianId: newPrimaryClinicianId,
+      patientId: existing.patient_id,
+      appointmentType: String(
+        dto.type ?? existing.type ?? existing.appointment_type ?? 'follow_up',
+      ),
+      mode: ((dto.mode ?? existing.mode ?? 'direct') as 'direct' | 'telehealth' | 'videoconference' | 'other'),
+      startTimeIso: start.toISOString(),
+      endTimeIso: end.toISOString(),
+      notes: (dto.notes ?? existing.notes ?? null) as string | null,
+      attendeeStaffIds:
+        desiredAttendees
+        ?? (
+          await appointmentAttendeeRepository.listForAppointment(clinicId, id)
+        )
+          .filter((row) => row.attendance_status !== 'removed')
+          .map((row) => row.staff_id),
+      type: 'update',
+    });
+
+    const [enriched] = await enrichAppointmentRows(clinicId, [
+      updated as unknown as Record<string, unknown>,
+    ]);
+    return mapDbToResponse(enriched);
   },
 
   async updateStatus(
@@ -586,7 +551,10 @@ export const appointmentService = {
       }
     }
 
-    return mapDbToResponse(updated as unknown as Record<string, unknown>);
+    const [enriched] = await enrichAppointmentRows(clinicId, [
+      updated as unknown as Record<string, unknown>,
+    ]);
+    return mapDbToResponse(enriched);
   },
 
   async cancel(
@@ -615,6 +583,18 @@ export const appointmentService = {
       cancellation_reason: reason ?? existing.cancellation_reason,
     });
     if (!updated) throw new AppError('Appointment not found after cancel', 404, 'NOT_FOUND');
+    await enqueueAppointmentCalendarSync({
+      clinicId,
+      appointmentId: id,
+      clinicianId: existing.clinician_id ?? auth.staffId,
+      patientId: existing.patient_id,
+      appointmentType: String(existing.type ?? existing.appointment_type ?? 'follow_up'),
+      mode: ((existing.mode ?? 'direct') as 'direct' | 'telehealth' | 'videoconference' | 'other'),
+      startTimeIso: (existingStart => existingStart instanceof Date ? existingStart.toISOString() : new Date(String(existingStart)).toISOString())(existing.appointment_start ?? existing.start_time),
+      endTimeIso: (existingEnd => existingEnd instanceof Date ? existingEnd.toISOString() : new Date(String(existingEnd)).toISOString())(existing.appointment_end ?? existing.end_time),
+      notes: existing.notes,
+      type: 'delete',
+    });
     try {
       const removed = await clearQueuedAppointmentReminders(clinicId, id);
       logger.info(
@@ -632,14 +612,20 @@ export const appointmentService = {
         'appointmentService.cancel — failed to clear queued reminder jobs',
       );
     }
-    return mapDbToResponse(updated as unknown as Record<string, unknown>);
+    const [enriched] = await enrichAppointmentRows(clinicId, [
+      updated as unknown as Record<string, unknown>,
+    ]);
+    return mapDbToResponse(enriched);
   },
 
   async getById(auth: AuthContext, id: string): Promise<AppointmentResponseType> {
     const existing = await appointmentRepository.findById(auth.clinicId, id);
     if (!existing) throw new AppError('Appointment not found', 404, 'NOT_FOUND');
     await requirePatientRelationship(auth, existing.patient_id);
-    return mapDbToResponse(existing as unknown as Record<string, unknown>);
+    const [enriched] = await enrichAppointmentRows(auth.clinicId, [
+      existing as unknown as Record<string, unknown>,
+    ]);
+    return mapDbToResponse(enriched);
   },
 
   async list(
@@ -664,10 +650,11 @@ export const appointmentService = {
       limit: filters.limit,
       offset: filters.offset,
     });
-    return toResponseListSafe(
-      rows as unknown as Array<Record<string, unknown>>,
+    const enriched = await enrichAppointmentRows(
       auth.clinicId,
+      rows as unknown as Array<Record<string, unknown>>,
     );
+    return toResponseListSafe(enriched, auth.clinicId);
   },
 
   // BUG-592-FOLLOWUP-DBADMIN-THRESHOLDS-FOLLOWUP-DEAD-CODE-CLEANUP

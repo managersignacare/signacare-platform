@@ -39,22 +39,10 @@ vi.mock('../../src/mcp/aiEnhancer', () => ({
 }));
 
 const localLlmMock = vi.hoisted(() => ({
-  clinicalAi: {
-    generateMaudsleySummary: vi.fn(),
-    generateISBAR: vi.fn(),
-    generateFormulation: vi.fn(),
-    generate91DayReview: vi.fn(),
-    generateLetter: vi.fn(),
-    processAmbientNotes: vi.fn(),
-    generateAdminReport: vi.fn(),
-    generateRegistrationSummary: vi.fn(),
-    generateDischargeSummary: vi.fn(),
-    generateMedSummary: vi.fn(),
-    classifyText: vi.fn(),
-  },
+  callLocalLlm: vi.fn(),
 }));
 vi.mock('../../src/mcp/localLlmAgent', () => ({
-  clinicalAi: localLlmMock.clinicalAi,
+  callLocalLlm: localLlmMock.callLocalLlm,
 }));
 
 const aiAgentMock = vi.hoisted(() => ({
@@ -62,14 +50,6 @@ const aiAgentMock = vi.hoisted(() => ({
 }));
 vi.mock('../../src/mcp/server/aiAgent', () => ({
   runAgent: aiAgentMock.runAgent,
-}));
-
-// axios used by scribeRoutes for Ollama HTTP calls.
-const axiosMock = vi.hoisted(() => ({
-  post: vi.fn(),
-}));
-vi.mock('axios', () => ({
-  default: { post: axiosMock.post },
 }));
 
 // ─── Imports (after mocks) ─────────────────────────────────────────────────
@@ -170,8 +150,21 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (!READY) return;
-  await dbAdmin('episodes').where({ patient_id: patientWithRel }).del().catch(() => undefined);
-  await dbAdmin('patients').whereIn('id', [patientWithRel, orphanPatient]).del().catch(() => undefined);
+  await dbAdmin('episodes')
+    .where({ patient_id: patientWithRel })
+    .update({
+      status: 'closed',
+      deleted_at: new Date(),
+      updated_at: new Date(),
+    })
+    .catch(() => undefined);
+  await dbAdmin('patients')
+    .whereIn('id', [patientWithRel, orphanPatient])
+    .update({
+      deleted_at: new Date(),
+      updated_at: new Date(),
+    })
+    .catch(() => undefined);
   // BUG-036 L5 review minor: disable ai-scribe flag after test so
   // the clinic state returns to its pre-test baseline.
   await dbAdmin('feature_flags')
@@ -184,8 +177,7 @@ beforeEach(() => {
   aiEnhancerMock.enhancedGenerate.mockReset();
   aiEnhancerMock.loadPatientContext.mockReset();
   aiAgentMock.runAgent.mockReset();
-  axiosMock.post.mockReset();
-  Object.values(localLlmMock.clinicalAi).forEach((fn) => fn.mockReset());
+  localLlmMock.callLocalLlm.mockReset();
 
   // Default mock returns so happy-path tests don't 500 after the gate.
   aiEnhancerMock.enhancedGenerate.mockResolvedValue({
@@ -200,9 +192,12 @@ beforeEach(() => {
     model: 'mock',
     toolCalls: [],
   });
-  axiosMock.post.mockResolvedValue({ data: { response: 'mock-ollama-response' } });
-  localLlmMock.clinicalAi.generateMaudsleySummary.mockResolvedValue('mock');
-  localLlmMock.clinicalAi.classifyText.mockResolvedValue('mock');
+  localLlmMock.callLocalLlm.mockResolvedValue({
+    text: 'mock-local-output',
+    model: 'mock-local-model',
+    tokensUsed: 128,
+    modelVersion: 'mock-local-model',
+  });
 });
 
 // ─── Helper senders ────────────────────────────────────────────────────────
@@ -329,7 +324,7 @@ describe.skipIf(!READY)('BUG-036 — LLM routes patient-relationship gate', () =
       });
       expect(res.status).toBe(403);
       expect(res.body.code).toBe('NO_PATIENT_RELATIONSHIP');
-      expect(axiosMock.post).not.toHaveBeenCalled();
+      expect(localLlmMock.callLocalLlm).not.toHaveBeenCalled();
     });
     it('(3b) clinician WITH relationship → 200', async () => {
       const token = await loginAsClinician();
@@ -337,14 +332,14 @@ describe.skipIf(!READY)('BUG-036 — LLM routes patient-relationship gate', () =
         structuredNote: DUMMY_STRUCTURED, patientId: patientWithRel,
       });
       expect(res.status).toBe(200);
-      expect(axiosMock.post).toHaveBeenCalledTimes(1);
+      expect(localLlmMock.callLocalLlm).toHaveBeenCalledTimes(1);
     });
     it('(3c) superadmin bypass → 200', async () => {
       const res = await postPatientSummary(adminToken, {
         structuredNote: DUMMY_STRUCTURED, patientId: orphanPatient,
       });
       expect(res.status).toBe(200);
-      expect(axiosMock.post).toHaveBeenCalledTimes(1);
+      expect(localLlmMock.callLocalLlm).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -356,7 +351,7 @@ describe.skipIf(!READY)('BUG-036 — LLM routes patient-relationship gate', () =
       });
       expect(res.status).toBe(403);
       expect(res.body.code).toBe('NO_PATIENT_RELATIONSHIP');
-      expect(axiosMock.post).not.toHaveBeenCalled();
+      expect(localLlmMock.callLocalLlm).not.toHaveBeenCalled();
     });
     it('(4b) clinician WITH relationship → 200', async () => {
       const token = await loginAsClinician();
@@ -364,14 +359,14 @@ describe.skipIf(!READY)('BUG-036 — LLM routes patient-relationship gate', () =
         structuredNote: DUMMY_STRUCTURED, patientId: patientWithRel,
       });
       expect(res.status).toBe(200);
-      expect(axiosMock.post).toHaveBeenCalledTimes(1);
+      expect(localLlmMock.callLocalLlm).toHaveBeenCalledTimes(1);
     });
     it('(4c) superadmin bypass → 200', async () => {
       const res = await postReferralLetter(adminToken, {
         structuredNote: DUMMY_STRUCTURED, patientId: orphanPatient,
       });
       expect(res.status).toBe(200);
-      expect(axiosMock.post).toHaveBeenCalledTimes(1);
+      expect(localLlmMock.callLocalLlm).toHaveBeenCalledTimes(1);
     });
   });
 

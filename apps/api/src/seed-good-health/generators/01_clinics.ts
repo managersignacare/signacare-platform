@@ -28,6 +28,8 @@ interface ClinicRow {
   name: string;
   legal_name: string;
   abn: string;
+  hpio: string;
+  npds_conformance_id: string;
   time_zone: string;
   is_active: boolean;
 }
@@ -61,6 +63,8 @@ export function buildClinicRows(): ClinicRow[] {
     name: c.name,
     legal_name: c.legalName,
     abn: c.abn,
+    hpio: c.hpio,
+    npds_conformance_id: c.npdsConformanceId,
     time_zone: c.timeZone,
     is_active: true,
   }));

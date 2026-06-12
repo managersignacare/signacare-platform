@@ -444,7 +444,7 @@ export const patientService = {
   ): Promise<PaginatedResponse<PatientResponse>> {
     requirePermission(auth, 'patient:read');
     const page  = filters.page  ?? 1;
-    const limit = filters.limit ?? 25;
+    const limit = filters.limit ?? filters.pageSize ?? 25;
     const result = await patientRepository.list(auth.clinicId, {
       search:      filters.search,
       status:      filters.status ?? null,

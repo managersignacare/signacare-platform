@@ -45,7 +45,7 @@ function noteSortTimestamp(note: SummaryNoteRow): number {
 }
 
 export function listArtifactNotes(
-  notes: SummaryNoteRow[],
+  notes: readonly SummaryNoteRow[],
   noteType: string,
 ): SummaryArtifactVersion[] {
   return [...notes]
@@ -67,7 +67,7 @@ export function listArtifactNotes(
 }
 
 export function findLatestArtifactNote(
-  notes: SummaryNoteRow[],
+  notes: readonly SummaryNoteRow[],
   noteType: string,
 ): SummaryArtifactNoteRef {
   const hit = listArtifactNotes(notes, noteType)[0];

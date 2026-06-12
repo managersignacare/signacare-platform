@@ -53,7 +53,7 @@
     },
     {
       "id": "scribe-summary-readability-signal",
-      "file": "apps/api/src/features/llm/scribeRoutes.ts",
+      "file": "apps/api/src/features/llm/scribeDraftSurface.ts",
       "requiredPatterns": [
         "recordScribeReadabilitySignal\\(",
         "feature: 'scribe-patient-summary'"

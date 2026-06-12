@@ -18,6 +18,12 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { tryAsync, isErr, type SideEffectScheduleResponse } from '@signacare/shared';
 import { apiClient } from '../../../shared/services/apiClient';
+import { llmAiJobsApi } from '../../../shared/services/llmAiJobsApi';
+import {
+  formatClinicalAiJobQueueSubmitErrorMessage,
+  formatClinicalAiQueueUnavailableMessage,
+  isClinicalAiQueueUnavailableError,
+} from '../../../shared/services/llmAiJobsSupport';
 import { psychiatristKeys } from '../queryKeys';
 
 const fmtTime = (iso: string) => {
@@ -85,6 +91,8 @@ type ClinicalFormulationsEnvelope = {
 };
 
 type LlmFivePResponse = Partial<Record<FivePKey, string>>;
+const FIVE_P_KEYS: FivePKey[] = ['presenting', 'predisposing', 'precipitating', 'perpetuating', 'protective'];
+const FIVE_P_HEADING_RE = /^\s*(?:\d+[.)]\s*)?(presenting|predisposing|precipitating|perpetuating|protective)(?:\s+(?:factors?|issues?|problem))?\s*:?\s*(.*)$/gim;
 
 const asRecord = (value: unknown): UnknownRecord | null => (
   value != null && typeof value === 'object' ? (value as UnknownRecord) : null
@@ -98,6 +106,46 @@ const readEnvelopeArray = <T,>(value: unknown, key: string): T[] => {
   if (Array.isArray(keyed)) return keyed as T[];
   const data = record.data;
   return Array.isArray(data) ? (data as T[]) : [];
+};
+
+const isFivePKey = (value: string): value is FivePKey => FIVE_P_KEYS.includes(value as FivePKey);
+
+const parseFivePText = (text: string): LlmFivePResponse => {
+  const matches = Array.from(text.matchAll(FIVE_P_HEADING_RE))
+    .map((match) => ({
+      key: match[1]?.toLowerCase() ?? '',
+      inline: match[2]?.trim() ?? '',
+      index: match.index ?? 0,
+      headingLength: match[0].length,
+    }))
+    .filter((match): match is typeof match & { key: FivePKey } => isFivePKey(match.key));
+
+  const parsed: LlmFivePResponse = {};
+  matches.forEach((match, idx) => {
+    const nextIndex = matches[idx + 1]?.index ?? text.length;
+    const sectionStart = match.index + match.headingLength;
+    const sectionBody = text.slice(sectionStart, nextIndex).trim();
+    const value = [match.inline, sectionBody].filter(Boolean).join('\n').trim();
+    if (value) parsed[match.key] = value.replace(/^\s*[-:]\s*/, '').trim();
+  });
+  return parsed;
+};
+
+const parseFivePJobResult = (text: string): LlmFivePResponse => {
+  try {
+    const parsed = JSON.parse(text) as unknown;
+    const record = asRecord(parsed);
+    if (record) {
+      return FIVE_P_KEYS.reduce<LlmFivePResponse>((acc, key) => {
+        const value = record[key];
+        if (typeof value === 'string' && value.trim()) acc[key] = value.trim();
+        return acc;
+      }, {});
+    }
+  } catch {
+    // Durable clinical AI jobs generally return plain text; fall through.
+  }
+  return parseFivePText(text);
 };
 
 export default function PsychiatristPage(): React.ReactElement {
@@ -221,6 +269,9 @@ function FormulationsTab() {
   // narrows to author + admin. 'restricted' narrows to author only.
   const [confidentialityLevel, setConfidentialityLevel] = useState<ConfidentialityLevel>('standard');
   const [aiLoading, setAiLoading] = useState(false);
+  const [aiJobId, setAiJobId] = useState<string | null>(null);
+  const [aiJobStatus, setAiJobStatus] = useState<string | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
 
   const { data: patientList = [] } = useQuery({
     queryKey: psychiatristKeys.patients(),
@@ -261,18 +312,45 @@ function FormulationsTab() {
   const handleAiAssist = async () => {
     if (!patientId) return;
     setAiLoading(true);
+    setAiError(null);
+    setAiJobStatus('Queuing 5P formulation job...');
+    setAiJobId(null);
+    let queuedJobId: string | null = null;
     try {
-      const resp = await apiClient.post<LlmFivePResponse>('llm/generate', { prompt: `Generate a 5P formulation for patient ${patientId}`, type: '5p-formulation' });
+      const queued = await llmAiJobsApi.queueClinicalAiJob({
+        action: '5p-formulation',
+        data: 'Generate a 5P formulation draft using the patient clinical context.',
+        patientId,
+        enhance: true,
+      });
+      queuedJobId = queued.jobId;
+      setAiJobId(queued.jobId);
+      const completed = await llmAiJobsApi.waitForClinicalAiJob(queued.jobId, {
+        onProgress: (status) => {
+          setAiJobStatus(status.statusMessage ?? status.stage ?? `Job ${status.status}`);
+        },
+      });
+      const resp = parseFivePJobResult(completed.result);
       if (resp.presenting) setFiveP((p) => ({ ...p, presenting: resp.presenting ?? '' }));
       if (resp.predisposing) setFiveP((p) => ({ ...p, predisposing: resp.predisposing ?? '' }));
       if (resp.precipitating) setFiveP((p) => ({ ...p, precipitating: resp.precipitating ?? '' }));
       if (resp.perpetuating) setFiveP((p) => ({ ...p, perpetuating: resp.perpetuating ?? '' }));
       if (resp.protective) setFiveP((p) => ({ ...p, protective: resp.protective ?? '' }));
-    } catch (_assistErr) {
-      // intentional silent — AI assist is optional and should not block manual entry.
-      void _assistErr;
+      setAiJobStatus('5P draft generated. Review each section before saving.');
+    } catch (assistErr) {
+      console.warn('PsychiatristPage: 5P AI assist failed', assistErr);
+      setAiError(
+        queuedJobId
+          ? `AI job ${queuedJobId} did not return a usable 5P draft. Check the async AI jobs dashboard or continue manually.`
+          : (
+              isClinicalAiQueueUnavailableError(assistErr)
+                ? formatClinicalAiQueueUnavailableMessage('AI 5P formulation generation')
+                : formatClinicalAiJobQueueSubmitErrorMessage('AI 5P formulation generation')
+            ),
+      );
+    } finally {
+      setAiLoading(false);
     }
-    setAiLoading(false);
   };
 
   const P_LABELS: Array<{ key: FivePKey; label: string; color: string }> = [
@@ -353,6 +431,13 @@ function FormulationsTab() {
           </Button>
         </DialogTitle>
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: '12px !important' }}>
+          {aiJobId && (
+            <Alert role="status" severity={aiError ? 'warning' : 'info'}>
+              Job ID: {aiJobId}
+              {aiJobStatus ? ` — ${aiJobStatus}` : ''}
+            </Alert>
+          )}
+          {aiError && <Alert role="alert" severity="error">{aiError}</Alert>}
           {P_LABELS.map(p => (
             <TextField key={p.key} label={p.label} size="small" fullWidth multiline rows={2}
               value={fiveP[p.key as keyof typeof fiveP]}

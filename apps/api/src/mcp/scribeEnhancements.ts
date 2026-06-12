@@ -16,6 +16,10 @@
 
 import { db } from '../db/db';
 import { logger } from '../utils/logger';
+export {
+  extractScribeActions,
+  type ScribeAction,
+} from '../shared/scribeActionExtractor';
 
 interface PriorNoteRow {
   title: string | null;
@@ -981,115 +985,6 @@ export function scoreQUEST(
     issues,
     grade,
   };
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// 9. AGENTIC SCRIBE — Extract Actionable Items
-// ═══════════════════════════════════════════════════════════════════════════════
-
-export interface ScribeAction {
-  type: 'referral' | 'appointment' | 'prescription' | 'pathology' | 'task' | 'alert';
-  description: string;
-  details: Record<string, string>;
-  autoCreateable: boolean;
-}
-
-export function extractScribeActions(
-  planFacts: string[],
-  medicationFacts: string[],
-  formattedNote: string,
-): ScribeAction[] {
-  const actions: ScribeAction[] = [];
-  const combined = [...planFacts, formattedNote].join('\n');
-
-  // Referral detection
-  const referralPatterns = [
-    /refer\w*\s+(?:to\s+)?(.+?)(?:\.|$)/gi,
-    /referral\s+(?:to\s+)?(.+?)(?:\.|$)/gi,
-  ];
-  for (const re of referralPatterns) {
-    let match;
-    while ((match = re.exec(combined)) !== null) {
-      actions.push({
-        type: 'referral',
-        description: `Referral to ${match[1].trim()}`,
-        details: { recipient: match[1].trim() },
-        autoCreateable: true,
-      });
-    }
-  }
-
-  // Appointment/follow-up detection
-  const apptPatterns = [
-    /(?:follow[- ]?up|review|appointment|next.*(?:appointment|session|review))\s*(?:in\s+)?(\d+\s*(?:day|week|fortnight|month)s?)/gi,
-    /(?:book|schedule|arrange)\s+(?:a\s+)?(?:follow[- ]?up|review|appointment)\s*(?:in\s+)?(\d+\s*(?:day|week|fortnight|month)s?)?/gi,
-  ];
-  for (const re of apptPatterns) {
-    let match;
-    while ((match = re.exec(combined)) !== null) {
-      actions.push({
-        type: 'appointment',
-        description: `Follow-up ${match[1] ? `in ${match[1].trim()}` : 'to be arranged'}`,
-        details: { timeframe: match[1]?.trim() ?? 'TBA' },
-        autoCreateable: true,
-      });
-    }
-  }
-
-  // Prescription changes
-  for (const fact of medicationFacts) {
-    const lower = fact.toLowerCase();
-    if (/start|commence|increase|decrease|cease|change/.test(lower)) {
-      actions.push({
-        type: 'prescription',
-        description: `Medication change: ${fact}`,
-        details: { medication: fact },
-        autoCreateable: false,
-      });
-    }
-  }
-
-  // Pathology orders
-  const pathPatterns = [
-    /(?:order|request|arrange)\s+(.+?(?:blood|test|pathology|FBC|UEC|LFT|TFT|lithium level|valproate level|clozapine level|HbA1c|lipid|fasting|metabolic).*?)(?:\.|$)/gi,
-    /(FBC|UEC|LFT|TFT|lipid|HbA1c|fasting glucose|metabolic panel|clozapine level|lithium level|valproate level)/gi,
-  ];
-  const seenPath = new Set<string>();
-  for (const re of pathPatterns) {
-    let match;
-    while ((match = re.exec(combined)) !== null) {
-      const test = match[1].trim();
-      if (!seenPath.has(test.toLowerCase())) {
-        seenPath.add(test.toLowerCase());
-        actions.push({
-          type: 'pathology',
-          description: `Pathology: ${test}`,
-          details: { test },
-          autoCreateable: true,
-        });
-      }
-    }
-  }
-
-  // Safety alerts
-  if (/safety.*plan|crisis.*plan/i.test(combined)) {
-    actions.push({
-      type: 'alert',
-      description: 'Update safety/crisis plan',
-      details: {},
-      autoCreateable: false,
-    });
-  }
-
-  // Deduplicate
-  const unique: ScribeAction[] = [];
-  const seen = new Set<string>();
-  for (const a of actions) {
-    const key = `${a.type}:${a.description}`;
-    if (!seen.has(key)) { seen.add(key); unique.push(a); }
-  }
-
-  return unique;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

@@ -129,6 +129,10 @@ describe.skipIf(!ready)('BUG-411 + BUG-400d — audit-log regression for clinic_
           scribe_consent_mode: origClinicSettings.scribe_consent_mode,
           ai_chat_classifier_mode: origClinicSettings.ai_chat_classifier_mode,
           scribe_audio_retention: origClinicSettings.scribe_audio_retention,
+          scribe_audio_retention_adr: origClinicSettings.scribe_audio_retention_adr ?? null,
+          scribe_audio_retention_clinical_review: origClinicSettings.scribe_audio_retention_clinical_review ?? null,
+          scribe_audio_retention_approved_by_staff_id: origClinicSettings.scribe_audio_retention_approved_by_staff_id ?? null,
+          scribe_audio_retention_approved_at: origClinicSettings.scribe_audio_retention_approved_at ?? null,
           email_sender_mode: origClinicSettings.email_sender_mode ?? 'staff_delegated',
           clinic_sender_email: origClinicSettings.clinic_sender_email ?? null,
           clinic_sender_name: origClinicSettings.clinic_sender_name ?? null,
@@ -203,6 +207,51 @@ describe.skipIf(!ready)('BUG-411 + BUG-400d — audit-log regression for clinic_
       expect(newData.email_sender_mode).toBe('clinic_mailbox');
       expect(newData.clinic_sender_email).toBe(senderEmail);
       expect(newData.clinic_sender_name).toBe(senderName);
+    });
+
+    it('TP-CS-AUDIT-411-4: rejects non-immediate scribe audio retention without ADR and clinical safety review proof', async () => {
+      const res = await request(app)
+        .patch('/api/v1/clinic-settings')
+        .set('Authorization', `Bearer ${session.token}`)
+        .set('X-CSRF-Token', 'test')
+        .send({ scribeAudioRetention: '7d' });
+
+      expect(res.status).toBe(422);
+      expect(String(res.body?.code ?? '')).toBe('SCRIBE_AUDIO_RETENTION_PROOF_REQUIRED');
+    });
+
+    it('TP-CS-AUDIT-411-5: persists proof-backed scribe audio retention exception and records it in audit newData', async () => {
+      const adr = `ADR-${runId}-scribe-audio-retention`;
+      const review = `Clinical safety review ${runId}: retained audio window approved for medico-legal replay.`;
+      const res = await request(app)
+        .patch('/api/v1/clinic-settings')
+        .set('Authorization', `Bearer ${session.token}`)
+        .set('X-CSRF-Token', 'test')
+        .send({
+          scribeAudioRetention: '24h',
+          scribeAudioRetentionAdr: adr,
+          scribeAudioRetentionClinicalReview: review,
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.scribeAudioRetention).toBe('24h');
+      expect(res.body.scribeAudioRetentionAdr).toBe(adr);
+      expect(res.body.scribeAudioRetentionClinicalReview).toBe(review);
+      expect(res.body.scribeAudioRetentionApprovedByStaffId).toBe(session.userId);
+      expect(res.body.scribeAudioRetentionApprovedAt).toBeTruthy();
+
+      const audit = await dbAdmin('audit_log')
+        .where({ clinic_id: session.clinicId, action: 'clinic_settings_update' })
+        .orderBy('created_at', 'desc')
+        .first('new_data');
+      expect(audit).toBeTruthy();
+      const newData =
+        typeof audit.new_data === 'string' ? JSON.parse(audit.new_data) : audit.new_data;
+      expect(newData.scribe_audio_retention).toBe('24h');
+      expect(newData.scribe_audio_retention_adr).toBe(adr);
+      expect(newData.scribe_audio_retention_clinical_review).toBe(review);
+      expect(newData.scribe_audio_retention_approved_by_staff_id).toBe(session.userId);
+      expect(newData.scribe_audio_retention_approved_at).toBeTruthy();
     });
   });
 

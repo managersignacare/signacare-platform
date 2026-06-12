@@ -1,0 +1,85 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "signacare-sovereign-gpu-inference.fullname" . }}
+  labels:
+    {{- include "signacare-sovereign-gpu-inference.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "signacare-sovereign-gpu-inference.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        {{- include "signacare-sovereign-gpu-inference.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        signacare.io/image-digest: {{ .Values.image.digest | quote }}
+        signacare.io/model-manifest-sha256: {{ .Values.runtime.modelManifestSha256 | quote }}
+    spec:
+      serviceAccountName: {{ include "signacare-sovereign-gpu-inference.fullname" . }}
+      automountServiceAccountToken: false
+      nodeSelector:
+        {{- toYaml .Values.nodeSelector | nindent 8 }}
+      tolerations:
+        {{- toYaml .Values.tolerations | nindent 8 }}
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: inference
+          image: "{{ .Values.image.repository }}@{{ .Values.image.digest }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+          env:
+            - name: OLLAMA_HOST
+              value: "0.0.0.0:{{ .Values.service.port }}"
+            - name: OLLAMA_REQUIRE_MODELS
+              value: {{ .Values.runtime.modelName | quote }}
+            - name: OLLAMA_MODEL_MANIFEST_SHA256
+              value: {{ .Values.runtime.modelManifestSha256 | quote }}
+            - name: OLLAMA_MODEL_MANIFEST_PATH
+              value: {{ .Values.runtime.modelManifestPath | quote }}
+            - name: SIGNACARE_INFERENCE_ENGINE
+              value: {{ .Values.runtime.engine | quote }}
+          readinessProbe:
+            httpGet:
+              path: /api/tags
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /api/tags
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 6
+          startupProbe:
+            httpGet:
+              path: /api/tags
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 30
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}

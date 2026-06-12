@@ -10,6 +10,7 @@ import {
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import React, { useState } from 'react';
 import { apiClient } from '../../../shared/services/apiClient';
+import { llmAiJobsApi } from '../../../shared/services/llmAiJobsApi';
 import { useAuthStore } from '../../../shared/store/authStore';
 import { handoverKeys } from '../queryKeys';
 
@@ -57,11 +58,6 @@ interface HandoverRow {
 
 interface HandoverListResponse {
   data?: HandoverRow[]
-}
-
-interface ClinicalAiResponse {
-  result?: string
-  text?: string
 }
 
 function asRecord(value: unknown): UnknownRecord | null {
@@ -327,12 +323,12 @@ function WriteHandoverPanel({ patients, shiftType, shiftDate, loading }: WriteHa
       })
       .join('\n\n');
     try {
-      const resp = await apiClient.instance.post<ClinicalAiResponse>('llm/clinical-ai', {
+      const result = await llmAiJobsApi.runClinicalAiJob({
         action: 'handover-summary',
         data: patientNotes,
         enhance: false,
-      }, { timeout: 120_000 });
-      setAiSummary(resp.data?.result ?? resp.data?.text ?? 'No summary generated');
+      });
+      setAiSummary(result);
     } catch {
       setAiSummary('AI summary unavailable. Check that Ollama is running.');
     }

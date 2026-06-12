@@ -1,6 +1,7 @@
 import React, { Suspense, useState, useEffect } from 'react';
 import WhatshotIcon from '@mui/icons-material/Whatshot';
 import LocalHospitalIcon from '@mui/icons-material/LocalHospital';
+import BadgeIcon from '@mui/icons-material/Badge';
 import { ErrorBoundary } from '../../../../shared/components/ui/ErrorBoundary';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { useWorkspaceStore } from '../../../../shared/store/workspaceStore';
@@ -30,6 +31,8 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { usePatient } from '../../hooks/usePatient';
 import { usePatientFlags } from '../../hooks/usePatientFlags';
+import { DutyRelationshipDialog } from './DutyRelationshipDialog';
+import { patientDutyRelationshipApi } from '../../services/patientDutyRelationshipApi';
 import {
   type AllergySummary,
   type ClinicalIntelligenceSummary,
@@ -57,92 +60,15 @@ import {
   legalOrdersKeys,
 } from '../../queryKeys';
 import { useModuleVisibility } from '../../../../shared/hooks/useModuleVisibility';
+import { getAllowedDutyRelationshipTypes } from '@signacare/shared';
 import { PATIENT_TABS, PATIENT_TAB_GROUPS, type PatientTabId, calculateAge } from '../../types/patientTypes';
 import {
   canAccessPatientTab,
   canAccessPermission,
   firstAccessiblePatientTab,
 } from '../../../../shared/utils/frontendAccessPolicy';
-import { SummaryTab }        from './tabs/SummaryTab';
-import { OverviewTab }       from './tabs/OverviewTab';
-import { EpisodesTab }       from './tabs/EpisodesTab';
-import { AlertsPlansTab }    from './tabs/AlertsPlansTab';
-import { MedicationsTab }    from './tabs/MedicationsTab';
-import { MedicationHistoryTab } from './tabs/MedicationHistoryTab';
-import { PathologyTab }      from './tabs/PathologyTab';
-import { LegalTab }          from './tabs/LegalTab';
-import { ReferralsTab }      from './tabs/ReferralsTab';
-import { DocumentsTab }      from './tabs/DocumentsTab';
-import { CorrespondenceTab } from './tabs/CorrespondenceTab';
-import { AppointmentsTab }   from './tabs/AppointmentsTab';
-import { AssessmentsTab }    from './tabs/AssessmentsTab';
-import { TrackingTab }       from './tabs/TrackingTab';
-import { NinetyOneDayReviewTab } from './tabs/NinetyOneDayReviewTab';
-import { PathwaysTab }          from './tabs/PathwaysTab';
-import { PhysicalHealthTab }    from './tabs/PhysicalHealthTab';
-import { LivedExperienceTab }   from './tabs/LivedExperienceTab';
-import { InpatientCareTab }    from './tabs/InpatientCareTab';
-import { EctTab }              from './tabs/EctTab';
-import { TmsTab }              from './tabs/TmsTab';
-import { VivaTab }             from './tabs/VivaTab';
-import { PatientBillingTab }   from '../../../../features/billing/components/PatientBillingTab';
-import { ProblemListTab }      from '../../../internal-medicine/tabs/ProblemListTab';
-import { ChronicDiseaseRegisterTab } from '../../../internal-medicine/tabs/ChronicDiseaseRegisterTab';
-import { GlucoseFlowsheetTab }  from '../../../endocrinology/tabs/GlucoseFlowsheetTab';
-import { PaediatricsTab }       from '../../../paediatrics/tabs/PaediatricsTab';
-import { ObsGyneTab }           from '../../../obs-gyne/tabs/ObsGyneTab';
-import { SurgeryTab }           from '../../../surgery/tabs/SurgeryTab';
-import { OncologyTab }          from '../../../oncology/tabs/OncologyTab';
-import { MentalHealthInformationExchangeTab } from './tabs/MentalHealthInformationExchangeTab';
-import {
-  EndoInformationExchangeTab,
-  GENDER_LABELS,
-  getInitials,
-  GimInformationExchangeTab,
-  ObsGyneInformationExchangeTab,
-  OncologyInformationExchangeTab,
-  PaedInformationExchangeTab,
-  SurgeryInformationExchangeTab,
-} from './patientDetailLayoutHelpers';
-const TAB_COMPONENTS: Record<PatientTabId, React.FC<{ patientId: string }>> = {
-  summary:        SummaryTab,
-  overview:       OverviewTab,
-  episodes:       EpisodesTab,
-  'alerts-plans': AlertsPlansTab,
-  medications:    MedicationsTab,
-  'medication-history': MedicationHistoryTab,
-  pathology:      PathologyTab,
-  legal:          LegalTab,
-  referrals:      ReferralsTab,
-  documents:      DocumentsTab,
-  correspondence: CorrespondenceTab,
-  appointments:   AppointmentsTab,
-  assessments:    AssessmentsTab,
-  tracking:       TrackingTab,
-  '91day-review':   NinetyOneDayReviewTab,
-  pathways:         PathwaysTab,
-  'physical-health':   PhysicalHealthTab,
-  'lived-experience':  LivedExperienceTab,
-  'inpatient-care':    InpatientCareTab,
-  'ect':               EctTab,
-  'tms':               TmsTab,
-  'viva':              VivaTab,
-  'billing':           PatientBillingTab,
-  problems:            ProblemListTab,
-  'chronic-diseases':  ChronicDiseaseRegisterTab,
-  glucose:             GlucoseFlowsheetTab,
-  paediatrics:         PaediatricsTab,
-  'mh-exchange':       MentalHealthInformationExchangeTab,
-  'gim-exchange':      GimInformationExchangeTab,
-  'endo-exchange':     EndoInformationExchangeTab,
-  'paed-exchange':     PaedInformationExchangeTab,
-  'obs-gyne':          ObsGyneTab,
-  'obs-exchange':      ObsGyneInformationExchangeTab,
-  'surgery':           SurgeryTab,
-  'oncology':          OncologyTab,
-  'onco-exchange':     OncologyInformationExchangeTab,
-  'surg-exchange':     SurgeryInformationExchangeTab,
-};
+import { GENDER_LABELS, getInitials } from './patientDetailLayoutHelpers';
+import { TAB_COMPONENTS } from './patientDetailTabRegistry';
 
 type WorkbenchMode = 'focus' | 'balanced' | 'review';
 type BannerRiskAlert = {
@@ -155,7 +81,7 @@ type BannerRiskAlert = {
 
 export const PatientDetailLayout: React.FC = () => {
   const { id: patientId = '' } = useParams<{ id: string }>();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const initialTab = (searchParams.get('tab') as PatientTabId) || 'summary';
   const [activeTab, setActiveTab] = useState<PatientTabId>(initialTab);
   const user = useAuthStore((s) => s.user);
@@ -165,13 +91,30 @@ export const PatientDetailLayout: React.FC = () => {
     isTabVisible(tabId) && canAccessPatientTab(user, tabId);
   const fallbackTab = firstAccessiblePatientTab(user) as PatientTabId;
   const activeTabAllowed = canRenderPatientTab(activeTab);
+  const openDocumentationAction = React.useCallback((action: 'note' | 'report') => {
+    const next = new URLSearchParams(searchParams);
+    next.set('tab', 'documentation');
+    next.set('docAction', action);
+    setSearchParams(next, { replace: true });
+    setActiveTab('documentation');
+  }, [searchParams, setSearchParams]);
+
   const quickActions = [
-    { label: 'New Note', tab: 'episodes' as PatientTabId, permission: 'note:create' as const },
+    { label: 'Write Note', tab: 'documentation' as PatientTabId, permission: 'note:create' as const, docAction: 'note' as const },
+    { label: 'Write Report', tab: 'documentation' as PatientTabId, permission: 'note:create' as const, docAction: 'report' as const },
     { label: 'New Medication', tab: 'medications' as PatientTabId, permission: 'medication:create' as const },
     { label: 'New Referral', tab: 'referrals' as PatientTabId, permission: 'referral:create' as const },
     { label: 'New Appointment', tab: 'appointments' as PatientTabId, permission: 'appointment:create' as const },
-    { label: 'New Assessment', tab: 'assessments' as PatientTabId, permission: 'episode:update' as const },
+    { label: 'New Rating Scale', tab: 'assessments' as PatientTabId, permission: 'episode:update' as const },
   ].filter((action) => canRenderPatientTab(action.tab) && canAccessPermission(user, action.permission));
+
+  const activateTab = React.useCallback((nextTab: PatientTabId) => {
+    const next = new URLSearchParams(searchParams);
+    next.set('tab', nextTab);
+    next.delete('docAction');
+    setSearchParams(next, { replace: true });
+    setActiveTab(nextTab);
+  }, [searchParams, setSearchParams]);
 
   const { data: patient, isLoading, isError } = usePatient(patientId);
   const openTab = useWorkspaceStore(s => s.openTab);
@@ -179,6 +122,7 @@ export const PatientDetailLayout: React.FC = () => {
   const { data: episodes } = useEpisodeData(patientId);
 
   const [quickMenuAnchor, setQuickMenuAnchor] = useState<null | HTMLElement>(null);
+  const [dutyDialogOpen, setDutyDialogOpen] = useState(false);
   const [workbenchMode, setWorkbenchMode] = useState<WorkbenchMode>('balanced');
   const [navigatorOpen, setNavigatorOpen] = useState(true);
   const [summaryOpen, setSummaryOpen] = useState(true);
@@ -212,12 +156,26 @@ export const PatientDetailLayout: React.FC = () => {
     enabled: !!patientId,
     staleTime: 60_000,
   });
+  const allowedDutyRelationshipTypes = getAllowedDutyRelationshipTypes(user?.role ?? null);
+  const { data: dutyRelationships } = useQuery({
+    queryKey: patientsKeys.dutyRelationshipsMe(patientId),
+    queryFn: () => patientDutyRelationshipApi.listMine(patientId),
+    enabled: !!patientId && allowedDutyRelationshipTypes.length > 0,
+    staleTime: 30_000,
+  });
 
   useEffect(() => {
     if (patient && patientId) {
       openTab({ id: patientId, name: `${patient.givenName} ${patient.familyName}`, emrNumber: patient.emrNumber ?? '' });
     }
   }, [patient, patientId, openTab]);
+
+  useEffect(() => {
+    const requestedTab = searchParams.get('tab') as PatientTabId | null;
+    if (requestedTab && requestedTab !== activeTab) {
+      setActiveTab(requestedTab);
+    }
+  }, [activeTab, searchParams]);
 
   useEffect(() => {
     if (workbenchMode === 'focus') {
@@ -232,6 +190,10 @@ export const PatientDetailLayout: React.FC = () => {
     }
     setNavigatorOpen(true);
   }, [workbenchMode]);
+
+  const toggleWorkbenchMode = (nextMode: Exclude<WorkbenchMode, 'balanced'>) => {
+    setWorkbenchMode((currentMode) => (currentMode === nextMode ? 'balanced' : nextMode));
+  };
 
   if (isLoading) {
     return (
@@ -282,6 +244,7 @@ export const PatientDetailLayout: React.FC = () => {
   const quickWorkbenchTabs: PatientTabId[] = [
     'summary',
     'episodes',
+    'documentation',
     'medications',
     'appointments',
     'correspondence',
@@ -332,6 +295,21 @@ export const PatientDetailLayout: React.FC = () => {
             ) : (
               <Chip label="Allergies: Not Recorded" size="small" sx={{ fontWeight: 600, fontSize: 10, height: 22, bgcolor: '#ECEFF1', color: '#455A64', border: '1px solid #B0BEC5' }} />
             )}
+            {(dutyRelationships ?? []).map((relationship) => (
+              <Chip
+                key={relationship.id}
+                label={`${relationship.relationshipType === 'duty_prescriber' ? 'Duty Prescriber' : 'Duty Clinician'} until ${new Date(relationship.expiresAt).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}`}
+                size="small"
+                sx={{
+                  fontWeight: 700,
+                  fontSize: 10,
+                  height: 22,
+                  bgcolor: '#FFF8E1',
+                  color: '#8D6E00',
+                  border: '1px solid #E6C34D',
+                }}
+              />
+            ))}
           </Box>
 
           <Button size="small" variant="contained" startIcon={<span style={{ fontSize: 16, fontWeight: 700 }}>+</span>}
@@ -347,7 +325,18 @@ export const PatientDetailLayout: React.FC = () => {
             transformOrigin={{ vertical: 'top', horizontal: 'right' }}
           >
             {quickActions.map((a) => (
-              <MenuItem key={a.label} onClick={() => { setActiveTab(a.tab); setQuickMenuAnchor(null); }} sx={{ fontSize: 13 }}>
+              <MenuItem
+                key={a.label}
+                onClick={() => {
+                  setQuickMenuAnchor(null);
+                  if (a.docAction) {
+                    openDocumentationAction(a.docAction);
+                    return;
+                  }
+                  activateTab(a.tab);
+                }}
+                sx={{ fontSize: 13 }}
+              >
                 {a.label}
               </MenuItem>
             ))}
@@ -358,6 +347,24 @@ export const PatientDetailLayout: React.FC = () => {
             )}
           </Menu>
 
+          {allowedDutyRelationshipTypes.length > 0 && (
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<BadgeIcon sx={{ fontSize: 16 }} />}
+              onClick={() => setDutyDialogOpen(true)}
+              sx={{
+                textTransform: 'none',
+                fontSize: 12,
+                fontWeight: 600,
+                minWidth: 0,
+                px: 1.5,
+                py: 0.5,
+              }}
+            >
+              Duty Access
+            </Button>
+          )}
           <BannerHotSpotButton patientId={patientId} />
           <BannerAdmissionFlagButton patientId={patientId} />
         </Box>
@@ -366,7 +373,7 @@ export const PatientDetailLayout: React.FC = () => {
           <Typography variant="caption" sx={{ color: '#999', fontSize: 10, mr: 0.5 }}>EPISODES:</Typography>
           {activeEpisodes.map((ep: EpisodeSummary) => (
             <Chip key={ep.id} label={ep.title ?? ep.episodeType ?? 'Episode'} size="small"
-              onClick={() => setActiveTab('episodes')}
+              onClick={() => activateTab('episodes')}
               sx={{ fontSize: 10, height: 20, bgcolor: '#E8F5E9', color: '#2E7D32', fontWeight: 600, border: '1px solid #A5D6A7', cursor: 'pointer' }} />
           ))}
           {activeEpisodes.length === 0 && <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>No active episodes</Typography>}
@@ -382,21 +389,14 @@ export const PatientDetailLayout: React.FC = () => {
               label="Focus"
               color={workbenchMode === 'focus' ? 'primary' : 'default'}
               variant={workbenchMode === 'focus' ? 'filled' : 'outlined'}
-              onClick={() => setWorkbenchMode('focus')}
-            />
-            <Chip
-              size="small"
-              label="Balanced"
-              color={workbenchMode === 'balanced' ? 'primary' : 'default'}
-              variant={workbenchMode === 'balanced' ? 'filled' : 'outlined'}
-              onClick={() => setWorkbenchMode('balanced')}
+              onClick={() => toggleWorkbenchMode('focus')}
             />
             <Chip
               size="small"
               label="Review"
               color={workbenchMode === 'review' ? 'primary' : 'default'}
               variant={workbenchMode === 'review' ? 'filled' : 'outlined'}
-              onClick={() => setWorkbenchMode('review')}
+              onClick={() => toggleWorkbenchMode('review')}
             />
           </Box>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
@@ -408,7 +408,7 @@ export const PatientDetailLayout: React.FC = () => {
                   key={tabId}
                   size="small"
                   label={tab.label}
-                  onClick={() => setActiveTab(tabId)}
+                  onClick={() => activateTab(tabId)}
                   sx={{
                     height: 22,
                     fontSize: 10,
@@ -467,7 +467,7 @@ export const PatientDetailLayout: React.FC = () => {
                       const tab = PATIENT_TABS.find(t => t.id === tid);
                       if (!tab) return null;
                       const isActive = activeTab === tid;
-                      const activate = () => setActiveTab(tid);
+                      const activate = () => activateTab(tid);
                       return (
                         <Box
                           key={tid}
@@ -502,11 +502,11 @@ export const PatientDetailLayout: React.FC = () => {
                     <Box
                       role="button"
                       tabIndex={0}
-                      onClick={() => setActiveTab(tabId)}
+                      onClick={() => activateTab(tabId)}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' || e.key === ' ') {
                           e.preventDefault();
-                          setActiveTab(tabId);
+                          activateTab(tabId);
                         }
                       }}
                       sx={{
@@ -543,7 +543,7 @@ export const PatientDetailLayout: React.FC = () => {
                   <Button
                     color="inherit"
                     size="small"
-                    onClick={() => setActiveTab(fallbackTab)}
+                    onClick={() => activateTab(fallbackTab)}
                   >
                     Go to permitted tab
                   </Button>
@@ -603,6 +603,11 @@ export const PatientDetailLayout: React.FC = () => {
           )}
         </Box>
       </Box>
+      <DutyRelationshipDialog
+        open={dutyDialogOpen}
+        patientId={patientId}
+        onClose={() => setDutyDialogOpen(false)}
+      />
     </Box>
   );
 };

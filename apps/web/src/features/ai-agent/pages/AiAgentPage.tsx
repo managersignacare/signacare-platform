@@ -14,11 +14,14 @@ import {
     Select, Tab, Tabs, TextField, Typography
 } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
+import { isDurableClinicalAiJobAction, requiresAsyncClinicalAiJob } from '@signacare/shared';
 import React, { useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MarkdownRenderer } from '../../../shared/components/ui/MarkdownRenderer';
+import { AiGeneratedNoteSaveDialog } from '../../../shared/components/ui/AiGeneratedNoteSaveDialog';
 import { PrintExportButtons } from '../../../shared/components/ui/PrintExportButtons';
-import { apiClient } from '../../../shared/services/apiClient';
+import { apiClient, LONG_RUNNING_AI_TIMEOUT_MS } from '../../../shared/services/apiClient';
+import { llmAiJobsApi } from '../../../shared/services/llmAiJobsApi';
 import { useAuthStore } from '../../../shared/store/authStore';
 import { useThemeStore } from '../../../shared/theme/ThemeProvider';
 import { PatientSearchAutocomplete, type PatientOption } from '../../patients/components/PatientSearchAutocomplete';
@@ -51,7 +54,8 @@ const AI_ACTIONS = [
 ];
 
 export default function AiAgentPage() {
-  const [topTab, setTopTab] = useState<'clinical' | 'agent'>('clinical');
+  const [topTab, setTopTab] = useState<'clinical' | 'agent' | 'agentic'>('clinical');
+  const navigate = useNavigate();
   const palette = useThemeStore((s) => s.palette);
   const bannerGradient = `linear-gradient(135deg, ${palette.sidebar} 0%, ${palette.secondary} 60%, ${palette.primary} 100%)`;
   return (
@@ -73,13 +77,70 @@ export default function AiAgentPage() {
         <Tabs aria-label="Navigation tabs" value={topTab} onChange={(_, v) => setTopTab(v)} sx={{ mt: 1, '& .MuiTab-root': { textTransform: 'none', fontFamily: 'Albert Sans, sans-serif', color: 'rgba(255,255,255,0.7)', '&.Mui-selected': { color: '#fff' } }, '& .MuiTabs-indicator': { bgcolor: '#fff' } }}>
           <Tab icon={<AutoAwesomeIcon sx={{ fontSize: 16 }} />} iconPosition="start" label="Clinical AI Tools" value="clinical" />
           <Tab icon={<ChatIcon sx={{ fontSize: 16 }} />} iconPosition="start" label="AI Agent Chat" value="agent" />
+          <Tab icon={<AutoAwesomeIcon sx={{ fontSize: 16 }} />} iconPosition="start" label="Agentic AI" value="agentic" />
         </Tabs>
       </Box>
 
       <Box sx={{ px: { xs: 2, md: 4 } }}>
         {topTab === 'clinical' && <ClinicalAiPanel />}
         {topTab === 'agent' && <AgentChatPanel />}
+        {topTab === 'agentic' && <AgenticAiLauncherPanel onOpen={() => navigate('/agentic-scribe')} />}
       </Box>
+    </Box>
+  );
+}
+
+/**
+ * In-page launcher for the Agentic Scribe (Agentic AI) surface.
+ *
+ * AI Assistant keeps an in-page launcher for the Agentic Scribe
+ * surface even though Medical Scribe is also exposed directly in the
+ * sidebar. This preserves a cohesive AI workspace while still giving
+ * clinicians a faster direct navigation path when they already know
+ * they want scribe tooling.
+ *
+ * The Cmd-K palette shortcut `g y` still navigates here directly.
+ * The Medical Scribe recorder also surfaces an Agentic AI button so
+ * the recorder operator does not need to detour back to this page.
+ */
+function AgenticAiLauncherPanel({ onOpen }: { onOpen: () => void }) {
+  return (
+    <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+      <Paper variant="outlined" sx={{ p: 4, maxWidth: 640, width: '100%', borderRadius: 3 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
+          <Box sx={{ width: 48, height: 48, borderRadius: 2, bgcolor: '#FFF3E0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <AutoAwesomeIcon sx={{ color: '#b8621a', fontSize: 28 }} />
+          </Box>
+          <Box>
+            <Typography variant="h6" fontWeight={700} fontFamily="Albert Sans, sans-serif">
+              Agentic AI
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              Multi-step clinical task drafts from your session transcript
+            </Typography>
+          </Box>
+        </Box>
+        <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
+          Agentic AI proposes structured drafts (referrals, follow-up tasks, escalations)
+          from an ambient or pasted clinical transcript and lets you accept or reject
+          each draft individually. It is governed by the same on-prem LLM as the rest
+          of the AI Assistant.
+        </Typography>
+        <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
+          <Button
+            variant="contained"
+            startIcon={<AutoAwesomeIcon />}
+            onClick={onOpen}
+            data-testid="aiagent-open-agentic-scribe"
+            sx={{ bgcolor: '#b8621a', '&:hover': { bgcolor: '#a05418' }, textTransform: 'none', fontWeight: 600 }}
+          >
+            Open Agentic Scribe
+          </Button>
+          <Typography variant="caption" color="text.secondary">
+            Cmd-K shortcut: <Chip label="g y" size="small" sx={{ ml: 0.5, height: 20, fontSize: 10 }} />
+          </Typography>
+        </Box>
+      </Paper>
     </Box>
   );
 }
@@ -95,8 +156,7 @@ function ClinicalAiPanel() {
   const [error, setError] = useState('');
   const [selectedPatient, setSelectedPatient] = useState<{ id: string; name: string } | null>(null);
   const [autoLoading, setAutoLoading] = useState(false);
-  const [noteDialogOpen, setNoteDialogOpen] = useState(false);
-  const [noteTitle, setNoteTitle] = useState('');
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [enriched, setEnriched] = useState(false);
   const [sectionCheck, setSectionCheck] = useState<{ valid: boolean; missing: string[] } | null>(null);
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
@@ -225,17 +285,50 @@ ${p.nokName ? `NOK: ${p.nokName} (${p.nokRelationship || 'unknown'}, Ph: ${p.nok
     if (!selectedAction || !inputText.trim()) return;
     setLoading(true); setError(''); setResult(''); setUsedModel(''); setEnriched(false); setSectionCheck(null);
     try {
-      const resp = await apiClient.post<{ result: string; model?: string; enriched?: boolean; sections?: { valid: boolean; missing: string[] } }>('llm/clinical-ai', {
-        action: selectedAction,
-        data: inputText.trim(),
-        model: activeModel || undefined,
-        patientId: selectedPatient ? selectedPatient.id : undefined,
-        enhance: true,
-      });
-      setResult(resp.result);
-      setUsedModel(resp.model ?? activeModel);
-      if (resp.enriched) setEnriched(true);
-      if (resp.sections) setSectionCheck(resp.sections);
+      if (
+        isDurableClinicalAiJobAction(selectedAction)
+        && requiresAsyncClinicalAiJob({
+          action: selectedAction,
+          patientId: selectedPatient?.id,
+        })
+      ) {
+        const status = await llmAiJobsApi.runClinicalAiJobDetailed({
+          action: selectedAction,
+          data: inputText.trim(),
+          model: activeModel || undefined,
+          patientId: selectedPatient?.id,
+          enhance: true,
+        });
+        const resultText = status.result?.trim();
+        if (!resultText) {
+          throw new Error('Clinical AI job completed without generated text.');
+        }
+        const jobResult = status.resultJson && typeof status.resultJson === 'object'
+          ? status.resultJson as {
+              model?: string;
+              payload?: {
+                enriched?: boolean;
+                sections?: { valid: boolean; missing: string[] };
+              };
+            }
+          : undefined;
+        setResult(resultText);
+        setUsedModel(jobResult?.model ?? activeModel);
+        if (jobResult?.payload?.enriched) setEnriched(true);
+        if (jobResult?.payload?.sections) setSectionCheck(jobResult.payload.sections);
+      } else {
+        const resp = await apiClient.post<{ result: string; model?: string; enriched?: boolean; sections?: { valid: boolean; missing: string[] } }>('llm/clinical-ai', {
+          action: selectedAction,
+          data: inputText.trim(),
+          model: activeModel || undefined,
+          patientId: selectedPatient ? selectedPatient.id : undefined,
+          enhance: true,
+        });
+        setResult(resp.result);
+        setUsedModel(resp.model ?? activeModel);
+        if (resp.enriched) setEnriched(true);
+        if (resp.sections) setSectionCheck(resp.sections);
+      }
     } catch (err: unknown) {
       setError(readErrorMessage(err, 'AI generation failed. Ensure local Ollama is running.'));
     } finally {
@@ -261,24 +354,6 @@ ${p.nokName ? `NOK: ${p.nokName} (${p.nokRelationship || 'unknown'}, Ph: ${p.nok
       alert(`Failed to send: ${readErrorMessage(err, 'Outlook not connected')}`);
     } finally {
       setEmailSending(false);
-    }
-  };
-
-  const handleUseInNote = async () => {
-    if (!selectedPatient || !result) return;
-    try {
-      const actionLabel = AI_ACTIONS.find(a => a.id === selectedAction)?.label ?? selectedAction;
-      await apiClient.post(`patients/${selectedPatient.id}/notes`, {
-        title: noteTitle.trim() || `AI: ${actionLabel}`,
-        noteType: 'progress',
-        content: result,
-        status: 'draft',
-      });
-      setNoteDialogOpen(false);
-      setNoteTitle('');
-      navigate(`/patients/${selectedPatient.id}`);
-    } catch (err: unknown) {
-      alert(`Failed to save note: ${readErrorMessage(err, 'Unknown error')}`);
     }
   };
 
@@ -449,7 +524,10 @@ ${p.nokName ? `NOK: ${p.nokName} (${p.nokRelationship || 'unknown'}, Ph: ${p.nok
                   <PrintExportButtons content={result} title={AI_ACTIONS.find(a => a.id === selectedAction)?.label ?? 'AI Output'} subtitle={selectedPatient?.name} />
                   <Box sx={{ display: 'flex', gap: 1 }}>
                   {selectedPatient && (
-                    <Button size="small" variant="contained" onClick={() => { setNoteTitle(`AI: ${AI_ACTIONS.find(a => a.id === selectedAction)?.label ?? ''}`); setNoteDialogOpen(true); }}
+                    <Button
+                      size="small"
+                      variant="contained"
+                      onClick={() => setSaveDialogOpen(true)}
                       sx={{ bgcolor: '#327C8D', '&:hover': { bgcolor: '#265f6d' } }}>Use in Note</Button>
                   )}
                   {outlookStatus?.connected && (
@@ -472,28 +550,19 @@ ${p.nokName ? `NOK: ${p.nokName} (${p.nokRelationship || 'unknown'}, Ph: ${p.nok
         </Grid>
       )}
 
-      {/* Save as Note Dialog */}
-      <Dialog aria-labelledby="dialog-title" open={noteDialogOpen} onClose={() => setNoteDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle id="dialog-title" sx={{ fontWeight: 700 }}>Save AI Output as Clinical Note</DialogTitle>
-        <Divider />
-        <DialogContent>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            This will create a <strong>draft</strong> note for <strong>{selectedPatient?.name}</strong>.
-            You can review and sign it in the patient's notes tab.
-          </Typography>
-          <TextField label="Note Title" fullWidth size="small" value={noteTitle} onChange={e => setNoteTitle(e.target.value)} sx={{ mb: 2 }} />
-          <Typography variant="caption" color="text.secondary">Content preview:</Typography>
-          <Box sx={{ maxHeight: 200, overflowY: 'auto', bgcolor: '#FAFAFA', p: 1.5, borderRadius: 1, mt: 0.5, border: '1px solid #eee' }}>
-            <MarkdownRenderer content={result.substring(0, 500) + (result.length > 500 ? '...' : '')} />
-          </Box>
-        </DialogContent>
-        <DialogActions sx={{ px: 3, py: 2 }}>
-          <Button onClick={() => setNoteDialogOpen(false)} sx={{ color: 'text.secondary' }}>Cancel</Button>
-          <Button variant="contained" onClick={handleUseInNote} sx={{ bgcolor: '#327C8D', '&:hover': { bgcolor: '#265f6d' } }}>
-            Save as Draft Note
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <AiGeneratedNoteSaveDialog
+        open={saveDialogOpen}
+        patientId={selectedPatient?.id ?? null}
+        content={result}
+        defaultTitle={`AI: ${AI_ACTIONS.find((action) => action.id === selectedAction)?.label ?? selectedAction}`}
+        sourceKey={`ai_assistant:${selectedAction}`}
+        sourceLabel="AI Assistant output"
+        onClose={() => setSaveDialogOpen(false)}
+        onSaved={() => {
+          setSaveDialogOpen(false);
+          if (selectedPatient) navigate(`/patients/${selectedPatient.id}`);
+        }}
+      />
 
       {/* Send via Outlook Dialog */}
       <Dialog aria-labelledby="dialog-title" open={emailDialogOpen} onClose={() => setEmailDialogOpen(false)} maxWidth="sm" fullWidth>
@@ -662,7 +731,7 @@ function AgentChatPanel() {
         patientId: patient?.id,
         purposeOfUse: 'clinical',
         scope,
-      }, { timeout: 180_000 });
+      }, { timeout: LONG_RUNNING_AI_TIMEOUT_MS });
       setMessages(prev => [...prev, { role: 'agent', text: resp.data.answer, tools: resp.data.toolCalls }]);
     } catch (err: unknown) {
       setMessages(prev => [...prev, { role: 'agent', text: `Error: ${readErrorMessage(err, 'Agent unavailable.')}` }]);
@@ -673,9 +742,33 @@ function AgentChatPanel() {
   };
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [pendingSave, setPendingSave] = useState<{ title: string; content: string } | null>(null);
 
   const handlePromptClick = (q: string) => {
     void handleSend(q);
+  };
+
+  const openSaveDialogForMessage = (index: number) => {
+    const message = messages[index];
+    if (!message || message.role !== 'agent' || !patient) return;
+    const previousUserMessage = [...messages.slice(0, index)]
+      .reverse()
+      .find((entry) => entry.role === 'user');
+    const chatContent = [
+      '# AI Agent Chat',
+      '',
+      previousUserMessage ? `## Prompt\n${previousUserMessage.text}` : null,
+      '',
+      '## Response',
+      message.text,
+    ]
+      .filter((line): line is string => line !== null)
+      .join('\n');
+
+    setPendingSave({
+      title: `AI Agent Chat — ${new Date().toLocaleDateString('en-AU')}`,
+      content: chatContent,
+    });
   };
 
   return (
@@ -825,6 +918,16 @@ function AgentChatPanel() {
                 {msg.role === 'agent' && msg.text.length > 50 && (
                   <Box sx={{ mt: 0.5, display: 'flex', alignItems: 'center', gap: 1, px: 0.5 }}>
                     <PrintExportButtons content={msg.text} title="AI Agent Response" compact />
+                    {contextLevel === 'patient' && patient && (
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        onClick={() => openSaveDialogForMessage(i)}
+                        sx={{ textTransform: 'none', minWidth: 0, px: 1 }}
+                      >
+                        Save to Episode
+                      </Button>
+                    )}
                     {msg.tools?.length ? (
                       <Box sx={{ display: 'flex', gap: 0.3, alignItems: 'center' }}>
                         <Typography variant="caption" color="text.secondary" sx={{ fontSize: 9 }}>Used:</Typography>
@@ -866,6 +969,16 @@ function AgentChatPanel() {
             sx={{ bgcolor: '#b8621a', '&:hover': { bgcolor: '#d6741f' }, minWidth: 80, borderRadius: 2, height: 40 }}>Send</Button>
         </Box>
       </Paper>
+      <AiGeneratedNoteSaveDialog
+        open={pendingSave !== null}
+        patientId={patient?.id ?? null}
+        content={pendingSave?.content ?? ''}
+        defaultTitle={pendingSave?.title ?? 'AI Agent Chat'}
+        sourceKey="ai_agent_chat"
+        sourceLabel="AI Agent patient chat"
+        onClose={() => setPendingSave(null)}
+        onSaved={() => setPendingSave(null)}
+      />
       </Box>
     </Box>
   );

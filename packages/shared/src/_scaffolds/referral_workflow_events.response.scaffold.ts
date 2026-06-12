@@ -6,6 +6,7 @@
 import { z } from 'zod';
 
 export const ReferralWorkflowEventsResponseScaffoldSchema = z.object({
+  id: z.number().int(),
   clinicId: z.string().uuid(),
   referralId: z.string().uuid(),
   eventType: z.string().max(50),

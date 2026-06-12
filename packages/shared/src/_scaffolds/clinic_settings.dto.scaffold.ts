@@ -23,6 +23,13 @@ export const ClinicSettingsDtoScaffoldSchema = z.object({
   emailSenderMode: z.string(),
   clinicSenderEmail: z.string().max(255).nullable().optional(),
   clinicSenderName: z.string().max(120).nullable().optional(),
+  scribeAudioRetentionAdr: z.string().nullable().optional(),
+  scribeAudioRetentionClinicalReview: z.string().nullable().optional(),
+  scribeAudioRetentionApprovedByStaffId: z.string().uuid().nullable().optional(),
+  scribeAudioRetentionApprovedAt: z.string().datetime().nullable().optional(),
+  aiLlmBackend: z.string().max(40),
+  scribeRuntimeMode: z.string().max(40),
+  localStyleAdapterModelName: z.string().max(200).nullable().optional(),
 });
 
 export type ClinicSettingsDtoScaffold = z.infer<typeof ClinicSettingsDtoScaffoldSchema>;

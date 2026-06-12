@@ -23,6 +23,8 @@ type Session = {
 type ScenarioRows = {
   staffIds: string[];
   orgUnitIds: string[];
+  clinicalRoleIds: string[];
+  staffRoleAssignmentIds: string[];
   patientIds: string[];
   episodeIds: string[];
   transitionIds: string[];
@@ -33,6 +35,8 @@ function createScenarioRows(): ScenarioRows {
   return {
     staffIds: [],
     orgUnitIds: [],
+    clinicalRoleIds: [],
+    staffRoleAssignmentIds: [],
     patientIds: [],
     episodeIds: [],
     transitionIds: [],
@@ -104,6 +108,15 @@ async function waitForAssertion<T>(args: {
 }
 
 async function cleanupScenario(rows: ScenarioRows): Promise<void> {
+  if (rows.staffRoleAssignmentIds.length > 0) {
+    await withClinicContext(CANONICAL_PERSONAS.admin.clinicId, (trx) =>
+      trx('staff_role_assignments')
+        .whereIn('id', rows.staffRoleAssignmentIds)
+        .delete()
+        .catch(() => undefined),
+    );
+  }
+
   if (rows.reallocationIds.length > 0) {
     await withClinicContext(CANONICAL_PERSONAS.admin.clinicId, (trx) =>
       trx('patient_team_reallocations')
@@ -143,6 +156,15 @@ async function cleanupScenario(rows: ScenarioRows): Promise<void> {
     );
     await withClinicContext(CANONICAL_PERSONAS.admin.clinicId, (trx) =>
       trx('patients').whereIn('id', rows.patientIds).delete().catch(() => undefined),
+    );
+  }
+
+  if (rows.clinicalRoleIds.length > 0) {
+    await withClinicContext(CANONICAL_PERSONAS.admin.clinicId, (trx) =>
+      trx('clinical_roles')
+        .whereIn('id', rows.clinicalRoleIds)
+        .delete()
+        .catch(() => undefined),
     );
   }
 
@@ -298,6 +320,45 @@ async function createPatientTeamAssignment(
     created_at: new Date(),
     updated_at: new Date(),
   }));
+}
+
+async function createMdtRoleAssignment(
+  session: Session,
+  rows: ScenarioRows,
+  staffId: string,
+  teamId: string,
+  roleName: string,
+): Promise<void> {
+  const clinicalRoleId = randomUUID();
+  const roleAssignmentId = randomUUID();
+  rows.clinicalRoleIds.push(clinicalRoleId);
+  rows.staffRoleAssignmentIds.push(roleAssignmentId);
+
+  await withClinicContext(session.clinicId, async (trx) => {
+    await trx('clinical_roles').insert({
+      id: clinicalRoleId,
+      clinic_id: session.clinicId,
+      name: `${roleName}-${TEST_TAG}`,
+      is_active: true,
+      sort_order: 100,
+      created_at: new Date(),
+      updated_at: new Date(),
+    });
+
+    await trx('staff_role_assignments').insert({
+      id: roleAssignmentId,
+      clinic_id: session.clinicId,
+      staff_id: staffId,
+      org_unit_id: teamId,
+      clinical_role_id: clinicalRoleId,
+      role_type: 'mdt',
+      start_date: new Date().toISOString().slice(0, 10),
+      end_date: null,
+      is_active: true,
+      created_at: new Date(),
+      updated_at: new Date(),
+    });
+  });
 }
 
 describe.skipIf(!READY)('BUG-REALLOC-ASSIGNMENT-PATH', () => {
@@ -486,6 +547,59 @@ describe.skipIf(!READY)('BUG-REALLOC-ASSIGNMENT-PATH', () => {
       expect(assignmentPrimaryClinicianId(assignment as Record<string, unknown>)).toBeNull();
       expect(assignmentEffectivePrimaryClinicianId(assignment as Record<string, unknown>)).toBe(primaryStaffId);
       expect((assignment as Record<string, unknown>).episodeId ?? (assignment as Record<string, unknown>).episode_id).toBe(episodeId);
+    } finally {
+      await cleanupScenario(rows);
+    }
+  });
+
+  test('team-assignments populates MDT from open episode team when assignment team is stale', async () => {
+    const session = await loginAsAdmin();
+    const rows = createScenarioRows();
+
+    try {
+      const primaryStaffId = await createStaff(session, rows, 'mdt-primary');
+      const consultantStaffId = await createStaff(session, rows, 'mdt-consultant');
+      const staleAssignmentTeamId = await createTeam(session, rows, 'mdt-stale-team');
+      const episodeTeamId = await createTeam(session, rows, 'mdt-episode-team');
+      const patientId = await createPatient(session, rows, 'mdt-patient');
+      const episodeId = await createEpisode(
+        session,
+        rows,
+        patientId,
+        primaryStaffId,
+        episodeTeamId,
+        'mdt-effective-team',
+      );
+      await createPatientTeamAssignment(session.clinicId, patientId, staleAssignmentTeamId, primaryStaffId);
+      await createMdtRoleAssignment(
+        session,
+        rows,
+        consultantStaffId,
+        episodeTeamId,
+        'Consultant Psychiatrist',
+      );
+
+      const teamAssignmentsRes = await request(app)
+        .get('/api/v1/patients/team-assignments')
+        .set(authHeaders(session.token));
+      expect(teamAssignmentsRes.status).toBe(200);
+
+      const assignment = ((teamAssignmentsRes.body?.assignments as Array<Record<string, unknown>> | undefined) ?? [])
+        .find((row) => assignmentPatientId(row) === patientId);
+      expect(assignment).toBeTruthy();
+      expect((assignment as Record<string, unknown>).episodeId ?? (assignment as Record<string, unknown>).episode_id).toBe(episodeId);
+      expect((assignment as Record<string, unknown>).orgUnitId ?? (assignment as Record<string, unknown>).org_unit_id).toBe(episodeTeamId);
+      expect((assignment as Record<string, unknown>).openEpisodeTeamId ?? (assignment as Record<string, unknown>).open_episode_team_id).toBe(episodeTeamId);
+
+      const mdt = ((assignment as Record<string, unknown>).mdt as Array<Record<string, unknown>> | undefined) ?? [];
+      expect(mdt).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            staffId: consultantStaffId,
+            roleName: expect.stringContaining('Consultant Psychiatrist'),
+          }),
+        ]),
+      );
     } finally {
       await cleanupScenario(rows);
     }

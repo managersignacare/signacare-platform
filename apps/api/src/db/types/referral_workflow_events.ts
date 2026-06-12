@@ -5,6 +5,7 @@
 // raw SQL column DDL is rejected by check-no-column-ddl-in-raw-sql guard).
 
 export interface ReferralWorkflowEventsRow {
+  id: number;
   clinic_id: string;
   referral_id: string;
   event_type: string;
@@ -17,6 +18,7 @@ export interface ReferralWorkflowEventsRow {
 }
 
 export const REFERRAL_WORKFLOW_EVENTS_COLUMNS = [
+  'id',
   'clinic_id',
   'referral_id',
   'event_type',

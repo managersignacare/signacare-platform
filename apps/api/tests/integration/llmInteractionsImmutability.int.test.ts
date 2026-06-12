@@ -9,7 +9,7 @@
  * mutation()` raises 'llm_interactions is append-only (BUG-286 tamper-
  * evident)' for all roles including dbAdmin (no SECURITY DEFINER).
  *
- * Coverage (7 tests):
+ * Coverage (8 tests):
  *   T1 — app_user has SELECT on llm_interactions (read preserved).
  *   T2 — app_user has INSERT on llm_interactions (write preserved for
  *        recordLlmInteraction).
@@ -20,6 +20,8 @@
  *   T6 — dbAdmin DELETE attempt raises 'llm_interactions is append-only'.
  *   T7 — dead updated_at trigger (`trg_llm_interactions_updated_at`) is
  *        absent (BUG-325 schema cleanup).
+ *   T8 — relationship foreign keys use RESTRICT delete rules so hard-delete
+ *        cannot mutate append-only rows.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -140,5 +142,26 @@ describe.skipIf(!READY)('BUG-286 llm_interactions immutability (live DB)', () =>
     const present = r.rows?.[0]?.present;
     if (typeof present !== 'boolean') return;
     expect(present).toBe(false);
+  });
+
+  it('T8 — user/patient/episode foreign keys use RESTRICT delete rules', async () => {
+    const { dbAdmin } = await import('../../src/db/db');
+    const r = await dbAdmin.raw<{
+      rows: Array<{ conname: string; confdeltype: string }>;
+    }>(`
+      SELECT conname, confdeltype
+      FROM pg_constraint
+      WHERE conrelid = 'llm_interactions'::regclass
+        AND conname IN (
+          'llm_interactions_user_id_foreign',
+          'llm_interactions_patient_id_foreign',
+          'llm_interactions_episode_id_foreign'
+        )
+      ORDER BY conname
+    `);
+
+    const rows = r.rows ?? [];
+    expect(rows).toHaveLength(3);
+    expect(rows.map((row) => row.confdeltype)).toEqual(['r', 'r', 'r']);
   });
 });

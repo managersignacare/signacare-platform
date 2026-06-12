@@ -1,8 +1,21 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
+const assetVersion = (process.env.VITE_ASSET_VERSION ?? 'dev')
+  .replace(/[^a-zA-Z0-9_-]/g, '')
+  .slice(0, 80);
+
 export default defineConfig({
   plugins: [react()],
+  build: {
+    rollupOptions: {
+      output: {
+        entryFileNames: `assets/[name]-[hash]-${assetVersion}.js`,
+        chunkFileNames: `assets/[name]-[hash]-${assetVersion}.js`,
+        assetFileNames: `assets/[name]-[hash]-${assetVersion}[extname]`,
+      },
+    },
+  },
   server: {
     port: 5173,
     proxy: {

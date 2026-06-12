@@ -1,22 +1,78 @@
 import { z } from 'zod';
 import { WearableMetricTypeSchema } from '@signacare/shared';
 
+function isRealDob(value: string): boolean {
+  const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  const au = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(value);
+  const yyyy = iso ? Number(iso[1]) : au ? Number(au[3]) : NaN;
+  const mm = iso ? Number(iso[2]) : au ? Number(au[2]) : NaN;
+  const dd = iso ? Number(iso[3]) : au ? Number(au[1]) : NaN;
+  if (!Number.isInteger(yyyy) || !Number.isInteger(mm) || !Number.isInteger(dd)) return false;
+  const date = new Date(Date.UTC(yyyy, mm - 1, dd));
+  return date.getUTCFullYear() === yyyy
+    && date.getUTCMonth() === mm - 1
+    && date.getUTCDate() === dd;
+}
+
+const DobInputSchema = z.union([
+  z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  z.string().regex(/^\d{2}\/\d{2}\/\d{4}$/),
+]).refine(isRealDob, {
+  message: 'Date of birth must be a real calendar date',
+});
+
 export const ActivateSchema = z.object({
   code: z.string().min(6).max(128),
   password: z.string().min(8).max(200),
   // Accept both ISO and AU D/M/Y entry from Viva activation form.
-  dob: z
-    .union([
-      z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-      z.string().regex(/^\d{2}\/\d{2}\/\d{4}$/),
-    ])
-    .optional(),
+  dob: DobInputSchema.optional(),
   phone: z.string().min(6).max(30),
 });
 
 export const PatientLoginSchema = z.object({
   phone: z.string().min(6).max(30),
   password: z.string().min(1).max(200),
+});
+
+const OptionalText = (max: number) =>
+  z.string().trim().max(max).optional().transform((value) => value || undefined);
+
+const PatientRegistrationContactSchema = z.object({
+  name: OptionalText(160),
+  relationship: OptionalText(120),
+  phone: OptionalText(30),
+});
+
+export const PatientRegistrationRequestSchema = z.object({
+  clinicId: z.string().uuid().optional(),
+  clinicName: OptionalText(200),
+  givenName: z.string().trim().min(1).max(120),
+  familyName: z.string().trim().min(1).max(120),
+  preferredName: OptionalText(120),
+  dateOfBirth: DobInputSchema,
+  gender: OptionalText(80),
+  phoneMobile: z.string().trim().min(6).max(30),
+  email: z.string().trim().email().max(255).optional().or(z.literal('').transform(() => undefined)),
+  address: z.object({
+    street: OptionalText(240),
+    suburb: OptionalText(120),
+    state: OptionalText(40),
+    postcode: OptionalText(20),
+  }).optional(),
+  nextOfKin: PatientRegistrationContactSchema.optional(),
+  gp: z.object({
+    name: OptionalText(160),
+    practice: OptionalText(200),
+    phone: OptionalText(30),
+  }).optional(),
+  supportPerson: PatientRegistrationContactSchema.optional(),
+  reason: OptionalText(2000),
+  clientRequestId: OptionalText(128),
+  consentToContact: z.literal(true, {
+    errorMap: () => ({
+      message: 'Consent to contact is required to submit a registration request',
+    }),
+  }),
 });
 
 const TrackingEntryShape = z.object({
@@ -80,7 +136,7 @@ export const AlertThresholdSchema = z.object({
 });
 
 export const AssessmentStartSchema = z.object({
-  templateId: z.string().uuid(),
+  templateId: z.string().min(1).max(120),
 });
 
 export const AssessmentSubmitSchema = z.object({

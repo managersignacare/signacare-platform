@@ -17,6 +17,8 @@ import {
   MANAGER_ROLES,
 } from '../../shared/roleGroups';
 import adminReportsRoutes from './adminReportsRouter';
+import { resolveLockedRuntimeSelection } from '../llm/modelRouter/modelRouter';
+import { scoreClinicalNoteAudit } from './llmAuditScoring';
 
 // Governance-scope routes (admin + superadmin only). These expose
 // per-clinician activity, quality-improvement audit tooling, and other
@@ -282,6 +284,7 @@ router.get('/clinical-alerts', clinicalAlertsRoleGate, async (req, res, next) =>
         .whereNotExists(function() {
           this.select(db.raw('1')).from('outcome_measures as om')
             .whereRaw('om.patient_id = e.patient_id')
+            .whereNull('om.deleted_at')
             .whereRaw("om.measure_type IN ('metabolic_monitoring', 'physical_health')")
             .whereRaw('om.created_at > CURRENT_DATE - INTERVAL \'90 days\'');
         })
@@ -497,7 +500,7 @@ router.post('/audit-runs', governanceRoleGate, async (req, res, next) => {
     }
 
     const notes = await q
-      .select('cn.id as noteId', 'cn.title', 'cn.note_type', 'cn.content', 'cn.created_at',
+      .select('cn.id as noteId', 'cn.patient_id as patientId', 'cn.title', 'cn.note_type', 'cn.content', 'cn.created_at',
         db.raw("p.given_name || ' ' || p.family_name as patientName"),
         db.raw("COALESCE(s.given_name || ' ' || s.family_name, 'Unknown') as authorName"),
       )
@@ -524,28 +527,27 @@ router.post('/audit-runs', governanceRoleGate, async (req, res, next) => {
         }
         return String(question ?? '');
       };
+      const questionTexts = questions.map((question: unknown) => toQuestionText(question));
+      const runtimeSelection = await resolveLockedRuntimeSelection(req.clinicId);
       // Fire async — don't await
       void (async () => {
         try {
           const results: Array<Record<string, unknown>> = [];
           for (const note of notes) {
             try {
-              const { default: axios } = await import('axios');
-              const ollamaUrl = process.env.OLLAMA_URL || 'http://localhost:11434';
-              const resp = await axios.post(`${ollamaUrl}/api/chat`, {
-                model: process.env.LLM_MODEL || 'llama3',
-                stream: false,
-                messages: [{
-                  role: 'system',
-                  content: `You are a clinical quality auditor for an Australian mental health service. Score the following clinical note against each audit question. Return ONLY valid JSON: { "scores": [{ "question": "...", "score": 0-5, "comment": "..." }], "overallScore": 0-100, "summary": "..." }`,
-                }, {
-                  role: 'user',
-                  content: `Note type: ${note.note_type}\nAuthor: ${note.authorName}\nContent:\n${note.content}\n\nAudit questions:\n${questions.map((q: unknown, i: number) => `${i + 1}. ${toQuestionText(q)}`).join('\n')}`,
-                }],
-              }, { timeout: 120000 });
-              const llmText = resp.data?.message?.content ?? '{}';
-              const parsed = JSON.parse(llmText);
-              results.push({ noteId: note.noteId, ...parsed });
+              results.push(await scoreClinicalNoteAudit({
+                clinicId: req.clinicId!,
+                createdById: req.user!.id,
+                runId: run.id,
+                templateId,
+                runtimeSelection,
+                noteId: note.noteId,
+                patientId: note.patientId ?? null,
+                noteType: note.note_type ?? null,
+                authorName: note.authorName,
+                content: note.content,
+                questions: questionTexts,
+              }));
             } catch { results.push({ noteId: note.noteId, error: 'LLM scoring failed' }); }
           }
           await db('audit_runs').where({ id: run.id }).update({

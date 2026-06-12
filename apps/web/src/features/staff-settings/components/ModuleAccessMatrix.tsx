@@ -4,7 +4,7 @@
  *
  * This component is the ONE surface that reads and writes
  * staff_module_access rows. It is mounted in exactly one place:
- * the "Access Control" tab inside Org Settings. The duplicate
+ * the "Access Control" tab inside Power Settings. The duplicate
  * AccessControlPanel that used to live in SettingsPage.tsx (with
  * a stale hardcoded MODULES list and a 'view'/'admin'/'none'
  * access-level enum the middleware rejected) has been deleted,
@@ -154,7 +154,7 @@ export interface ModuleAccessMatrixProps {
   /**
    * Visual shell. 'page' renders a full-page header + tinted
    * background — use when the component is the entire route body.
-   * 'tab' renders naked so it slots inside an Org Settings tab
+   * 'tab' renders naked so it slots inside a Power Settings tab
    * without doubling up typography or pastel backgrounds.
    */
   variant?: 'page' | 'tab'

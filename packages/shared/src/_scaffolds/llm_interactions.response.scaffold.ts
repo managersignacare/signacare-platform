@@ -26,6 +26,9 @@ export const LlmInteractionsResponseScaffoldSchema = z.object({
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime().nullable().optional(),
   embedding: z.unknown().nullable().optional(),
+  modelVersion: z.string().nullable().optional(),
+  temperature: z.string().regex(/^-?\d{1,2}(\.\d{0,3})?$/).nullable().optional(),
+  pipeline: z.unknown().nullable().optional(),
 });
 
 export type LlmInteractionsResponseScaffold = z.infer<typeof LlmInteractionsResponseScaffoldSchema>;

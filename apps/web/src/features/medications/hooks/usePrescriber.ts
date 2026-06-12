@@ -15,7 +15,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { useCallback } from 'react';
-import { tryAsync, isErr } from '@signacare/shared';
+import { tryAsync, isErr, isPrescriberSystemRole } from '@signacare/shared';
 import { apiClient } from '../../../shared/services/apiClient';
 import { useAuthStore } from '../../../shared/store/authStore';
 import { escapeHtml } from '../../../shared/utils/escapeHtml';
@@ -23,8 +23,10 @@ import { patientsKeys, prescriptionKeys } from '../../patients/queryKeys';
 import type { MedicationRow } from '../types';
 
 interface StaffMeResponse {
+  role?: string | null;
   prescriberNumber?: string | null;
   prescriber_number?: string | null;
+  hasPrescribingPrivileges?: boolean | null;
   isPrescribingDisciplineEligible?: boolean | null;
 }
 
@@ -39,12 +41,15 @@ export interface PrescriberEligibilitySnapshot {
 type PrescriberStatusLegacyContract = { isPrescriber: boolean; isError: boolean };
 
 export function evaluatePrescriberEligibility(staff: StaffMeResponse | null | undefined): PrescriberEligibilitySnapshot {
-  const isPrescriber = !!(staff?.prescriberNumber ?? staff?.prescriber_number);
-  const isDisciplineEligible = staff?.isPrescribingDisciplineEligible === true;
+  const hasPrescribingPrivileges = staff?.hasPrescribingPrivileges === true
+    || isPrescriberSystemRole(staff?.role);
+  const hasPrescriberNumber = !!(staff?.prescriberNumber ?? staff?.prescriber_number);
+  const isPrescriber = hasPrescribingPrivileges && hasPrescriberNumber;
+  const isDisciplineEligible = hasPrescribingPrivileges;
   return {
     isPrescriber,
     isDisciplineEligible,
-    canPrescribeClozapine: isPrescriber && isDisciplineEligible,
+    canPrescribeClozapine: isPrescriber,
   };
 }
 

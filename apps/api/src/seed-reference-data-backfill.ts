@@ -30,27 +30,11 @@ const TEMPLATES = [
     { label: 'Becoming easily annoyed or irritable', fieldType: 'likert', options: ['Not at all','Several days','More than half the days','Nearly every day'], scores: [0,1,2,3] },
     { label: 'Feeling afraid something awful might happen', fieldType: 'likert', options: ['Not at all','Several days','More than half the days','Nearly every day'], scores: [0,1,2,3] },
   ] },
-  { name: 'K10 (Kessler Psychological Distress Scale)', category: 'Rating Scales', type: 'assessment', content: [
-    { label: 'Did you feel tired out for no good reason?', fieldType: 'likert', options: ['None','A little','Some','Most','All of the time'], scores: [1,2,3,4,5] },
-    { label: 'Did you feel nervous?', fieldType: 'likert', options: ['None','A little','Some','Most','All of the time'], scores: [1,2,3,4,5] },
-    { label: 'Did you feel so nervous nothing could calm you?', fieldType: 'likert', options: ['None','A little','Some','Most','All of the time'], scores: [1,2,3,4,5] },
-    { label: 'Did you feel hopeless?', fieldType: 'likert', options: ['None','A little','Some','Most','All of the time'], scores: [1,2,3,4,5] },
-    { label: 'Did you feel restless or fidgety?', fieldType: 'likert', options: ['None','A little','Some','Most','All of the time'], scores: [1,2,3,4,5] },
-  ] },
-  { name: 'HoNOS (Health of the Nation Outcome Scales)', category: 'Rating Scales', type: 'assessment', content: [
-    { label: 'Overactive/aggressive behaviour', fieldType: 'likert', options: ['No problem','Minor','Mild','Moderately severe','Severe'], scores: [0,1,2,3,4] },
-    { label: 'Non-accidental self-injury', fieldType: 'likert', options: ['No problem','Minor','Mild','Moderately severe','Severe'], scores: [0,1,2,3,4] },
-    { label: 'Problem drinking or drug-taking', fieldType: 'likert', options: ['No problem','Minor','Mild','Moderately severe','Severe'], scores: [0,1,2,3,4] },
-  ] },
-  { name: 'LSP-16 (Life Skills Profile)', category: 'Rating Scales', type: 'assessment', content: [
-    { label: 'General self-care', fieldType: 'likert', options: ['No difficulty','Slight','Moderate','Extreme'], scores: [0,1,2,3] },
-  ] },
-  { name: 'BPRS (Brief Psychiatric Rating Scale)', category: 'Rating Scales', type: 'assessment', content: [
-    { label: 'Somatic concern', fieldType: 'likert', options: ['Not reported','Very mild','Mild','Moderate','Moderately severe','Severe','Extremely severe'], scores: [1,2,3,4,5,6,7] },
-  ] },
-  { name: 'AIMS (Abnormal Involuntary Movement Scale)', category: 'Rating Scales', type: 'assessment', content: [
-    { label: 'Muscles of facial expression', fieldType: 'likert', options: ['None','Minimal','Mild','Moderate','Severe'], scores: [0,1,2,3,4] },
-  ] },
+  // K10, HoNOS, LSP-16 removed from Rating Scales seed — they are outcome measures
+  // and are surfaced via the Outcome Measures tab (canonical SSoT: packages/shared/src/assessmentTaxonomy.ts)
+  // BPRS/AIMS are intentionally not backfilled here. Complete clinician-rated
+  // instrument definitions are managed by seed-rating-scales.ts; partial
+  // placeholders create non-comparable clinical scores.
   { name: 'Management Plan', category: 'Management Plans', type: 'management_plan', content: [
     { label: 'Current Issues', fieldType: 'textarea' }, { label: 'Goals', fieldType: 'textarea' },
     { label: 'Interventions', fieldType: 'textarea' }, { label: 'Review Date', fieldType: 'date' },

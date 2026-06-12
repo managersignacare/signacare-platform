@@ -12,6 +12,7 @@
 //   await requirePatientRelationship(auth, dto.patientId);
 
 import type { AuthContext } from '@signacare/shared';
+import { getAllowedDutyRelationshipTypes, isPrescriberSystemRole } from '@signacare/shared';
 import type { Request } from 'express';
 import type { Knex } from 'knex';
 import { AppError, HttpError } from './errors';
@@ -38,6 +39,48 @@ export function requirePermission(auth: AuthContext, permission: string): void {
       'FORBIDDEN',
     );
   }
+}
+
+const CLINICAL_LEADERSHIP_PERMISSION_OVERRIDES = new Set([
+  'note:read',
+  'note:create',
+  'note:update',
+]);
+
+/**
+ * Allows clinic-wide clinical leadership roles to read/write clinical notes
+ * even when their base JWT permission set is narrower than clinician/admin.
+ *
+ * This is intentionally scoped to note permissions only. It preserves least
+ * privilege for unrelated modules while reflecting the operational model where
+ * clinical managers and medical directors can review and document care across
+ * the clinic.
+ */
+export async function requirePermissionOrClinicalLeadershipOverride(
+  auth: AuthContext,
+  permission: string,
+): Promise<void> {
+  if (BYPASS_ROLES.has(auth.role)) return;
+  if (auth.permissions.includes(permission)) return;
+
+  if (CLINICAL_LEADERSHIP_PERMISSION_OVERRIDES.has(permission)) {
+    const hasClinicWideLeadershipAccess = await withRelationshipDbContext(
+      auth.clinicId,
+      (relationshipDb) =>
+        hasClinicWideClinicalLeadershipAccess(
+          relationshipDb,
+          auth.clinicId,
+          auth.staffId,
+        ),
+    );
+    if (hasClinicWideLeadershipAccess) return;
+  }
+
+  throw new AppError(
+    `Permission '${permission}' required`,
+    403,
+    'FORBIDDEN',
+  );
 }
 
 /**
@@ -79,43 +122,21 @@ export async function requireSpecialty(
 }
 
 /**
- * BUG-040 — verify the caller's staff.discipline is in the
- * prescribing-eligible allow-list (AHPRA compliance). SSoT is the
- * `is_prescribing_eligible_discipline(text)` SQL function installed
- * by migration 20260421000003. Both this helper and the DB-level
- * trigger on patient_medications call that one function, so the
- * allow-list cannot drift.
+ * Verify the caller is one of the explicitly-authorised prescribing
+ * system roles. Prescribing authority is now derived from system role,
+ * not from the legacy discipline allow-list.
  *
  * No bypass roles for this guard. Prescribing authority is a clinical
  * safety control, not an administrative one — admin/superadmin callers
- * must satisfy the same discipline check as clinicians.
+ * must satisfy the same role gate as clinicians.
  *
- * Fails with HTTP 403 PRESCRIBING_DISCIPLINE_REQUIRED when the
- * discipline is not in the allow-list or is NULL.
+ * Fails with HTTP 403 PRESCRIBING_DISCIPLINE_REQUIRED to preserve the
+ * existing API contract for callers and historical test fixtures.
  */
 export async function requirePrescribingDiscipline(auth: AuthContext): Promise<void> {
-  const row = await db('staff')
-    .where({ id: auth.staffId })
-    .select('discipline')
-    .first();
-
-  const discipline = (row?.discipline as string | null | undefined) ?? null;
-  if (!discipline) {
+  if (!isPrescriberSystemRole(auth.role)) {
     throw new AppError(
-      'Prescribing requires a registered AHPRA discipline (none set)',
-      403,
-      'PRESCRIBING_DISCIPLINE_REQUIRED',
-    );
-  }
-
-  const result = await db.raw<{ rows: Array<{ eligible: boolean }> }>(
-    'SELECT is_prescribing_eligible_discipline(?) AS eligible',
-    [discipline],
-  );
-  const eligible = result.rows?.[0]?.eligible === true;
-  if (!eligible) {
-    throw new AppError(
-      `Discipline '${discipline}' is not authorised to prescribe (AHPRA)`,
+      'Prescribing requires an authorised prescriber system role',
       403,
       'PRESCRIBING_DISCIPLINE_REQUIRED',
     );
@@ -164,14 +185,23 @@ export async function requireValidHpii(auth: AuthContext): Promise<void> {
  *       audited separately via writeBreakGlassAudit).
  *   (2) Caller is the clinic's nominated_admin_staff_id OR
  *       delegated_admin_staff_id (clinic-scoped admin authority).
- *   (3) Open episode where caller is primary_clinician_id OR
+ *   (3) Active patient-team assignment where caller is the assigned
+ *       primary_clinician_id.
+ *   (4) Open episode where caller is primary_clinician_id OR
  *       key_worker_id.
- *   (4) Team membership — caller has either a staff_team_assignments
+ *   (4.5) Active duty relationship — caller has a non-revoked,
+ *       unexpired patient_duty_relationships row. `duty_prescriber`
+ *       only counts while the caller still holds an authorised
+ *       prescriber system role.
+ *   (5) Team membership — caller has either a staff_team_assignments
  *       row OR a staff_role_assignments row on the patient's team,
- *       OR on any ANCESTOR org_unit of the patient's team (recursive
- *       hierarchy cascade — executives with facility-level
- *       assignments see patients in descendant teams).
- *   (5) Caller is an active appointment attendee.
+ *       OR on any ANCESTOR org_unit of the patient's team. The seed
+ *       team comes from either active patient_team_assignments OR the
+ *       current open episode.team_id so MDT allocations remain valid
+ *       even when the episode team is newer than the patient-team
+ *       anchor (recursive hierarchy cascade — executives with
+ *       facility-level assignments see patients in descendant teams).
+ *   (6) Caller is an active appointment attendee.
  *
  * Role-based bypass was REMOVED in Phase 0.5.B: superadmin and
  * generic role='admin' no longer auto-pass this guard. Per PART 12,
@@ -237,7 +267,28 @@ export async function requirePatientRelationship(
         );
       if (hasClinicWideLeadershipAccess) return true;
 
-      // Check 1: open episode where caller is primary_clinician_id or key_worker
+      // Check 1: direct patient-team assignment where caller is the
+      // named primary clinician. This is the canonical "I am currently
+      // assigned to this patient" relationship and must not depend on a
+      // parallel staff_team_assignments row staying in sync.
+      const patientTeamAssignment = await relationshipDb(
+        'patient_team_assignments as pta',
+      )
+        .join('org_units as ou', 'ou.id', 'pta.org_unit_id')
+        .join('patients as p', 'p.id', 'pta.patient_id')
+        .where({
+          'pta.patient_id': patientId,
+          'pta.primary_clinician_id': auth.staffId,
+          'pta.is_active': true,
+          'p.clinic_id': auth.clinicId,
+          'ou.clinic_id': auth.clinicId,
+        })
+        .whereNull('p.deleted_at')
+        .first('pta.id');
+
+      if (patientTeamAssignment) return true;
+
+      // Check 2: open episode where caller is primary_clinician_id or key_worker
       const episode = await relationshipDb('episodes')
         .where({
           patient_id: patientId,
@@ -253,24 +304,64 @@ export async function requirePatientRelationship(
 
       if (episode) return true;
 
-      // Check 2 (Phase 0.5.B — expanded): team membership via EITHER
+      // Check 2.5: active duty relationship. This is an explicit,
+      // shift-bounded escape hatch for on-duty clinicians/prescribers
+      // who are covering a patient outside their standing care-team
+      // anchor. The relationship is auditable and time-limited, so it
+      // is materially different from break-glass.
+      const allowedDutyTypes = getAllowedDutyRelationshipTypes(auth.role);
+      if (allowedDutyTypes.length > 0) {
+        const dutyRelationship = await relationshipDb('patient_duty_relationships')
+          .where({
+            clinic_id: auth.clinicId,
+            patient_id: patientId,
+            staff_id: auth.staffId,
+          })
+          .whereNull('revoked_at')
+          .where('expires_at', '>', new Date())
+          .whereIn('relationship_type', allowedDutyTypes)
+          .first('id');
+
+        if (dutyRelationship) return true;
+      }
+
+      // Check 3 (Phase 0.5.B — expanded): team membership via EITHER
       // staff_team_assignments OR staff_role_assignments, with recursive
       // cascade up org_units.parent_id. Pre-0.5.B this branch only
       // matched plain staff_team_assignments on the EXACT org_unit of the
       // patient. Team leaders attached via role-only and facility-level
-      // executives were rejected. The recursive CTE finds the patient's
-      // team AND all its ancestors, then matches the caller to any
-      // assignment (team or role) at any level.
+      // executives were rejected. The recursive CTE now seeds from BOTH
+      // active patient_team_assignments and the current open episode.team_id
+      // so care-team allocations written through the episode workflow do
+      // not fall through when patient_team_assignments lags behind.
       const teamResult = await relationshipDb.raw<{
         rows: Array<{ has_match: boolean }>;
       }>(
         `
           WITH RECURSIVE ancestor_units AS (
-            -- Seed: the patient's directly-assigned team(s). depth=1.
+            -- Seed A: the patient's active team assignment(s). depth=1.
             SELECT ou.id, ou.parent_id, ou.clinic_id, 1 AS depth
             FROM patient_team_assignments pta
+            JOIN patients p ON p.id = pta.patient_id
             JOIN org_units ou ON ou.id = pta.org_unit_id
             WHERE pta.patient_id = :patientId
+              AND pta.is_active = true
+              AND p.clinic_id = :clinicId
+              AND p.deleted_at IS NULL
+              AND ou.clinic_id = :clinicId
+            UNION
+            -- Seed B: the current open/admitted episode team. This keeps
+            -- MDT members on the episode's team in relationship even when
+            -- patient_team_assignments has not been refreshed yet.
+            SELECT ou.id, ou.parent_id, ou.clinic_id, 1 AS depth
+            FROM episodes e
+            JOIN org_units ou ON ou.id = e.team_id
+            WHERE e.patient_id = :patientId
+              AND e.clinic_id = :clinicId
+              AND e.team_id IS NOT NULL
+              AND e.deleted_at IS NULL
+              AND e.status IN ('open', 'active', 'admitted')
+              AND ou.clinic_id = :clinicId
             UNION
             -- Recurse: each ancestor org_unit. L5-absorb-1 depth cap:
             -- fail-loud on a cycle or pathologically-nested hierarchy.
@@ -303,7 +394,7 @@ export async function requirePatientRelationship(
       );
       if (teamResult.rows?.[0]?.has_match) return true;
 
-      // Check 3: appointment attendee
+      // Check 4: appointment attendee
       const appointment = await relationshipDb('appointment_attendees as aa')
         .join('appointments as a', 'a.id', 'aa.appointment_id')
         .where({
@@ -322,7 +413,7 @@ export async function requirePatientRelationship(
   if (hasRelationship) return;
 
   throw new AppError(
-    'No active relationship with this patient. Use break-glass access for emergency.',
+    'No active relationship with this patient. Add a duty relationship if you are covering this patient on shift, or use break-glass access for emergency.',
     403,
     'NO_PATIENT_RELATIONSHIP',
   );

@@ -50,6 +50,15 @@ export const ChangePasswordSchema = z.object({
 });
 export type ChangePasswordDTO = z.infer<typeof ChangePasswordSchema>;
 
+export const ChangePasswordResponseSchema = z.object({
+  success: z.literal(true),
+  message: z.string(),
+  user: AuthUserSchema,
+  accessToken: z.string().optional(),
+  refreshToken: z.string().optional(),
+});
+export type ChangePasswordResponse = z.infer<typeof ChangePasswordResponseSchema>;
+
 export const MfaConfirmSchema = z.object({
   token: z.string().length(6).regex(/^\d{6}$/),
 });

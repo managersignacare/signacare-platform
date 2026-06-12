@@ -154,6 +154,7 @@ async function buildOutcomesSnippet(
 ): Promise<NoteSnippet> {
   const q = db('outcome_measures')
     .where({ clinic_id: clinicId, patient_id: patientId })
+    .whereNull('deleted_at')
     .orderBy('created_at', 'desc')
     .limit(5)
     .select('id', 'template_name', 'total_score', 'collection_occasion', 'created_at');
@@ -324,4 +325,3 @@ function emptySnippet(type: SnippetType): NoteSnippet {
 //   absorb-1 review; pre-existing (not introduced by this commit).
 //   Fix requires deciding the canonical vitals table
 //   (measurements-style or vitals-style) and updating the builder.
-

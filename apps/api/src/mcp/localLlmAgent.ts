@@ -17,9 +17,35 @@
 import { config } from '../config'
 import { stripMarkdown } from '../utils/stripMarkdown'
 import { logger } from '../utils/logger'
+import { resolvePositiveIntEnv } from '../shared/positiveIntEnv'
+import { generateOllamaText, listOllamaTags, type OllamaTag } from '../shared/ollamaHttpClient'
+import { AppError } from '../shared/errors'
 
-const OLLAMA_URL = config.ollama?.baseUrl ?? 'http://localhost:11434'
 const DEFAULT_MODEL = config.ollama?.model ?? 'qwen2.5:14b'
+const DEFAULT_LOCAL_LLM_GENERATE_TIMEOUT_MS = 10 * 60 * 1000
+const MAX_LOCAL_LLM_GENERATE_TIMEOUT_MS = 30 * 60 * 1000
+
+export function resolveLocalLlmGenerateTimeoutMs(action?: string): number {
+  if (action === 'ambient') {
+    return resolvePositiveIntEnv(
+      'AMBIENT_OLLAMA_TIMEOUT_MS',
+      {
+        fallback: DEFAULT_LOCAL_LLM_GENERATE_TIMEOUT_MS,
+        max: MAX_LOCAL_LLM_GENERATE_TIMEOUT_MS,
+        loggerContext: { configSurface: 'local_llm_agent', action: 'ambient' },
+      },
+    )
+  }
+
+  return resolvePositiveIntEnv(
+    'LOCAL_LLM_GENERATE_TIMEOUT_MS',
+    {
+      fallback: DEFAULT_LOCAL_LLM_GENERATE_TIMEOUT_MS,
+      max: MAX_LOCAL_LLM_GENERATE_TIMEOUT_MS,
+      loggerContext: { configSurface: 'local_llm_agent', action: action ?? 'general' },
+    },
+  )
+}
 
 // ============ Model Registry ============
 
@@ -141,22 +167,6 @@ interface LlmRequest {
   action?: string
 }
 
-// Ollama /api/generate response shape (documented at
-// https://github.com/ollama/ollama/blob/main/docs/api.md#response-2)
-interface OllamaGenerateResponse {
-  model?: string
-  response?: string
-  done?: boolean
-  prompt_eval_count?: number
-  eval_count?: number
-  eval_duration?: number
-}
-
-// Ollama /api/tags response shape
-interface OllamaTagsResponse {
-  models?: Array<{ name?: string; modified_at?: string; size?: number }>
-}
-
 interface LlmResponse {
   text: string
   /** Tag / model identifier as configured (e.g. 'llama3:70b'). */
@@ -170,6 +180,12 @@ interface LlmResponse {
    * with the SHA-256. Callers MAY annotate "tag-fallback" in audit meta.
    */
   modelVersion?: string
+  /**
+   * When the requested local model failed and the agent retried on the
+   * default local model, capture the original requested model here so
+   * callers can audit the degraded path explicitly.
+   */
+  fallbackFromModel?: string
   /**
    * BUG-037 — the REQUESTED temperature passed to the model. Ollama does
    * NOT echo the runtime temperature, so this is the atomic field we can
@@ -224,6 +240,7 @@ async function _callLocalLlm(request: LlmRequest): Promise<LlmResponse> {
   // BUG-037 — resolve requested temperature once; record this value (not
   // runtime actual, which Ollama doesn't echo) into llm_interactions.
   const requestedTemperature = request.temperature ?? modelConfig?.defaultTemperature ?? 0.3
+  const timeoutMs = resolveLocalLlmGenerateTimeoutMs(request.action)
 
   try {
     if (modelConfig?.type === 'classifier') {
@@ -231,28 +248,14 @@ async function _callLocalLlm(request: LlmRequest): Promise<LlmResponse> {
       return await callClassifierModel(ollamaModel, request)
     }
 
-    const response = await fetch(`${OLLAMA_URL}/api/generate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: ollamaModel,
-        prompt: request.prompt,
-        system: request.system ?? SYSTEM_PROMPTS.clinical_summary,
-        stream: false,
-        options: {
-          temperature: requestedTemperature,
-          num_predict: request.maxTokens ?? modelConfig?.maxTokens ?? 2000,
-        },
-      }),
-      signal: AbortSignal.timeout(150_000), // 2.5 min server-side timeout
+    const data = await generateOllamaText({
+      model: ollamaModel,
+      prompt: request.prompt,
+      system: request.system ?? SYSTEM_PROMPTS.clinical_summary,
+      temperature: requestedTemperature,
+      maxTokens: request.maxTokens ?? modelConfig?.maxTokens ?? 2000,
+      timeoutMs,
     })
-
-    if (!response.ok) {
-      const errText = await response.text().catch(() => '')
-      throw new Error(`Ollama error ${response.status}: ${errText || response.statusText}`)
-    }
-
-    const data = await response.json() as OllamaGenerateResponse
     return {
       text: stripMarkdown(data.response ?? ''),
       model: data.model ?? ollamaModel,
@@ -269,6 +272,7 @@ async function _callLocalLlm(request: LlmRequest): Promise<LlmResponse> {
       {
         kind: 'local_llm_generate_failed',
         model: ollamaModel,
+        timeoutMs,
         error: errMsg,
       },
       '[LocalLLM] model invocation failed',
@@ -284,36 +288,37 @@ async function _callLocalLlm(request: LlmRequest): Promise<LlmResponse> {
         },
         '[LocalLLM] falling back to default model',
       )
-      return callLocalLlm({ ...request, model: DEFAULT_MODEL })
+      const fallback = await callLocalLlm({ ...request, model: DEFAULT_MODEL })
+      return {
+        ...fallback,
+        fallbackFromModel: fallback.fallbackFromModel ?? ollamaModel,
+      }
     }
 
-    return {
-      text: `[AI unavailable — model "${ollamaModel}" not running. Start Ollama and pull the model: ollama pull ${ollamaModel}]`,
-      model: ollamaModel,
-      tokensUsed: 0,
-      // BUG-037 — degraded response still records the attempted model tag
-      // + requested temperature so the audit row reflects intent.
-      modelVersion: ollamaModel,
-      requestedTemperature,
-    }
+    throw new AppError(
+      'AI generation is unavailable because the configured local model service is not reachable or the model is not loaded.',
+      503,
+      'AI_MODEL_UNAVAILABLE',
+      {
+        model: ollamaModel,
+        timeoutMs,
+        action: request.action ?? 'general',
+        remediation: 'Verify the AI runtime service is deployed by immutable digest and the baked model manifest is present.',
+      },
+    )
   }
 }
 
 // For BERT-style models: use generate with a classification prompt
 async function callClassifierModel(model: string, request: LlmRequest): Promise<LlmResponse> {
   try {
-    const response = await fetch(`${OLLAMA_URL}/api/generate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model,
-        prompt: `${SYSTEM_PROMPTS['mental-classify']}\n\nClinical text:\n${request.prompt}`,
-        stream: false,
-        options: { temperature: 0, num_predict: 512 },
-      }),
+    const data = await generateOllamaText({
+      model,
+      prompt: `${SYSTEM_PROMPTS['mental-classify']}\n\nClinical text:\n${request.prompt}`,
+      temperature: 0,
+      maxTokens: 512,
+      timeoutMs: resolveLocalLlmGenerateTimeoutMs(request.action),
     })
-    if (!response.ok) throw new Error(`Ollama error: ${response.status}`)
-    const data = await response.json() as OllamaGenerateResponse
     return {
       text: data.response ?? '',
       model,
@@ -332,137 +337,29 @@ async function callClassifierModel(model: string, request: LlmRequest): Promise<
 
 export async function listAvailableModels(): Promise<ModelConfig[]> {
   try {
-    const resp = await fetch(`${OLLAMA_URL}/api/tags`)
-    if (!resp.ok) return MODEL_REGISTRY.map(m => ({ ...m, available: false }))
-    const data = await resp.json() as OllamaTagsResponse
-    const installed = new Set((data.models ?? []).map((m) => m.name?.split(':')[0]))
-    return MODEL_REGISTRY.map(m => ({ ...m, available: installed.has(m.ollamaModel) }))
+    const data = await listOllamaTags()
+    const installedNames = new Set((data.models ?? []).flatMap((model) => {
+      const name = normalizeModelName(model)
+      if (!name) return []
+      const base = baseModelName(name)
+      return base === name ? [name] : [name, base]
+    }))
+    return MODEL_REGISTRY.map((model) => ({
+      ...model,
+      available: installedNames.has(model.ollamaModel) || installedNames.has(baseModelName(model.ollamaModel)),
+    }))
   } catch {
     return MODEL_REGISTRY.map(m => ({ ...m, available: false }))
   }
 }
 
-// ============ Clinical AI Functions ============
-
-// ============ Task → Model Routing ============
-// All generative tasks → Qwen 2.5:14b (via Ollama)
-// Classification tasks → HuggingFace classifiers (MentalBERT, GoEmotions, Suicide Detector, Clinical NER)
-//
-// Task-specific tuning is done via temperature and system prompt, NOT model selection.
-// Low temp (0.0-0.1) = factual extraction, risk assessment, ambient notes
-// Med temp (0.2-0.3) = clinical summaries, letters, formulations
-// Higher temp (0.3-0.4) = creative tasks like therapeutic suggestions
-
-const TASK_CONFIG: Record<string, { temperature: number; maxTokens: number }> = {
-  // Factual / safety-critical → lowest temperature
-  ambient:           { temperature: 0.0, maxTokens: 4096 },
-  'risk-assessment': { temperature: 0.0, maxTokens: 2000 },
-  '91day':           { temperature: 0.1, maxTokens: 3000 },
-  discharge:         { temperature: 0.1, maxTokens: 3000 },
-  'med-summary':     { temperature: 0.1, maxTokens: 2000 },
-  // Structured clinical → low temperature
-  isbar:             { temperature: 0.15, maxTokens: 2000 },
-  maudsley:          { temperature: 0.2,  maxTokens: 3000 },
-  formulation:       { temperature: 0.2,  maxTokens: 3000 },
-  'mhrt-report':     { temperature: 0.15, maxTokens: 3000 },
-  certificate:       { temperature: 0.1,  maxTokens: 1500 },
-  // Creative / variable → slightly higher temperature
-  letter:            { temperature: 0.3,  maxTokens: 2500 },
-  'admin-report':    { temperature: 0.25, maxTokens: 3000 },
-  'register-summary':{ temperature: 0.2,  maxTokens: 1500 },
-  agent:             { temperature: 0.3,  maxTokens: 4096 },
+function normalizeModelName(model: OllamaTag): string | null {
+  return typeof model.name === 'string' && model.name.trim().length > 0
+    ? model.name.trim()
+    : null
 }
 
-function getTaskConfig(task: string) {
-  return TASK_CONFIG[task] ?? { temperature: 0.2, maxTokens: 2000 }
-}
-
-export const clinicalAi = {
-  async generateMaudsleySummary(data: string, _model?: string): Promise<string> {
-    const cfg = getTaskConfig('maudsley')
-    const r = await callLocalLlm({ system: SYSTEM_PROMPTS.clinical_summary, prompt: `Generate a Maudsley format longitudinal summary from the following patient data:\n\n${data}`, temperature: cfg.temperature, maxTokens: cfg.maxTokens })
-    return r.text
-  },
-  async generateISBAR(data: string, _model?: string): Promise<string> {
-    const cfg = getTaskConfig('isbar')
-    const r = await callLocalLlm({ system: SYSTEM_PROMPTS.isbar, prompt: `Generate an ISBAR handover summary from these clinical notes:\n\n${data}`, temperature: cfg.temperature, maxTokens: cfg.maxTokens })
-    return r.text
-  },
-  async generateFormulation(data: string, _model?: string): Promise<string> {
-    const cfg = getTaskConfig('formulation')
-    const r = await callLocalLlm({ system: SYSTEM_PROMPTS.formulation, prompt: `Generate a biopsychosocial clinical formulation from:\n\n${data}`, temperature: cfg.temperature, maxTokens: cfg.maxTokens })
-    return r.text
-  },
-  async generate91DayReview(data: string, _model?: string): Promise<string> {
-    const cfg = getTaskConfig('91day')
-    const r = await callLocalLlm({ system: SYSTEM_PROMPTS.review_91day, prompt: `Generate a 91-day review summary from:\n\n${data}`, temperature: cfg.temperature, maxTokens: cfg.maxTokens })
-    return r.text
-  },
-  async generateLetter(data: string, templateType: string, _model?: string): Promise<string> {
-    const cfg = getTaskConfig('letter')
-    const r = await callLocalLlm({ system: SYSTEM_PROMPTS.letter, prompt: `Generate a ${templateType} letter using this context:\n\n${data}`, temperature: cfg.temperature, maxTokens: cfg.maxTokens })
-    return r.text
-  },
-  async processAmbientNotes(data: string, _model?: string): Promise<string> {
-    const cfg = getTaskConfig('ambient')
-    const r = await callLocalLlm({ system: SYSTEM_PROMPTS.ambient, prompt: `Convert these ambient clinical notes into structured SOAP documentation:\n\n${data}`, temperature: cfg.temperature, maxTokens: cfg.maxTokens })
-    return r.text
-  },
-  async generateAdminReport(data: string, _model?: string): Promise<string> {
-    const cfg = getTaskConfig('admin-report')
-    const r = await callLocalLlm({ system: SYSTEM_PROMPTS['admin-report'], prompt: data, temperature: cfg.temperature, maxTokens: cfg.maxTokens })
-    return r.text
-  },
-  async generateRegistrationSummary(data: string, _model?: string): Promise<string> {
-    const cfg = getTaskConfig('register-summary')
-    const r = await callLocalLlm({ system: SYSTEM_PROMPTS['register-summary'], prompt: `Summarise this referral/intake data for patient registration:\n\n${data}`, temperature: cfg.temperature, maxTokens: cfg.maxTokens })
-    return r.text
-  },
-  async generateDischargeSummary(data: string, _model?: string): Promise<string> {
-    const cfg = getTaskConfig('discharge')
-    const r = await callLocalLlm({ system: SYSTEM_PROMPTS.discharge, prompt: `Generate a discharge summary from:\n\n${data}`, temperature: cfg.temperature, maxTokens: cfg.maxTokens })
-    return r.text
-  },
-  async generateMedSummary(data: string, _model?: string): Promise<string> {
-    const cfg = getTaskConfig('med-summary')
-    const r = await callLocalLlm({ system: SYSTEM_PROMPTS['med-summary'], prompt: data, temperature: cfg.temperature, maxTokens: cfg.maxTokens })
-    return r.text
-  },
-  async generateMHRTReport(data: string, _model?: string): Promise<string> {
-    const cfg = getTaskConfig('mhrt-report')
-    const r = await callLocalLlm({ system: SYSTEM_PROMPTS.mhrt_report ?? SYSTEM_PROMPTS.clinical_summary, prompt: `Generate an MHRT clinical report from:\n\n${data}`, temperature: cfg.temperature, maxTokens: cfg.maxTokens })
-    return r.text
-  },
-  async generateCertificate(data: string, _model?: string): Promise<string> {
-    const cfg = getTaskConfig('certificate')
-    const r = await callLocalLlm({ system: SYSTEM_PROMPTS.certificate ?? SYSTEM_PROMPTS.letter, prompt: `Generate a medical certificate from:\n\n${data}`, temperature: cfg.temperature, maxTokens: cfg.maxTokens })
-    return r.text
-  },
-  /** Classification via HuggingFace MentalBERT + Suicide Detector + GoEmotions */
-  async classifyText(data: string): Promise<string> {
-    // Use Qwen as fallback for classification (HF models are called separately in the pipeline)
-    const r = await callLocalLlm({ prompt: data, system: SYSTEM_PROMPTS['mental-classify'], temperature: 0 })
-    return r.text
-  },
-  /** Run the full HF classifier pipeline on clinical text */
-  async runClassifierPipeline(text: string): Promise<{
-    riskLevel: string;
-    suicideRisk: string;
-    emotions: string[];
-    entities: string[];
-  }> {
-    const { classifyWithHF } = await import('./huggingfaceService')
-    // classifyWithHF runs all classifiers internally and returns a combined result
-    try {
-      const result = await classifyWithHF(text, 'mentalbert')
-      return {
-        riskLevel: result.riskLevel ?? 'unknown',
-        suicideRisk: result.suicideRisk?.label ?? 'unknown',
-        emotions: result.emotions?.slice(0, 3).map((e: { label: string; score: number }) => e.label) ?? [],
-        entities: [],
-      }
-    } catch {
-      return { riskLevel: 'unavailable', suicideRisk: 'unavailable', emotions: [], entities: [] }
-    }
-  },
+function baseModelName(name: string): string {
+  const separatorIndex = name.indexOf(':')
+  return separatorIndex >= 0 ? name.slice(0, separatorIndex) : name
 }

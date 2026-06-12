@@ -1,9 +1,10 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   dashboardApi,
   type DashboardFilters,
   type TeamDashboardFilters,
 } from '../services/dashboardApi';
+import type { DashboardPreferencesUpdate } from '@signacare/shared';
 import { useAuthStore }  from '../../../shared/store/authStore';
 import { dashboardKeys } from '../queryKeys';
 
@@ -80,5 +81,31 @@ export function useTeamDashboardScopes(enabled = true) {
     queryFn: () => dashboardApi.getTeamDashboardScopes(),
     enabled: enabled && canRead,
     staleTime: 5 * 60_000,
+  });
+}
+
+export function useDashboardPreferences(enabled = true) {
+  const user = useAuthStore((s) => s.user);
+  const clinicScope = user?.clinicId ?? '';
+  return useQuery({
+    queryKey: dashboardKeys.preferences(clinicScope, user?.id),
+    queryFn: () => dashboardApi.getDashboardPreferences(),
+    enabled: enabled && !!user?.id,
+    staleTime: 5 * 60_000,
+  });
+}
+
+export function useUpdateDashboardPreferences() {
+  const qc = useQueryClient();
+  const user = useAuthStore((s) => s.user);
+  const clinicScope = user?.clinicId ?? '';
+  return useMutation({
+    mutationFn: (preferences: DashboardPreferencesUpdate) =>
+      dashboardApi.updateDashboardPreferences(preferences),
+    onSuccess: () => {
+      qc.invalidateQueries({
+        queryKey: dashboardKeys.preferences(clinicScope, user?.id),
+      });
+    },
   });
 }

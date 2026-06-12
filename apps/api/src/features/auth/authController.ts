@@ -91,12 +91,20 @@ function clearAuthCookies(res: Response) {
   res.clearCookie("signacare_refresh", opts);
 }
 
+function getClientIp(req: Request): string | undefined {
+  const forwarded = req.headers["x-forwarded-for"];
+  const forwardedValue = Array.isArray(forwarded) ? forwarded[0] : forwarded;
+  const firstForwardedIp = forwardedValue?.split(',')[0]?.trim();
+  const candidate = firstForwardedIp || req.ip || req.socket.remoteAddress || undefined;
+  return candidate?.replace(/^::ffff:/, '').slice(0, 50);
+}
+
 export const validateLogin = validateBody(LoginSchema);
 export const validateMfaVerify = validateBody(MfaVerifySchema);
 
 export async function loginController(req: Request, res: Response) {
   const dto = req.body as LoginDTO;
-  const ip = (req.headers["x-forwarded-for"] as string) ?? req.ip ?? undefined;
+  const ip = getClientIp(req);
   const userAgent = req.headers["user-agent"];
   const timingBase = {
     requestId: req.requestId,
@@ -210,7 +218,7 @@ export async function loginController(req: Request, res: Response) {
 
 export async function mfaVerifyController(req: Request, res: Response) {
   const dto = req.body as MFAVerifyDTO;
-  const ip = (req.headers["x-forwarded-for"] as string) ?? req.ip ?? undefined;
+  const ip = getClientIp(req);
   const userAgent = req.headers["user-agent"];
 
   const result = await authService.verifyMfa(dto, {
@@ -292,7 +300,7 @@ export async function logoutController(req: Request, res: Response) {
         action: 'LOGOUT',
         tableName: 'staff_sessions',
         recordId: req.user.id,
-        ipAddress: (req.headers["x-forwarded-for"] as string) ?? req.ip ?? undefined,
+        ipAddress: getClientIp(req),
       });
     } catch (err) {
       logger.warn(

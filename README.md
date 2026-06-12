@@ -1,18 +1,14 @@
-# Signacare Platform
+# Signacare EMR
 
-Australian mental-health EMR platform. Multi-tenant, RLS-enforced, integrated
+Australian mental-health EMR. Multi-tenant, RLS-enforced, integrated
 with MHR / HealthLink / Medicare / NHSD / Ollama.
-
-This repository is the platform split only. Sara and Viva are maintained in
-separate repositories:
-
-- Sara clinician app: `managersignacare/Sara`
-- Viva patient app: `managersignacare/viva`
 
 ## Workspaces
 
 - `apps/api` — Node/TypeScript/Express backend + Knex migrations + BullMQ
 - `apps/web` — React 18 + MUI v6 + TanStack Query + Formik
+- `apps/mobile` — Sara (Flutter, clinician)
+- `apps/patient-app` — Viva (Flutter, patient)
 - `apps/emr-gateway` — eRx / SafeScript / HealthLink gateway shim
 - `packages/shared` — Zod schemas + DTOs (single source of truth)
 
@@ -47,6 +43,8 @@ separate repositories:
    ```
    - API: `http://localhost:4000` (HTTPS via `TLS_CERT_PATH` in prod)
    - Web: `http://localhost:5173`
+   - Sara (Flutter): `flutter run -d chrome --web-port=5174`
+   - Viva (Flutter): `flutter run -d chrome --web-port=5175`
 
 ## Required environment variables
 
@@ -67,9 +65,11 @@ full list.
 
 - **CLAUDE.md** — development rules (13 sections, including §12.4
   gold-standard migration skeleton).
-- **docs/quality/fix-registry.md** — every fix has a row with an ERE anchor
+- **docs/audit-2026-04-19/FINDINGS.md** — clinical-safety findings
+  (112 bugs) that drove Tiers 1-19 of the remediation plan.
+- **docs/fix-registry.md** — every fix has a row with an ERE anchor
   verified by `check-fix-registry.sh`.
-- **docs/compliance/tga-classification.md** — TGA non-device classification
+- **docs/tga-classification.md** — TGA non-device classification
   evidence for the scribe pipeline.
 
 ## CI guards
@@ -93,6 +93,32 @@ TypeScript must be green across api / web / shared workspaces.
 - Unit: `vitest run` inside each workspace
 - Integration: `npm run test:integration`
 - Red-team: `npx ts-node scripts/tests/scribe-red-team.ts`
+
+## ASR benchmark (Phase 7)
+
+A reproducible benchmark harness for the Whisper ASR pipeline lives in
+`scripts/asr-benchmark/`. It compares latency, WER, token overlap, and
+timeout / clip-abort counts across the closed-list backends
+(`whisper/cpu`, `faster-whisper`, `gpu-managed`) for the operator-
+mandated 5m / 15m / 60m clip durations. Setting
+`SIGNACARE_WHISPER_BACKEND` opts the harness into a non-default lane;
+the runtime resolver in `apps/api/src/mcp/whisperBackend.ts` falls back
+LOUDLY (no silent regression) when a non-default lane is missing its
+endpoint URL env var. The runtime default behaviour is unchanged by
+Phase 7.
+
+```bash
+npm run bench:asr:dry                     # dry run — no audio required
+npm run bench:asr -- \
+  --backend whisper/cpu \
+  --corpus-root scripts/asr-benchmark/fixtures \
+  --out docs/quality/asr-benchmark/baseline-$(date +%Y%m%d).json
+```
+
+See [`scripts/asr-benchmark/README.md`](./scripts/asr-benchmark/README.md)
+for the full CLI surface, go/no-go gate semantics, and the
+[`docs/quality/asr-benchmark/`](./docs/quality/asr-benchmark/) evidence
+directory for committed baselines.
 
 ## Feedback
 

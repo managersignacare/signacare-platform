@@ -10,8 +10,9 @@ import { AppError } from '../../shared/errors';
 import { writeAuditLog } from '../../utils/audit';
 // BUG-042 — canonical shutdown registry (static import per §9.6).
 import { registerShutdownHook } from '../../shared/gracefulShutdown';
+import { createBullmqRedisConnection } from '../../shared/bullmqRedisConnection';
 
-const connection = { host: process.env['REDIS_HOST'] ?? 'localhost', port: 6379 };
+const connection = createBullmqRedisConnection();
 
 // ─── HL7 v2.5 ORM^O01 Builder ─────────────────────────────────────────────────
 function buildOrmO01(

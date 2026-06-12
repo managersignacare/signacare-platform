@@ -23,6 +23,16 @@ function isPhq9Instrument(value: string | null | undefined): boolean {
   return name.includes('phq-9') || name.includes('phq9');
 }
 
+function isBdiInstrument(value: string | null | undefined): boolean {
+  const name = normaliseInstrumentName(value);
+  return name.includes('bdi-ii') || name.includes('bdi ii') || name.includes('beck depression');
+}
+
+function isEpdsInstrument(value: string | null | undefined): boolean {
+  const name = normaliseInstrumentName(value);
+  return name.includes('epds') || name.includes('edinburgh postnatal');
+}
+
 function sumNumericValuesFromObject(obj: UnknownRecord): number {
   let total = 0;
   for (const value of Object.values(obj)) {
@@ -120,6 +130,74 @@ export function derivePhq9Q9Score(responses: unknown): number | null {
   return extractQ9ScoreFromObject(rec);
 }
 
+function extractNumberedRiskItemScoreFromObject(obj: UnknownRecord, itemNumber: number): number | null {
+  const directKeys = [
+    `q${itemNumber}`,
+    `question${itemNumber}`,
+    `item${itemNumber}`,
+    String(itemNumber),
+    `risk_item_${itemNumber}`,
+  ];
+  for (const key of directKeys) {
+    const raw = obj[key];
+    const numeric = asNumber(raw);
+    if (numeric != null) return numeric;
+    const nested = toRecord(raw);
+    if (!nested) continue;
+    const nestedNumeric = asNumber(
+      nested.score ?? nested.value ?? nested.selectedValue ?? nested.answer,
+    );
+    if (nestedNumeric != null) return nestedNumeric;
+  }
+  return null;
+}
+
+function extractNumberedRiskItemScoreFromArray(
+  values: unknown[],
+  itemNumber: number,
+  labelFragments: readonly string[],
+): number | null {
+  for (const item of values) {
+    const rec = toRecord(item);
+    if (!rec) continue;
+    const id = String(rec.id ?? rec.itemId ?? rec.questionId ?? '').toLowerCase();
+    const label = String(rec.label ?? rec.question ?? '').toLowerCase();
+    const matchesNumber = id === String(itemNumber) || id === `q${itemNumber}` || id === `item${itemNumber}`;
+    const matchesLabel = labelFragments.some((fragment) => label.includes(fragment));
+    if (!matchesNumber && !matchesLabel) continue;
+    return asNumber(rec.score ?? rec.value ?? rec.selectedValue ?? rec.answer);
+  }
+  return null;
+}
+
+function deriveRiskItemScore(input: {
+  responses: unknown;
+  measureType?: string | null;
+  templateName?: string | null;
+}): { instrument: 'PHQ-9' | 'BDI-II' | 'EPDS' | null; score: number | null } {
+  const name = `${input.measureType ?? ''} ${input.templateName ?? ''}`;
+  const spec = isPhq9Instrument(name)
+    ? { instrument: 'PHQ-9' as const, itemNumber: 9, fragments: ['better off dead', 'self harm', 'self-harm'] }
+    : isBdiInstrument(name)
+      ? { instrument: 'BDI-II' as const, itemNumber: 9, fragments: ['suicidal thoughts', 'suicide'] }
+      : isEpdsInstrument(name)
+        ? { instrument: 'EPDS' as const, itemNumber: 10, fragments: ['harming myself', 'self harm', 'self-harm'] }
+        : null;
+  if (!spec) return { instrument: null, score: null };
+  if (Array.isArray(input.responses)) {
+    return {
+      instrument: spec.instrument,
+      score: extractNumberedRiskItemScoreFromArray(input.responses, spec.itemNumber, spec.fragments),
+    };
+  }
+  const rec = toRecord(input.responses);
+  if (!rec) return { instrument: spec.instrument, score: null };
+  return {
+    instrument: spec.instrument,
+    score: extractNumberedRiskItemScoreFromObject(rec, spec.itemNumber),
+  };
+}
+
 export function detectSuicideRiskSignal(input: {
   measureType?: string | null;
   templateName?: string | null;
@@ -135,14 +213,15 @@ export function detectSuicideRiskSignal(input: {
   reason: string | null;
 } {
   const isPhq9 = isPhq9Instrument(input.measureType) || isPhq9Instrument(input.templateName);
+  const riskItem = deriveRiskItemScore(input);
   const totalScore = deriveAssessmentTotalScore(input.responses);
   const submittedTotalScore = asNumber(input.submittedTotalScore);
   const hasScoreMismatch =
     submittedTotalScore != null
     && totalScore != null
     && Math.abs(submittedTotalScore - totalScore) > Number.EPSILON;
-  const q9Score = derivePhq9Q9Score(input.responses);
-  if (!isPhq9) {
+  const q9Score = riskItem.score;
+  if (!riskItem.instrument) {
     return {
       isPhq9: false,
       totalScore,
@@ -154,15 +233,15 @@ export function detectSuicideRiskSignal(input: {
     };
   }
 
-  const q9Positive = q9Score != null && q9Score >= 1;
-  const severeTotal = totalScore != null && totalScore >= 20;
-  const triggered = q9Positive || severeTotal;
+  const riskItemPositive = q9Score != null && q9Score >= 1;
+  const severeTotal = riskItem.instrument === 'PHQ-9' && totalScore != null && totalScore >= 20;
+  const triggered = riskItemPositive || severeTotal;
 
   let reason: string | null = null;
-  if (q9Positive && severeTotal) {
+  if (riskItemPositive && severeTotal) {
     reason = 'PHQ-9 Q9 positive and total score >= 20';
-  } else if (q9Positive) {
-    reason = 'PHQ-9 Q9 positive';
+  } else if (riskItemPositive) {
+    reason = `${riskItem.instrument} self-harm/suicide item positive`;
   } else if (severeTotal) {
     reason = 'PHQ-9 total score >= 20';
   }

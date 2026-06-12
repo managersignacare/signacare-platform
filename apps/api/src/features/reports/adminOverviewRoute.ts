@@ -1,24 +1,25 @@
 import type { NextFunction, Request, Response } from 'express';
+import type { Knex } from 'knex';
 import { z } from 'zod';
 import { extractCount } from '../../shared/extractCount';
 import { OPEN_TASK_STATUSES } from '../tasks/taskStatusCatalog';
 import {
   OPEN_CASELOAD_EPISODE_STATUSES,
-  caseloadAssignmentPredicateForStaffAlias,
 } from '../dashboard/caseloadAssignmentSql';
 
 // @jsonb-extraction-exempt: aggregate-only route; no JSONB columns are selected or returned.
 type GroupRow = Record<string, unknown>;
 type TeamBreakdownRow = { team: string; cnt: string | number };
 type StaffActivityRow = {
+  id: string;
   given_name: string;
   family_name: string;
   role: string;
-  patients: number;
   notes: number;
   appointments: number;
 };
 type DischargeRow = { closure_reason?: string; cnt: string | number; avg_los?: string };
+type StaffPatientCountRow = { staff_id: string; patients: string | number };
 
 const CountMapSchema = z.record(z.number().int().nonnegative());
 const AdminOverviewResponseSchema = z.object({
@@ -107,6 +108,61 @@ const totalFromGroup = (rows: GroupRow[]) =>
 const totalForStatuses = (rows: GroupRow[], statuses: readonly string[]) =>
   statuses.reduce((sum, status) => sum + sumGroup(rows, status), 0);
 
+function applyCaseloadAssignmentPredicate(
+  qb: Knex.QueryBuilder,
+  today: string,
+): void {
+  qb.whereRaw('?? = ??', ['e.primary_clinician_id', 'staff.id'])
+    .orWhereRaw('?? = ??', ['e.key_worker_id', 'staff.id'])
+    .orWhereExists(function patientPrimaryAssignment(this: Knex.QueryBuilder) {
+      this.select(1)
+        .from('patient_team_assignments as pta_primary')
+        .whereRaw('?? = ??', ['pta_primary.patient_id', 'e.patient_id'])
+        .where('pta_primary.is_active', true)
+        .whereRaw('?? = ??', ['pta_primary.primary_clinician_id', 'staff.id']);
+    })
+    .orWhereExists(function staffRoleAssignment(this: Knex.QueryBuilder) {
+      this.select(1)
+        .from('staff_role_assignments as sra')
+        .whereRaw('?? = ??', ['sra.clinic_id', 'e.clinic_id'])
+        .whereRaw('?? = ??', ['sra.staff_id', 'staff.id'])
+        .where('sra.is_active', true)
+        .where(function roleStillActive(this: Knex.QueryBuilder) {
+          this.whereNull('sra.end_date').orWhere('sra.end_date', '>=', today);
+        })
+        .where(function roleMatchesEpisodeOrPatientTeam(this: Knex.QueryBuilder) {
+          this.whereRaw('?? = ??', ['sra.org_unit_id', 'e.team_id'])
+            .orWhereExists(function patientRoleTeamAssignment(this: Knex.QueryBuilder) {
+              this.select(1)
+                .from('patient_team_assignments as pta_role')
+                .whereRaw('?? = ??', ['pta_role.patient_id', 'e.patient_id'])
+                .whereRaw('?? = ??', ['pta_role.org_unit_id', 'sra.org_unit_id'])
+                .where('pta_role.is_active', true);
+            });
+        });
+    })
+    .orWhereExists(function staffTeamAssignment(this: Knex.QueryBuilder) {
+      this.select(1)
+        .from('staff_team_assignments as sta')
+        .whereRaw('?? = ??', ['sta.clinic_id', 'e.clinic_id'])
+        .whereRaw('?? = ??', ['sta.staff_id', 'staff.id'])
+        .where('sta.is_active', true)
+        .where(function teamStillActive(this: Knex.QueryBuilder) {
+          this.whereNull('sta.end_date').orWhere('sta.end_date', '>=', today);
+        })
+        .where(function teamMatchesEpisodeOrPatientTeam(this: Knex.QueryBuilder) {
+          this.whereRaw('?? = ??', ['sta.org_unit_id', 'e.team_id'])
+            .orWhereExists(function patientTeamAssignment(this: Knex.QueryBuilder) {
+              this.select(1)
+                .from('patient_team_assignments as pta_team')
+                .whereRaw('?? = ??', ['pta_team.patient_id', 'e.patient_id'])
+                .whereRaw('?? = ??', ['pta_team.org_unit_id', 'sta.org_unit_id'])
+                .where('pta_team.is_active', true);
+            });
+        });
+    });
+}
+
 export async function handleAdminOverview(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const { db } = await import('../../db/db');
@@ -115,6 +171,7 @@ export async function handleAdminOverview(req: Request, res: Response, next: Nex
     const clinicId = req.clinicId;
     const period = (req.query.period as string) || 'month';
     const { from, now } = resolvePeriodWindow(period);
+    const today = now.toISOString().slice(0, 10);
 
     // BUG-722: request-scoped RLS uses one transaction connection.
     // Run independent DB reads sequentially to avoid concurrent-query warnings.
@@ -145,6 +202,25 @@ export async function handleAdminOverview(req: Request, res: Response, next: Nex
       .select('team_id as team', db.raw('count(*) as cnt'))
       .groupBy('team_id')
       .orderBy('cnt', 'desc');
+    const staffPatientCountRows = await db('staff')
+      .where({ 'staff.clinic_id': clinicId, 'staff.is_active': true })
+      .whereNull('staff.deleted_at')
+      // @fk-join-exempt: clinic-scope staff x open-episode aggregation; assignment predicates below bind each episode to the staff member.
+      .join('episodes as e', 'e.clinic_id', 'staff.clinic_id')
+      .whereIn('e.status', [...OPEN_CASELOAD_EPISODE_STATUSES])
+      .whereNull('e.deleted_at')
+      .where(function assignedToStaff() {
+        applyCaseloadAssignmentPredicate(this, today);
+      })
+      .groupBy('staff.id')
+      .select('staff.id as staff_id')
+      .countDistinct({ patients: 'e.patient_id' });
+    const patientCountsByStaff = new Map(
+      (staffPatientCountRows as StaffPatientCountRow[]).map((row) => [
+        row.staff_id,
+        parseInt(String(row.patients), 10),
+      ]),
+    );
     const staffActivity = await db('staff')
       .where({ clinic_id: clinicId, is_active: true })
       .whereNull('deleted_at')
@@ -159,20 +235,10 @@ export async function handleAdminOverview(req: Request, res: Response, next: Nex
         'staff.id', 'a.clinician_id',
       )
       .select(
+        'staff.id',
         'staff.given_name',
         'staff.family_name',
         'staff.role',
-        db.raw(
-          `COALESCE((
-            SELECT COUNT(DISTINCT e.patient_id)::int
-            FROM episodes e
-            WHERE e.clinic_id = staff.clinic_id
-              AND e.deleted_at IS NULL
-              AND e.status IN (${OPEN_CASELOAD_EPISODE_STATUSES.map(() => '?').join(',')})
-              AND ${caseloadAssignmentPredicateForStaffAlias('e', 'staff')}
-          ), 0)::int as patients`,
-          [...OPEN_CASELOAD_EPISODE_STATUSES],
-        ),
         db.raw('COALESCE(n.note_cnt, 0)::int as notes'),
         db.raw('COALESCE(a.appt_cnt, 0)::int as appointments'),
       )
@@ -239,7 +305,7 @@ export async function handleAdminOverview(req: Request, res: Response, next: Nex
       staff: (staffActivity as StaffActivityRow[]).map((row) => ({
         name: `${row.given_name} ${row.family_name}`,
         role: row.role,
-        patients: row.patients,
+        patients: patientCountsByStaff.get(row.id) ?? 0,
         notes: row.notes,
         appointments: row.appointments,
       })),

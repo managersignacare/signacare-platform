@@ -11,6 +11,7 @@
 //   /vitals    → latest vitals + metabolic flowsheet reading
 //   /meds      → current active medications + insulin regimen
 //   /problems  → active problem list
+//   /rating scale → score + date of the most recent clinician-rated assessment
 //
 // All fetches go through the existing apiClient endpoints — no new
 // backend surface required:
@@ -18,21 +19,24 @@
 //   - GET /nursing-assessments?patientId=:id&assessmentType=physical_tracking&limit=1
 //   - GET /medications/patients/:id/medications
 //   - GET /internal-medicine/patients/:id/problems?clinicalStatus=active
+//   - GET /assessments/patient/:id/measurement-summary?family=clinician_rating_scale
 //
 // Naming conventions (CLAUDE.md §1.5 + naming-conventions guard):
 //   apiClient calls use relative paths only — no /api/v1/ prefix and
 //   no leading slash.
+import type { MeasurementDashboardSummary, MeasurementSeries } from '@signacare/shared'
 import { apiClient } from '../../../../shared/services/apiClient'
 
-export type MacroId = 'labs' | 'vitals' | 'meds' | 'problems'
+export type MacroId = 'labs' | 'vitals' | 'meds' | 'problems' | 'ratingScale'
 
-export const MACRO_IDS: MacroId[] = ['labs', 'vitals', 'meds', 'problems']
+export const MACRO_IDS: MacroId[] = ['labs', 'vitals', 'meds', 'problems', 'ratingScale']
 
 export const MACRO_LABEL: Record<MacroId, string> = {
   labs: 'Labs',
   vitals: 'Vitals',
   meds: 'Medications',
   problems: 'Problems',
+  ratingScale: 'Rating Scale',
 }
 
 export const MACRO_TRIGGER: Record<MacroId, string> = {
@@ -40,6 +44,7 @@ export const MACRO_TRIGGER: Record<MacroId, string> = {
   vitals: '/vitals',
   meds: '/meds',
   problems: '/problems',
+  ratingScale: '/rating scale',
 }
 
 interface PathologyReport {
@@ -79,6 +84,13 @@ interface ProblemRow {
   clinicalStatus: string
   severity?: string | null
   isChronic: boolean
+}
+
+function sortSeriesByLatestAssessment(a: MeasurementSeries, b: MeasurementSeries): number {
+  const aTime = a.latestPoint?.completedAt ?? ''
+  const bTime = b.latestPoint?.completedAt ?? ''
+  if (aTime !== bTime) return bTime.localeCompare(aTime)
+  return a.displayName.localeCompare(b.displayName)
 }
 
 function fmtDate(d?: string | null): string {
@@ -179,11 +191,47 @@ async function expandProblems(patientId: string): Promise<string> {
   }
 }
 
+// ── /rating scale ────────────────────────────────────────────────────────
+
+async function expandRatingScale(patientId: string): Promise<string> {
+  try {
+    const summary = await apiClient.get<MeasurementDashboardSummary>(
+      `assessments/patient/${patientId}/measurement-summary`,
+      { family: 'clinician_rating_scale' },
+    )
+    const latestSeries = [...(summary.series ?? [])]
+      .filter((series) => Boolean(series.latestPoint))
+      .sort(sortSeriesByLatestAssessment)[0]
+
+    if (!latestSeries?.latestPoint) {
+      return '=== RATING SCALE ===\n  (no clinician-rated rating scales recorded yet)\n'
+    }
+
+    const latest = latestSeries.latestPoint
+    const score =
+      latest.maxScore != null
+        ? `${latest.rawScore}/${latest.maxScore}`
+        : `${latest.rawScore}`
+    const severity = latest.severityLabel ? ` — ${latest.severityLabel}` : ''
+
+    return [
+      '=== RATING SCALE ===',
+      `  Instrument: ${latest.instrumentDisplayName}`,
+      `  Latest score: ${score}${severity}`,
+      `  Completed: ${fmtDate(latest.completedAt)}`,
+      '',
+    ].join('\n')
+  } catch {
+    return '=== RATING SCALE ===\n  (failed to load clinician-rated assessment — check connection)\n'
+  }
+}
+
 const EXPANDERS: Record<MacroId, (patientId: string) => Promise<string>> = {
   labs: expandLabs,
   vitals: expandVitals,
   meds: expandMeds,
   problems: expandProblems,
+  ratingScale: expandRatingScale,
 }
 
 /**
@@ -212,19 +260,17 @@ export function detectTrigger(
   if (caret < 2) return null
   // Trailing char must be a single space (the trigger commit).
   if (text[caret - 1] !== ' ') return null
-  // Look back from caret-1 for a slash-prefixed token.
-  let i = caret - 2
-  while (i >= 0) {
-    const c = text[i]
-    if (c === '/') break
-    // Trigger tokens are lowercase letters only.
-    if (!/[a-z]/.test(c)) return null
-    i--
-    if (caret - 1 - i > 16) return null // bound the lookback
+  const candidates = [...MACRO_IDS].sort(
+    (left, right) => MACRO_TRIGGER[right].length - MACRO_TRIGGER[left].length,
+  )
+
+  for (const id of candidates) {
+    const triggerWithCommit = `${MACRO_TRIGGER[id]} `
+    const start = caret - triggerWithCommit.length
+    if (start < 0) continue
+    if (text.slice(start, caret) !== triggerWithCommit) continue
+    return { id, start, end: caret }
   }
-  if (i < 0 || text[i] !== '/') return null
-  const word = text.slice(i + 1, caret - 1)
-  const id = MACRO_IDS.find((m) => m === (word as MacroId))
-  if (!id) return null
-  return { id, start: i, end: caret }
+
+  return null
 }

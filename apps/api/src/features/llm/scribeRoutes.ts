@@ -18,44 +18,27 @@ import { requireModuleRead } from '../../middleware/moduleAccessMiddleware';
 import { requireClinicModuleEnabled } from '../../middleware/clinicModuleMiddleware';
 import { requireFeatureEnabled } from '../../middleware/featureFlagMiddleware';
 import { MODULE_KEYS } from '../../shared/moduleKeys';
-import { db } from '../../db/db';
 import { buildAuthContext } from '../../shared/buildAuthContext';
-import { requirePatientRelationship, requireSpecialty } from '../../shared/authGuards';
-// BUG-284 — disclaimer envelope parity with the rest of the clinical-AI
-// surface (BUG-038 shipped CLINICAL_AI_DISCLAIMER as the canonical
-// string embedded in every AI-response body).
-import { CLINICAL_AI_DISCLAIMER } from '../../shared/llmDisclaimer';
-import { writeLlmAccessBypassAudit } from '../../shared/writeLlmAccessBypassAudit';
+import { requireSpecialty } from '../../shared/authGuards';
+import {
+  AI_SCRIBE_PARITY_CAPABILITIES,
+  AiScribeCapabilitiesResponseSchema,
+} from '@signacare/shared';
 import scribeConsentRoutes from './scribeConsentRoutes';
 import scribeSessionRoutes from './scribeSessionRoutes';
 import scribeCatalogRoutes from './scribeCatalogRoutes';
-import { recordScribeReadabilitySignal } from '../../shared/postDeployTelemetry';
+import scribeParityRoutes from './scribeParityRoutes';
+import scribeDraftSurface from './scribeDraftSurface';
+import { getClinicAiRuntimeSettings } from './modelRouter/clinicAiRuntimeSettings';
 
 // ── Local Zod schemas (Phase R3b / CLAUDE.md §12) ────────────────────────────
 // The scribe pipeline accepts structuredNote / assessmentFacts as either
 // strings or model-emitted JSON objects/arrays; downstream prompt builders
 // want a string. Zod `.transform` coerces to a canonical string at the
 // boundary so the downstream signatures stay typed.
-const structuredNoteInput = z
-  .union([z.string().min(1), z.record(z.string(), z.unknown()).refine((o) => Object.keys(o).length > 0, 'structuredNote required')])
-  .transform((v) => (typeof v === 'string' ? v : JSON.stringify(v)));
-
 const stringFactArray = z
   .array(z.union([z.string(), z.record(z.string(), z.unknown())]))
   .transform((arr) => arr.map((v) => (typeof v === 'string' ? v : JSON.stringify(v))));
-
-const PatientSummarySchema = z.object({
-  structuredNote: structuredNoteInput,
-  patientId: z.string().uuid().optional(),
-});
-
-const ReferralLetterSchema = z.object({
-  structuredNote: structuredNoteInput,
-  recipientType: z.enum(['gp', 'specialist', 'service']).optional(),
-  recipientName: z.string().max(200).optional(),
-  patientId: z.string().uuid().optional(),
-  reason: z.string().max(500).optional(),
-});
 
 const Icd10SuggestSchema = z.object({
   assessmentFacts: stringFactArray.optional(),
@@ -77,20 +60,12 @@ const OutcomeMeasureSchema = z.object({
 import {
   getScribePreferences,
   saveScribePreferences,
-  PATIENT_SUMMARY_PROMPT,
-  buildPatientSummaryPrompt,
-  REFERRAL_LETTER_PROMPT,
-  buildReferralLetterPrompt,
   autoCodeICD10,
   suggestMBSItems,
   extractOutcomeMeasures,
-  wrapAsAiDraft,
-  roleLabel,
 } from '../../mcp/scribeEnhancements';
-import axios from 'axios';
-
-const OLLAMA_URL = process.env.OLLAMA_URL ?? 'http://localhost:11434';
 const router = Router();
+
 router.use(authMiddleware);
 // Every scribe endpoint is gated behind the 'medical-scribe' module
 // grant. requireModuleRead allows access_level='read' OR 'write' —
@@ -108,6 +83,25 @@ router.use(requireClinicModuleEnabled(MODULE_KEYS.MEDICAL_SCRIBE));
 // FEATURE_DISABLED within the 60s cache TTL. Admin role does NOT
 // bypass — a kill switch is for everyone.
 router.use(requireFeatureEnabled('ai-scribe'));
+
+// GET /api/v1/scribe/capabilities
+//
+// Deployment smoke uses this authenticated but non-PHI endpoint to prove that
+// the active environment exposes the parity-critical scribe surfaces before
+// traffic promotion. Patient/session artefact creation is tested separately by
+// clinical workflow suites; this endpoint is deliberately read-only.
+router.get('/capabilities', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const runtime = await getClinicAiRuntimeSettings(req.clinicId!);
+    res.json(AiScribeCapabilitiesResponseSchema.parse({
+      schemaVersion: '1.0',
+      activePath: runtime.scribeRuntimeMode === 'agentic' ? 'agentic-ai-scribe' : 'async-ai-scribe-v2',
+      capabilities: AI_SCRIBE_PARITY_CAPABILITIES,
+      stagingSmokeRequired: true,
+      productionSmokeRequired: true,
+    }));
+  } catch (err) { next(err); }
+});
 
 // ── Clinician Scribe Preferences ───────────────────────────────────────────
 
@@ -180,143 +174,6 @@ router.put('/macros',
   },
 );
 
-// ── After-Visit Patient Summary ────────────────────────────────────────────
-
-// POST /api/v1/scribe/patient-summary
-router.post('/patient-summary',
-  requireRoles(['clinician', 'admin', 'superadmin']),
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { structuredNote, patientId } = PatientSummarySchema.parse(req.body);
-
-      // BUG-036 — patient-relationship gate. patientId is optional per
-      // PatientSummarySchema, so the gate is conditional. When absent,
-      // only the already-sanitized structuredNote flows (from a prior
-      // scribe session that had its own /ambient-note gate — BUG-035).
-      if (patientId) {
-        const auth = buildAuthContext(req, patientId);
-        await requirePatientRelationship(auth, patientId);
-      }
-
-      // Get patient name
-      let patientName = 'there';
-      if (patientId) {
-        const patient = await db('patients').where({ id: patientId }).first();
-        if (patient) patientName = patient.given_name ?? patient.preferred_name ?? 'there';
-      }
-
-      const prompt = buildPatientSummaryPrompt(structuredNote, patientName);
-      const model = process.env.OLLAMA_MODEL || 'qwen2.5:14b';
-
-      const resp = await axios.post(`${OLLAMA_URL}/api/generate`, {
-        model,
-        system: PATIENT_SUMMARY_PROMPT,
-        prompt,
-        stream: false,
-        options: { temperature: 0.2, num_predict: 2048 },
-      }, { timeout: 60000 });
-
-      // Tier 12.1 — wrap in AI-DRAFT header so the clinician cannot
-      // miss that this is un-reviewed model output.
-      const summary = wrapAsAiDraft(resp.data?.response ?? '');
-      // BUG-284 — disclaimer envelope parity with /suggest, /clinical-ai,
-      // /agent. Frontend must surface the AI-source signal via this
-      // canonical field; auditors parse it across the full LLM surface.
-      // BUG-279 — explicit bypass-role audit for /scribe/patient-summary.
-      await writeLlmAccessBypassAudit({
-        req,
-        patientId: patientId ?? null,
-        endpoint: '/scribe/patient-summary',
-        feature: 'scribe-patient-summary',
-      });
-      recordScribeReadabilitySignal({
-        feature: 'scribe-patient-summary',
-        text: summary,
-      });
-      res.json({ summary, patientName, isAiDraft: true, disclaimer: CLINICAL_AI_DISCLAIMER });
-    } catch (err) { next(err); }
-  },
-);
-
-// ── Auto Referral / GP Letter ──────────────────────────────────────────────
-
-// POST /api/v1/scribe/referral-letter
-router.post('/referral-letter',
-  requireRoles(['clinician', 'admin', 'superadmin']),
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { structuredNote, recipientType, recipientName, patientId, reason } = ReferralLetterSchema.parse(req.body);
-
-      // BUG-036 — patient-relationship gate. patientId is optional per
-      // ReferralLetterSchema; when present, loads DOB/MRN into the Ollama
-      // prompt — must verify clinician-patient relationship first.
-      if (patientId) {
-        const auth = buildAuthContext(req, patientId);
-        await requirePatientRelationship(auth, patientId);
-      }
-
-      // Get patient and clinician details
-      let patientName = '', patientDob = '', patientMrn = '';
-      if (patientId) {
-        const patient = await db('patients').where({ id: patientId }).first();
-        if (patient) {
-          patientName = `${patient.given_name} ${patient.family_name}`;
-          patientDob = patient.date_of_birth ? new Date(patient.date_of_birth).toLocaleDateString('en-AU') : '';
-          patientMrn = patient.emr_number ?? '';
-        }
-      }
-
-      const staff = await db('staff').where({ id: req.user!.id }).first();
-      const clinicianName = staff ? `${staff.given_name} ${staff.family_name}` : '';
-      // Tier 12.4 — role labels must match the clinician's role so the
-      // letter's sign-off reads correctly ("Consultant Psychiatrist"
-      // vs "Clinical Psychologist" etc.). Fall back to "Treating
-      // Clinician" when the row has no role.
-      const clinicianRole = staff?.role ?? req.user!.role ?? '';
-
-      const prompt = buildReferralLetterPrompt(
-        structuredNote,
-        recipientType ?? 'gp',
-        recipientName ?? 'GP',
-        patientName,
-        patientDob,
-        patientMrn,
-        clinicianName,
-        clinicianRole,
-        reason,
-      );
-
-      const model = process.env.OLLAMA_MODEL || 'qwen2.5:14b';
-      const resp = await axios.post(`${OLLAMA_URL}/api/generate`, {
-        model,
-        system: REFERRAL_LETTER_PROMPT,
-        prompt,
-        stream: false,
-        options: { temperature: 0.2, num_predict: 2048 },
-      }, { timeout: 60000 });
-
-      // Tier 12.1 — AI-DRAFT header on referral letters too.
-      const letter = wrapAsAiDraft(resp.data?.response ?? '');
-      // BUG-284 — disclaimer envelope parity (see /patient-summary).
-      // BUG-279 — explicit bypass-role audit for /scribe/referral-letter.
-      await writeLlmAccessBypassAudit({
-        req,
-        patientId: patientId ?? null,
-        endpoint: '/scribe/referral-letter',
-        feature: 'scribe-referral-letter',
-      });
-      res.json({
-        letter,
-        patientName,
-        clinicianName,
-        clinicianRoleLabel: roleLabel(clinicianRole),
-        isAiDraft: true,
-        disclaimer: CLINICAL_AI_DISCLAIMER,
-      });
-    } catch (err) { next(err); }
-  },
-);
-
 // ── ICD-10-AM Suggestions ──────────────────────────────────────────────────
 
 // POST /api/v1/scribe/icd10-suggest
@@ -374,6 +231,8 @@ router.post('/outcome-measures',
 // while preserving one shared middleware envelope at this parent router.
 router.use(scribeConsentRoutes);
 router.use(scribeSessionRoutes);
+router.use(scribeParityRoutes);
 router.use(scribeCatalogRoutes);
+router.use(scribeDraftSurface);
 
 export default router;

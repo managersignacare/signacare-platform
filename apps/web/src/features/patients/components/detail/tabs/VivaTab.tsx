@@ -15,10 +15,12 @@ import BookIcon from '@mui/icons-material/Book'
 import UploadFileIcon from '@mui/icons-material/UploadFile'
 import AssessmentIcon from '@mui/icons-material/Assessment'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import type { MeasurementDashboardSummary } from '@signacare/shared'
 import { apiClient } from '../../../../../shared/services/apiClient'
 import {
   vivaKeys,
   patientsKeys,
+  outcomeMeasuresKeys,
   patientMedicationsKeys,
 } from '../../../queryKeys'
 import {
@@ -32,13 +34,14 @@ import {
   type VivaTrackingEntry,
   type VivaTrackingResponse,
 } from './vivaTabDomain'
+import { MultiInstrumentMeasurementPanel } from './measurements'
 type SubTab = 'mood' | 'vitals' | 'assessments' | 'medications' | 'tasks' | 'diary' | 'goals' | 'activities' | 'docs' | 'profile' | 'invite'
 type ThresholdRuleRow = { id?: string; trackingType?: string | null; direction?: string | null; threshold?: number | string | null; consecutiveDays?: number | string | null }
 type ThresholdAlertRow = { triggered?: boolean; type?: string | null; direction?: string | null; threshold?: number | string | null; consecutiveDays?: number | string | null; actual?: Array<number | string> }
 type MedicationRow = { id?: string; status?: string | null; drugLabel?: string | null; genericName?: string | null; medicationName?: string | null; dose?: string | null; frequency?: string | null; route?: string | null }
 type ReminderRow = { id?: string; drugName?: string | null; dose?: string | null; instructions?: string | null; reminderTime?: string | null; daysOfWeek?: number[] }
 type SharedDocRow = { id?: string; title?: string | null; url?: string | null; docType?: 'document' | 'weblink' | string | null; createdAt?: string | null }
-type SelfRatingTemplateRow = { id?: string; name?: string | null }
+type SelfRatingTemplateRow = { id?: string; templateId?: string | null; name?: string | null }
 type SelfRatingAssessmentRow = { id?: string; status?: string | null; templateName?: string | null; measureType?: string | null; createdAt?: string | null; completedAt?: string | null; totalScore?: number | string | null }
 type GoalStatusChange = { action?: string | null; date?: string | null; clinician?: string | null }
 type GoalEntryPayload = VivaGoalPayload & { refused?: boolean; source?: string | null; createdAt?: string | null; statusChanges?: GoalStatusChange[] }
@@ -1098,6 +1101,19 @@ function AssessmentsPanel({ patientId }: { patientId: string }) {
     },
   })
 
+  // Phase 8 visualisation — latest score cards + trend charts for SELF-RATED
+  // scales only. Server filter family=self_rated_scale excludes outcome
+  // measures (Outcome Measures tab) and clinician-rated rating scales
+  // (Rating Scales tab) structurally, so this view never shows them.
+  const { data: summary } = useQuery({
+    queryKey: outcomeMeasuresKeys.summary(patientId, 'self_rated_scale'),
+    queryFn: () => apiClient.get<MeasurementDashboardSummary>(
+      `assessments/patient/${patientId}/measurement-summary`,
+      { family: 'self_rated_scale' },
+    ),
+    enabled: !!patientId,
+  })
+
   const assignMut = useMutation({
     mutationFn: () => apiClient.post(`patient-app/assessments/${patientId}/assign`, { templateId: selectedTemplate }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: vivaKeys.assessments(patientId) }); setSelectedTemplate(''); },
@@ -1108,19 +1124,13 @@ function AssessmentsPanel({ patientId }: { patientId: string }) {
   const pending = (assessments ?? []).filter(a => a.status === 'pending')
   const completed = (assessments ?? []).filter(a => a.status === 'completed')
 
-  // Build score history for graph (group by template_name)
-  const scoreHistory: Record<string, Array<{ date: string; score: number }>> = {}
-  for (const a of completed) {
-    const name = a.templateName ?? a.measureType ?? 'Assessment'
-    if (!scoreHistory[name]) scoreHistory[name] = []
-    scoreHistory[name].push({ date: a.completedAt ?? a.createdAt ?? '', score: Number(a.totalScore ?? 0) })
-  }
-
   return (
     <Box>
       <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1 }}>Self-Rating Assessments</Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2, fontSize: 12 }}>
-        Assign self-rating scales from the dropdown. Patient completes them in Viva app and results sync back here.
+        Patient-reported via Viva. Assign self-rating scales from the dropdown — patient completes them in
+        the Viva app and results sync back here. Outcome measures and clinician-rated rating scales live
+        on their own tabs and are intentionally not shown here.
       </Typography>
 
       {/* Assign new */}
@@ -1185,50 +1195,27 @@ function AssessmentsPanel({ patientId }: { patientId: string }) {
         </Box>
       )}
 
-      {/* Score trend graphs */}
-      {Object.entries(scoreHistory).map(([name, scores]) => {
-        if (scores.length < 2) return null
-        const sorted = [...scores].sort((a, b) => a.date.localeCompare(b.date))
-        return (
-          <Card key={name} variant="outlined" sx={{ mb: 2 }}>
-            <CardContent>
-              <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1, color: '#7B1FA2' }}>{name} — Score Trend</Typography>
-              <Box sx={{ height: 100 }}>
-                <svg width="100%" height="100" viewBox={`0 0 ${Math.max(sorted.length - 1, 1)} 100`} preserveAspectRatio="none">
-                  <polyline
-                    points={sorted.map((s, i) => {
-                      const min = Math.min(...sorted.map(x => x.score)) * 0.9
-                      const max = Math.max(...sorted.map(x => x.score)) * 1.1 || 1
-                      return `${i},${95 - ((s.score - min) / (max - min)) * 90}`
-                    }).join(' ')}
-                    fill="none" stroke="#7B1FA2" strokeWidth="2.5" vectorEffect="non-scaling-stroke" />
-                  <polygon
-                    points={`0,100 ${sorted.map((s, i) => {
-                      const min = Math.min(...sorted.map(x => x.score)) * 0.9
-                      const max = Math.max(...sorted.map(x => x.score)) * 1.1 || 1
-                      return `${i},${95 - ((s.score - min) / (max - min)) * 90}`
-                    }).join(' ')} ${sorted.length - 1},100`}
-                    fill="#7B1FA2" opacity="0.08" />
-                  {sorted.map((s, i) => {
-                    const min = Math.min(...sorted.map(x => x.score)) * 0.9
-                    const max = Math.max(...sorted.map(x => x.score)) * 1.1 || 1
-                    const y = 95 - ((s.score - min) / (max - min)) * 90
-                    return <circle key={i} cx={i} cy={y} r="3" fill="#7B1FA2" vectorEffect="non-scaling-stroke" />
-                  })}
-                </svg>
-              </Box>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
-                {sorted.map((s, i) => (
-                  <Box key={i} sx={{ textAlign: 'center' }}>
-                    <Typography sx={{ fontSize: 10, fontWeight: 700, color: '#7B1FA2' }}>{s.score}</Typography>
-                    <Typography sx={{ fontSize: 8, color: '#888' }}>{new Date(s.date).toLocaleDateString('en-AU', { day: '2-digit', month: 'short' })}</Typography>
-                  </Box>
-                ))}
-              </Box>
-            </CardContent>
-          </Card>
-        )
-      })}
+      {/*
+       * Phase 8 visualisation — latest score cards + small-multiples trend
+       * charts for SELF-RATED scales only (server filter
+       * family=self_rated_scale). Outcome measures + clinician-rated rows
+       * cannot leak into this view.
+       */}
+      {summary && (summary.series.length > 0 || summary.crossInstrumentTimeline.length > 0) && (
+        <Box sx={{ mb: 2 }}>
+          <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1, color: '#7B1FA2' }}>
+            Self-Rated Score Trends — Patient-Reported via Viva
+          </Typography>
+          <MultiInstrumentMeasurementPanel
+            series={summary.series}
+            timeline={summary.crossInstrumentTimeline}
+            warnings={summary.warnings}
+            restrictToFamily="self_rated_scale"
+            hideLegend
+            hideTimeline
+          />
+        </Box>
+      )}
 
       {(assessments ?? []).length === 0 && (
         <Typography color="text.secondary" sx={{ textAlign: 'center', py: 2 }}>No assessments assigned yet. Use the dropdown above to assign a self-rating scale.</Typography>

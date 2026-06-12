@@ -24,3 +24,7 @@ Every file under `docs/gold-standard/` MUST end with a comparison table against 
 ## Fix registry
 
 The machine-readable mirror of every verified fix lives at [`quality/fix-registry.md`](quality/fix-registry.md). Every PR that fixes a bug MUST add a row. See `quality/fix-build-rules.md` for the full rule.
+
+## Deployment learnings
+
+The authoritative operational lessons from the Azure Windows VM and Linux deployment attempts live at [`operations/deployment-learnings.md`](operations/deployment-learnings.md). Future deployment work must use that document before changing Azure topology, deployment scripts, or production runbooks.

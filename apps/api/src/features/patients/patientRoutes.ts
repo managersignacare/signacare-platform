@@ -18,7 +18,11 @@ import {
 } from '../../shared/blobStorage';
 import { idempotencyMiddleware } from '../../middleware/idempotencyMiddleware';
 import { uploadLimiter } from '../../middleware/rateLimiters';
-import { requireClinicalAccessRole, requirePatientRelationship, requirePermission } from '../../shared/authGuards';
+import {
+  requireClinicalAccessRole,
+  requirePatientRelationship,
+  requirePermissionOrClinicalLeadershipOverride,
+} from '../../shared/authGuards';
 import { buildAuthContext } from '../../shared/buildAuthContext';
 import { ensureClinicalNoteConsent } from '../../shared/recordingConsent';
 import { AppError } from '../../shared/errors';
@@ -46,6 +50,7 @@ import {
   PATIENT_ATTACHMENT_COLUMNS,
 } from './patientRouteColumns';
 import { patientTeamAssignmentRouter } from './patientTeamAssignmentRouter';
+import { patientDutyRelationshipRouter } from './patientDutyRelationshipRouter';
 import { createTaskInternal } from '../tasks/taskService';
 import { registerPatientAncillaryRoutes } from './patientAncillaryRoutes';
 import {
@@ -166,7 +171,7 @@ const requireClinicalPatientAccess = (permission: string) => {
     try {
       const auth = buildAuthContext(req, req.params.id);
       requireClinicalAccessRole(auth);
-      requirePermission(auth, permission);
+      await requirePermissionOrClinicalLeadershipOverride(auth, permission);
       await requirePatientRelationship(auth, req.params.id);
       next();
     } catch (err) {
@@ -177,6 +182,7 @@ const requireClinicalPatientAccess = (permission: string) => {
 
 router.get('/', patientController.list);
 router.use(patientTeamAssignmentRouter);
+router.use(patientDutyRelationshipRouter);
 
 // Attachment counts for all patients in clinic (used by patient list for icon)
 router.get('/attachment-counts', async (req: Request, res: Response, next: NextFunction) => {
@@ -452,6 +458,7 @@ router.get('/:id/clinical-intelligence-summary', requireClinicalPatientAccess('p
       async () => {
         const rows = await db('outcome_measures')
           .where({ clinic_id: clinicId, patient_id: patientId })
+          .whereNull('deleted_at')
           .whereNotNull('total_score')
           .orderBy('created_at', 'desc')
           .limit(2)
@@ -635,7 +642,7 @@ router.post('/:id/attachments', uploadLimiter, upload.array('files', 10), async 
           // resolve their download URL via storage_key. We populate it
           // with the storage_key for consistency.
           file_path: putResult.key,
-          storage_backend: putResult.bucket === 'local' ? 'local' : 's3',
+          storage_backend: putResult.backend,
           storage_key: putResult.key,
           storage_bucket: putResult.bucket,
           storage_etag: putResult.etag,
@@ -694,7 +701,7 @@ router.post('/:id/pathology', uploadLimiter, upload.single('file'), async (req: 
           mime_type: file.mimetype,
           file_size: file.size,
           file_path: putResult.key,
-          storage_backend: putResult.bucket === 'local' ? 'local' : 's3',
+          storage_backend: putResult.backend,
           storage_key: putResult.key,
           storage_bucket: putResult.bucket,
           storage_etag: putResult.etag,
@@ -1054,6 +1061,17 @@ router.patch('/:id/notes/:noteId', requireClinicalPatientAccess('note:update'), 
 
     res.json({ note: mapClinicalNoteRowToResponse(row) });
   } catch (err) { next(err); }
+});
+
+router.delete('/:id/notes/:noteId', requireClinicalPatientAccess('note:update'), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const auth = buildAuthContext(req, req.params.id);
+    const { clinicalNoteService } = await import('../clinical-notes/clinicalNote.service');
+    await clinicalNoteService.softDelete(auth, req.params.noteId);
+    res.status(204).end();
+  } catch (err) {
+    next(err);
+  }
 });
 
 registerPatientAncillaryRoutes(router, { upload });

@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["image", "runtime", "service", "resources", "nodeSelector", "tolerations"],
+  "properties": {
+    "replicaCount": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "image": {
+      "type": "object",
+      "required": ["repository", "digest", "pullPolicy"],
+      "properties": {
+        "repository": {
+          "type": "string",
+          "minLength": 1
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "pullPolicy": {
+          "type": "string",
+          "enum": ["IfNotPresent", "Always"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "runtime": {
+      "type": "object",
+      "required": ["engine", "modelName", "modelManifestSha256", "modelManifestPath"],
+      "properties": {
+        "engine": {
+          "type": "string",
+          "enum": ["ollama"]
+        },
+        "modelName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "modelManifestSha256": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "modelManifestPath": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "service": {
+      "type": "object",
+      "required": ["port"],
+      "properties": {
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        }
+      },
+      "additionalProperties": false
+    },
+    "resources": {
+      "type": "object"
+    },
+    "nodeSelector": {
+      "type": "object",
+      "required": ["signacare.io/pool", "signacare.io/gpu"],
+      "properties": {
+        "signacare.io/pool": {
+          "type": "string",
+          "const": "inference"
+        },
+        "signacare.io/gpu": {
+          "type": "string",
+          "const": "true"
+        }
+      },
+      "additionalProperties": true
+    },
+    "tolerations": {
+      "type": "array",
+      "minItems": 1
+    }
+  }
+}

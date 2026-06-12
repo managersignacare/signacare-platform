@@ -1,3 +1,5 @@
+import { resolvePositiveIntEnv } from '../shared/positiveIntEnv';
+
 /**
  * Counting Semaphore — limits concurrent access to a resource.
  *
@@ -27,6 +29,12 @@ export class Semaphore {
     return new Promise<void>(resolve => this.queue.push(resolve));
   }
 
+  tryAcquire(): boolean {
+    if (this.count >= this.max) return false;
+    this.count++;
+    return true;
+  }
+
   release(): void {
     const next = this.queue.shift();
     if (next) {
@@ -54,10 +62,27 @@ export class Semaphore {
 
 /** Global LLM semaphore — limits concurrent Ollama requests */
 export const llmSemaphore = new Semaphore(
-  parseInt(process.env.LLM_MAX_CONCURRENT ?? '3', 10)
+  resolvePositiveIntEnv('LLM_MAX_CONCURRENT', {
+    fallback: 3,
+    max: 12,
+    loggerContext: { configSurface: 'llm_semaphore' },
+  })
 );
 
 /** Global Whisper semaphore — limits concurrent transcription requests */
 export const whisperSemaphore = new Semaphore(
-  parseInt(process.env.WHISPER_MAX_CONCURRENT ?? '2', 10)
+  resolvePositiveIntEnv('WHISPER_MAX_CONCURRENT', {
+    fallback: 2,
+    max: 8,
+    loggerContext: { configSurface: 'whisper_semaphore' },
+  })
+);
+
+/** Global ambient upload semaphore — acquired before multer buffers audio. */
+export const ambientUploadSemaphore = new Semaphore(
+  resolvePositiveIntEnv('AMBIENT_UPLOAD_MAX_CONCURRENT', {
+    fallback: 1,
+    max: 4,
+    loggerContext: { configSurface: 'ambient_upload_semaphore' },
+  })
 );

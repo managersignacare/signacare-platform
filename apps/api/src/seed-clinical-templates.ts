@@ -163,30 +163,8 @@ async function seed() {
       { type: 'score', label: 'Total AIMS Score (sum of items 1–7)' },
       { type: 'short_answer', label: 'Clinical notes / observations' },
     ]},
-    { name: 'HoNOS (Health of the Nation Outcome Scales)', type: 'assessment', category: 'Rating Scales', content: [
-      { type: 'heading', text: 'HoNOS OUTCOME SCALE' },
-      { type: 'instruction', text: 'Rate each scale: 0=No problem, 1=Minor problem, 2=Mild problem, 3=Moderately severe problem, 4=Severe/very severe problem' },
-      ...['Overactive, aggressive, disruptive or agitated behaviour', 'Non-accidental self-injury', 'Problem drinking or drug-taking', 'Cognitive problems', 'Physical illness or disability problems', 'Problems associated with hallucinations and delusions', 'Problems with depressed mood', 'Other mental and behavioural problems', 'Problems with relationships', 'Problems with activities of daily living', 'Problems with living conditions', 'Problems with occupation and activities']
-        .map((q, i) => ({ type: 'likert', label: `${i + 1}. ${q}`, min: 0, max: 4, options: ['0 - No problem', '1 - Minor', '2 - Mild', '3 - Moderately severe', '4 - Severe'] })),
-      { type: 'score', label: 'Total HoNOS Score (sum of 12 items)' },
-      { type: 'short_answer', label: 'Additional clinical notes' },
-    ]},
-    { name: 'K10+ (Kessler Psychological Distress Scale)', type: 'assessment', category: 'Rating Scales', content: [
-      { type: 'heading', text: 'K10+ PSYCHOLOGICAL DISTRESS SCALE' },
-      { type: 'instruction', text: 'In the past 4 weeks, how often did you feel... 1=None of the time, 2=A little of the time, 3=Some of the time, 4=Most of the time, 5=All of the time' },
-      ...['Tired out for no good reason?', 'Nervous?', 'So nervous nothing could calm you down?', 'Hopeless?', 'Restless or fidgety?', 'So restless you could not sit still?', 'Depressed?', 'That everything was an effort?', 'So sad that nothing could cheer you up?', 'Worthless?']
-        .map((q, i) => ({ type: 'likert', label: `${i + 1}. ${q}`, min: 1, max: 5, options: ['1 - None of the time', '2 - A little', '3 - Some of the time', '4 - Most of the time', '5 - All of the time'] })),
-      { type: 'score', label: 'Total K10 Score (sum of 10 items, range 10–50)' },
-      { type: 'multiple_choice', label: 'Interpretation', options: ['10–15: Likely to be well', '16–21: Likely to have mild disorder', '22–29: Likely to have moderate disorder', '30–50: Likely to have severe disorder'] },
-      { type: 'short_answer', label: 'Clinical notes' },
-    ]},
-    { name: 'LSP-16 (Life Skills Profile)', type: 'assessment', category: 'Rating Scales', content: [
-      { type: 'heading', text: 'LIFE SKILLS PROFILE — 16 ITEM VERSION' },
-      { type: 'instruction', text: 'Rate the person\'s typical behaviour over the past 3 months. 1=Never does, 2=Sometimes does, 3=Usually does, 4=Always does' },
-      ...['Takes care of own physical health', 'Copes with mental health problems', 'Looks after own appearance', 'Keeps room/house tidy', 'Manages money', 'Plans and shops for food', 'Looks after nutritional needs', 'Uses public transport', 'Can deal with agencies (Centrelink, banks)', 'Maintains friendships/relationships', 'Is considerate of others', 'Is involved in social activities', 'Does not withdraw from social contact', 'Is not behaviourally disturbed', 'Is not aggressive', 'Does not engage in antisocial behaviour']
-        .map((q, i) => ({ type: 'likert', label: `${i + 1}. ${q}`, min: 1, max: 4, options: ['1 - Never', '2 - Sometimes', '3 - Usually', '4 - Always'] })),
-      { type: 'score', label: 'Total LSP-16 Score' },
-    ]},
+    // HoNOS, K10+, LSP-16 removed from Rating Scales seed — they are outcome measures
+    // and are surfaced via the Outcome Measures tab (canonical SSoT: packages/shared/src/assessmentTaxonomy.ts)
   ]
 
   let added = 0

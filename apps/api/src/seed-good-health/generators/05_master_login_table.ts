@@ -1,6 +1,6 @@
 import { promises as fs } from 'fs';
 import * as path from 'path';
-import { buildExecutiveStaff } from './02_executive_staff';
+import { buildExecutiveStaff, buildDemoShortcutAdmins } from './02_executive_staff';
 import { buildDepartmentHeads } from './03_department_heads';
 import { buildClinicStaff } from './04_clinic_staff';
 import type { StaffMasterLoginRow } from './02_executive_staff';
@@ -17,7 +17,7 @@ import type { GeneratorResult } from './01_clinics';
 //   - One grouped table per persona tier:
 //       Executive (5)
 //       Department Heads (7)
-//       Clinical Staff — grouped by clinic (20 per clinic × 4)
+//       Clinic Staff & Superadmins — grouped by clinic (21 per clinic × 4)
 //   - Plaintext passwords (these are demo-only, deliberately checked
 //     in because the seed is fictional and the audit trail of who
 //     has the passwords is more valuable than hiding them)
@@ -45,6 +45,15 @@ const HEADER = `# Good Health — Master Login Table
 > If you are looking at this file in production, something has gone
 > very wrong — the seed entrypoint refuses to run with
 > \`NODE_ENV=production\` unless \`ALLOW_DEMO_SEED=1\` is explicitly set.
+>
+> **Superadmin access policy note:** The Signacare platform runtime only
+> permits superadmin logins from domains listed in
+> \`SUPERADMIN_ALLOWED_EMAIL_DOMAINS\` (defaults:
+> \`signacare.net,signacare.local\`). If your environment keeps the
+> default allowlist, the \`*.goodhealth.demo\` superadmin personas below
+> are seed references only. Use \`admin@signacare.local\` for the
+> guaranteed demo superadmin login unless ops explicitly extends the
+> allowlist for demo domains.
 
 `;
 
@@ -62,14 +71,16 @@ function formatLoginTable(rows: readonly StaffMasterLoginRow[]): string {
 }
 
 export async function buildMasterLoginMarkdown(): Promise<string> {
-  const [exec, heads, clinic] = await Promise.all([
+  const [exec, demoShortcut, heads, clinic] = await Promise.all([
     buildExecutiveStaff(IDENTITY_HASH),
+    buildDemoShortcutAdmins(IDENTITY_HASH),
     buildDepartmentHeads(IDENTITY_HASH),
     buildClinicStaff(IDENTITY_HASH),
   ]);
 
   const allLogins: StaffMasterLoginRow[] = [
     ...exec.loginTable,
+    ...demoShortcut.loginTable,
     ...heads.loginTable,
     ...clinic.loginTable,
   ];
@@ -85,7 +96,16 @@ export async function buildMasterLoginMarkdown(): Promise<string> {
 
   const sections: string[] = [
     HEADER,
-    `**Total personas:** ${total} (${exec.loginTable.length} executive + ${heads.loginTable.length} department heads + ${clinic.loginTable.length} clinical staff)`,
+    `**Total personas:** ${total} (${exec.loginTable.length} executive + ${demoShortcut.loginTable.length} demo-shortcut + ${heads.loginTable.length} department heads + ${clinic.loginTable.length} clinic staff & superadmins)`,
+    '',
+    '## Demo-Shortcut Logins',
+    '',
+    '> Memorable email + password pairs for quick demo access. These rows live',
+    '> in the executive clinic tenant alongside the standard CEO/CMO personas',
+    '> but use fixed credentials so a tester can sign in without looking up',
+    '> the master table. MFA is intentionally disabled on these accounts.',
+    '',
+    formatLoginTable(demoShortcut.loginTable),
     '',
     '## Executive & Corporate',
     '',
@@ -95,7 +115,7 @@ export async function buildMasterLoginMarkdown(): Promise<string> {
     '',
     formatLoginTable(heads.loginTable),
     '',
-    '## Clinical Staff (by clinic)',
+    '## Clinic Staff & Superadmins (by clinic)',
     '',
   ];
 

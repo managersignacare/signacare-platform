@@ -1,6 +1,13 @@
 # Noah Bennett Longitudinal Demo Data
 
 > Generated demo-only longitudinal history for clinical walkthroughs.
+>
+> Canonical reseed command:
+> `npm -w apps/api run seed:soham-mental-health-demo-suite`
+>
+> The suite includes `seed:noah-bennett-longitudinal-demo` on top of the
+> Soham staff + patient-registration seeds so Noah Bennett exists before the
+> longitudinal history is applied.
 
 Generated at: 2026-05-18T11:08:59.781Z
 Clinic: Soham Health
@@ -20,4 +27,3 @@ Dataset includes:
 
 Marker:
 - All seeded records are tagged with `[Noah Demo]` and/or source type `demo_noah_seed` for safe cleanup/reseed.
-

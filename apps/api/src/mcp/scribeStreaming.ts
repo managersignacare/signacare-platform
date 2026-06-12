@@ -517,6 +517,7 @@ async function handleControlMessage(
           clinicId: session.clinicId,
           staffId: session.staffId,
           patientId: session.patientId,
+          auth: { ...(ws as ScribeWebSocketWithAuth)._scribeAuth, patientId: session.patientId },
           // BUG-342 — WS scribe sessions bind consent at session-open
           // (BUG-272); thread it to processAmbientAudio so the
           // llm_prompts_outputs row carries consent_id for revocation

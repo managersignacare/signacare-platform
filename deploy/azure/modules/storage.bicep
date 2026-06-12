@@ -7,7 +7,7 @@
 // Security model:
 //   - Public blob access disabled at the account level. All reads go
 //     through short-lived SAS URLs minted by the API with a maximum
-//     TTL of 10 minutes, matching the behaviour of the S3BlobStorage
+//     TTL of 10 minutes, matching the behaviour of the AzureBlobStorage
 //     backend in apps/api/src/shared/blobStorage.ts.
 //   - Soft-delete + versioning enabled — a deleted attachment can be
 //     recovered within 14 days; prior versions are kept forever until

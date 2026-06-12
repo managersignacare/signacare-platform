@@ -27,6 +27,14 @@ export const ClinicsDtoScaffoldSchema = z.object({
   hpio: z.string().max(16).nullable().optional(),
   npdsConformanceId: z.string().max(64).nullable().optional(),
   erxEtp1SiteId: z.string().max(64).nullable().optional(),
+  nominatedAdminStaffId: z.string().uuid().nullable().optional(),
+  delegatedAdminStaffId: z.string().uuid().nullable().optional(),
+  dataRetentionYears: z.number().int(),
+  retentionPurgeEnabled: z.boolean(),
+  retentionPurgeEnabledAt: z.string().datetime().nullable().optional(),
+  retentionPurgeEnabledByStaffId: z.string().uuid().nullable().optional(),
+  retentionPurgeManagerApprovedByStaffId: z.string().uuid().nullable().optional(),
+  retentionPurgeManagerApprovedAt: z.string().datetime().nullable().optional(),
   sessionIdleMinutes: z.number().int().nullable().optional(),
 });
 

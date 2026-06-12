@@ -15,7 +15,7 @@ import {
 } from '@mui/material';
 import React from 'react';
 import { useMemo, useState } from 'react';
-import { apiClient } from '../../../shared/services/apiClient';
+import { llmAiJobsApi } from '../../../shared/services/llmAiJobsApi';
 import { getIndicationDisplay } from './PrescribeDialog';
 import type { MedicationRow } from '../types';
 
@@ -50,7 +50,7 @@ export function durationLabel(startStr: string | null, endStr: string | null, is
 }
 
 interface MedHistoryPanelProps { rows: MedicationRow[]; allMeds: MedicationRow[]; patientId: string }
-export function MedHistoryPanel({ rows, allMeds }: MedHistoryPanelProps) {
+export function MedHistoryPanel({ rows, allMeds, patientId }: MedHistoryPanelProps) {
   const [aiSummary, setAiSummary] = useState('');
   const [editingSummary, setEditingSummary] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -91,11 +91,13 @@ export function MedHistoryPanel({ rows, allMeds }: MedHistoryPanelProps) {
       const medList = allMeds.map(m =>
         `${m.medicationName} ${m.dose} ${m.frequency} (${m.route}) — ${m.status}${m.prescribedAt ? `, prescribed ${m.prescribedAt}` : ''}`
       ).join('\n');
-      const resp = await apiClient.instance.post<{ result: string }>('llm/clinical-ai', {
+      const result = await llmAiJobsApi.runClinicalAiJob({
         action: 'med-summary',
         data: `Generate a concise clinical medication history summary for this patient's medications:\n\n${medList}\n\nInclude: current medications, recent changes, ceased medications, and any notable patterns (polypharmacy, frequent changes, etc). Use Australian clinical terminology. Be concise and factual.`,
-      }, { timeout: 180_000 });
-      setAiSummary(resp.data.result);
+        patientId,
+        enhance: false,
+      });
+      setAiSummary(result);
     } catch {
       setAiSummary('(AI summary unavailable — ensure local Ollama is running)');
     } finally {

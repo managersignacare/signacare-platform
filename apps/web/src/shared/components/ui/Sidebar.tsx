@@ -41,7 +41,6 @@ import ReceiptIcon from '@mui/icons-material/Receipt';
 // ChatBubbleOutlineIcon, MailOutlineIcon, AccountTreeIcon, GroupsIcon removed — Settings moved to bottom link
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import AssessmentIcon from '@mui/icons-material/Assessment';
-import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import DraftsIcon from '@mui/icons-material/Drafts';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
@@ -92,7 +91,7 @@ const BASE_NAV_GROUPS: NavGroup[] = [
       { label: 'Tasks', path: 'tasks', icon: <AssignmentIcon /> },
       { label: 'Drafts', path: 'drafts', icon: <DraftsIcon /> },
       { label: 'AI Assistant', path: 'ai-agent', icon: <PsychologyIcon /> },
-      { label: 'Agentic Scribe', path: 'agentic-scribe', icon: <AutoAwesomeIcon /> },
+      { label: 'Medical Scribe', path: 'agentic-scribe', icon: <LocalHospitalIcon /> },
     ],
   },
   {
@@ -134,7 +133,7 @@ const BASE_NAV_GROUPS: NavGroup[] = [
   },
 ];
 
-function buildNavGroups(role: string): NavGroup[] {
+export function buildNavGroups(role: string): NavGroup[] {
   const isSuperadmin = role === 'superadmin';
   const isAdmin = role === 'admin' || isSuperadmin;
   // Phase 0.5.B — role classification mirrors packages/shared/permissions.ts
@@ -401,7 +400,7 @@ export function Sidebar({ collapsed = false }: SidebarProps): React.ReactElement
 
   const handleNav = (path: string, label: string): void => {
     setActivePage(label);
-    navigate(`/${path}`);
+    navigate(path.startsWith('/') ? path : `/${path}`);
   };
 
   // Filter groups based on hidden items, but keep groups that have at least one visible item
@@ -491,10 +490,13 @@ export function Sidebar({ collapsed = false }: SidebarProps): React.ReactElement
           )}
           {(!group.group || !collapsedGroups.has(group.group)) && <List dense disablePadding>
             {group.items.map((item) => {
+              const itemHref = item.path.startsWith('/') ? item.path : `/${item.path}`;
+              const currentPath = `${location.pathname}${location.search}`;
               const isActive =
-                location.pathname === `/${item.path}` ||
-                (item.path !== 'dashboard' &&
-                  location.pathname.startsWith(`/${item.path}`));
+                currentPath === itemHref ||
+                (!item.path.includes('?') &&
+                  item.path !== 'dashboard' &&
+                  location.pathname.startsWith(`${itemHref}/`));
 
               const button = (
                 <ListItemButton

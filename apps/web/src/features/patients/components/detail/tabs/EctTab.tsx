@@ -3,7 +3,6 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import DescriptionIcon from '@mui/icons-material/Description';
 import DownloadIcon from '@mui/icons-material/Download';
 import ElectricalServicesIcon from '@mui/icons-material/ElectricalServices';
-import LockIcon from '@mui/icons-material/Lock';
 import MedicationIcon from '@mui/icons-material/Medication';
 import MonitorHeartIcon from '@mui/icons-material/MonitorHeart';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
@@ -18,10 +17,10 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import React, { useRef, useState } from 'react';
 import { apiClient } from '../../../../../shared/services/apiClient';
-import { ectKeys, patientsKeys } from '../../../queryKeys';
+import { llmAiJobsApi } from '../../../../../shared/services/llmAiJobsApi';
+import { ectKeys } from '../../../queryKeys';
 import { useAuthStore } from '../../../../../shared/store/authStore';
 import {
-  type ClinicalAiResponse,
   type EctAssessmentHistoryData,
   type EctCourseData,
   type EctDocumentRow,
@@ -30,45 +29,17 @@ import {
   type EctTreatmentData,
   type NursingAssessmentRow,
   type NursingAssessmentsResponse,
-  type StaffPrescriberRow,
   MEDICAL_SCORE_FIELDS,
   getErrorMessage,
   readAssessmentData,
   readList,
 } from './ectTabSupport';
+import {
+  EctPrescriberGate,
+  EctTmsRoleWorkflowNotice,
+} from './ectRoleSupport';
 
 type EctSubTab = 'course' | 'treatments' | 'prescription' | 'consent' | 'cognitive' | 'documents';
-
-// ── Prescriber check hook ──
-function usePrescriberStatus() {
-  const userId = useAuthStore(s => s.user?.id);
-  const { data } = useQuery({
-    queryKey: patientsKeys.staffPrescriber(userId),
-    queryFn: async () => {
-      if (!userId) return { isPrescriber: false, prescriberNumber: null };
-      try {
-        const staff = await apiClient.get<StaffPrescriberRow>(`staff/${userId}`);
-        const num = staff?.prescriberNumber ?? staff?.prescriber_number ?? null;
-        return { isPrescriber: !!num, prescriberNumber: num };
-      } catch { return { isPrescriber: false, prescriberNumber: null }; }
-    },
-    enabled: !!userId,
-    staleTime: 5 * 60_000,
-  });
-  return data ?? { isPrescriber: false, prescriberNumber: null };
-}
-
-interface PrescriberGateProps { children: React.ReactNode }
-function PrescriberGate({ children }: PrescriberGateProps) {
-  const { isPrescriber } = usePrescriberStatus();
-  if (isPrescriber) return <>{children}</>;
-  return (
-    <Alert role="alert" severity="warning" icon={<LockIcon />} sx={{ fontSize: 12 }}>
-      <strong>Prescriber access required.</strong> Only staff with a registered prescriber number can create prescriptions.
-      Contact your administrator to add your prescriber number in Staff Management.
-    </Alert>
-  );
-}
 
 // ── ECT Constants ──
 const ELECTRODE_PLACEMENTS = ['Bilateral (BL)', 'Right Unilateral (RUL)', 'Left Anterior Right Temporal (LART)', 'Bifrontal (BF)'];
@@ -104,11 +75,11 @@ export function EctTab({ patientId }: EctTabProps): React.ReactElement {
   const generateEctSummary = async () => {
     setAiLoading(true);
     try {
-      const resp = await apiClient.instance.post<ClinicalAiResponse>('llm/clinical-ai', {
+      const result = await llmAiJobsApi.runClinicalAiJob({
         action: 'ect-summary',
         data: JSON.stringify({ courses: courses.length, activeCourse: readAssessmentData<EctCourseData>(activeCourse), patientId }),
-      }, { timeout: 120_000 });
-      setAiSummary(resp.data?.result ?? 'Summary unavailable');
+      });
+      setAiSummary(result ?? 'Summary unavailable');
     } catch { setAiSummary('AI summary unavailable. Ensure Ollama is running.'); }
     setAiLoading(false);
   };
@@ -159,7 +130,7 @@ export function EctTab({ patientId }: EctTabProps): React.ReactElement {
 
       {subTab === 'course' && <EctCoursePanel patientId={patientId} />}
       {subTab === 'treatments' && courseId && <TreatmentLogPanel patientId={patientId} />}
-      {subTab === 'prescription' && courseId && <PrescriberGate><EctPrescriptionPanel patientId={patientId} /></PrescriberGate>}
+      {subTab === 'prescription' && courseId && <EctPrescriberGate><EctPrescriptionPanel patientId={patientId} /></EctPrescriberGate>}
       {subTab === 'consent' && courseId && <ConsentMhaPanel patientId={patientId} />}
       {subTab === 'cognitive' && courseId && <EctAssessmentsPanel patientId={patientId} />}
       {subTab === 'documents' && <EctDocumentsPanel patientId={patientId} />}
@@ -582,6 +553,7 @@ function TreatmentLogPanel({ patientId }: TreatmentLogPanelProps) {
 interface EctPrescriptionPanelProps { patientId: string }
 function EctPrescriptionPanel({ patientId }: EctPrescriptionPanelProps) {
   const qc = useQueryClient();
+  const userRole = useAuthStore(s => s.user?.role);
   const [form, setForm] = useState({
     psychiatrist: '', indication: '', setting: 'inpatient' as string,
     electrodePlacement: 'Right Unilateral (RUL)',
@@ -608,6 +580,7 @@ function EctPrescriptionPanel({ patientId }: EctPrescriptionPanelProps) {
       </Typography>
 
       <Grid container spacing={2}>
+        <Grid size={12}><EctTmsRoleWorkflowNotice role={userRole} modality="ECT" /></Grid>
         <Grid size={{ xs: 12, sm: 4 }}>
           <TextField label="Treating Psychiatrist *" size="small" fullWidth value={form.psychiatrist}
             onChange={e => setForm(p => ({ ...p, psychiatrist: e.target.value }))} />
@@ -681,6 +654,7 @@ function EctPrescriptionPanel({ patientId }: EctPrescriptionPanelProps) {
 interface ConsentMhaPanelProps { patientId: string }
 function ConsentMhaPanel({ patientId }: ConsentMhaPanelProps) {
   const qc = useQueryClient();
+  const userRole = useAuthStore(s => s.user?.role);
   const [form, setForm] = useState({
     consentType: 'informed', consentDate: new Date().toISOString().slice(0, 10),
     consentedBy: '', witnessedBy: '', mhaOrderRequired: false, mhaOrderNumber: '',
@@ -705,6 +679,7 @@ function ConsentMhaPanel({ patientId }: ConsentMhaPanelProps) {
       </Typography>
 
       <Grid container spacing={2}>
+        <Grid size={12}><EctTmsRoleWorkflowNotice role={userRole} modality="ECT" /></Grid>
         <Grid size={{ xs: 12, sm: 4 }}>
           <FormControl fullWidth size="small"><InputLabel>Consent Type</InputLabel>
             <Select label="Consent Type" value={form.consentType} onChange={e => setForm(p => ({ ...p, consentType: e.target.value }))}>

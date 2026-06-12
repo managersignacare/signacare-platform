@@ -7,11 +7,12 @@
  *   Clinical rail (requirePatientRelationship) — caller passes if ANY:
  *     1. Caller is clinics.nominated_admin_staff_id OR
  *        delegated_admin_staff_id for the patient's clinic
- *     2. Episode relationship (primary_clinician_id / key_worker_id)
- *     3. Team relationship via staff_team_assignments OR
+ *     2. Direct patient-team assignment as primary clinician
+ *     3. Episode relationship (primary_clinician_id / key_worker_id)
+ *     4. Team relationship via staff_team_assignments OR
  *        staff_role_assignments with recursive hierarchy cascade up
  *        org_units.parent_id
- *     4. Appointment attendee
+ *     5. Appointment attendee
  *   Role-based bypass is REMOVED — superadmin + generic role='admin'
  *   no longer auto-pass this guard.
  *
@@ -23,21 +24,22 @@
  *   Operational-only roles (receptionist, readonly) always rejected
  *   by requireClinicalAccessRole regardless of team attachments.
  *
- * Coverage (14 tests):
+ * Coverage:
  *   Clinical rail:
  *     T1 clinician with staff_team_assignments on team → 200
- *     T2 team-leader with staff_role_assignments only → 200 (NEW)
- *     T3 executive with staff_role_assignments at parent facility → 200
+ *     T2 direct patient-team primary clinician → 200 (NEW)
+ *     T3 team-leader with staff_role_assignments only → 200 (NEW)
+ *     T4 executive with staff_role_assignments at parent facility → 200
  *        on patient in grandchild team (NEW, arbitrary cascade)
- *     T4 superadmin accessing clinical data → 403 NO_PATIENT_RELATIONSHIP
+ *     T5 superadmin accessing clinical data → 403 NO_PATIENT_RELATIONSHIP
  *        (formerly bypassed — NEW)
- *     T5 generic role='admin' (NOT nominated/delegated) → 403
+ *     T6 generic role='admin' (NOT nominated/delegated) → 403
  *        (formerly bypassed — NEW)
- *     T6 nominated_admin_staff_id → 200 (NEW)
- *     T7 delegated_admin_staff_id → 200 (NEW)
- *     T8 receptionist with staff_team_assignments → 403
+ *     T7 nominated_admin_staff_id → 200 (NEW)
+ *     T8 delegated_admin_staff_id → 200 (NEW)
+ *     T9 receptionist with staff_team_assignments → 403
  *        CLINICAL_ACCESS_DENIED (operational block)
- *     T9 clinician on team A accessing patient in team B → 403 (unchanged)
+ *     T10 clinician on team A accessing patient in team B → 403 (unchanged)
  *
  *   Settings rail:
  *     T10 nominated admin PUT module-access → 200
@@ -62,6 +64,7 @@ import {
   requirePatientRelationship,
   requireClinicalAccessRole,
   requireAccessSettingsAuthority,
+  requirePermissionOrClinicalLeadershipOverride,
 } from '../../src/shared/authGuards';
 import { withTenantContext } from '../../src/shared/tenantContext';
 
@@ -96,13 +99,18 @@ describe.skipIf(!READY)('Phase 0.5.B two-rail access model', () => {
   let teamBOrgUnitId: string;
   let grandchildTeamOrgUnitId: string;
   let patientId: string;
+  let episodeOnlyPatientId: string;
+  let episodeOnlyPatientEpisodeId: string;
   let patientOtherClinicId: string;
 
   const clinicianOnTeamAId = randomUUID();
+  const directPrimaryClinicianId = randomUUID();
   const teamLeaderRoleOnlyId = randomUUID();
   const executiveAtFacilityId = randomUUID();
   const clinicalDirectorId = randomUUID();
   const executiveDirectorId = randomUUID();
+  const clinicalManagerId = randomUUID();
+  const medicalDirectorId = randomUUID();
   const receptionistOnTeamAId = randomUUID();
   const clinicianOnTeamBId = randomUUID();
   const nominatedAdminId = randomUUID();
@@ -112,9 +120,13 @@ describe.skipIf(!READY)('Phase 0.5.B two-rail access model', () => {
   const clinicalRoleName = `Team Leader ${Date.now()}`;
   const clinicalDirectorRoleName = `Clinical Director ${Date.now()}`;
   const executiveDirectorRoleName = `Executive Director ${Date.now()}`;
+  const clinicalManagerRoleName = `Clinical Manager ${Date.now()}`;
+  const medicalDirectorRoleName = `Medical Director ${Date.now()}`;
   let clinicalRoleId: string;
   let clinicalDirectorRoleId: string;
   let executiveDirectorRoleId: string;
+  let clinicalManagerRoleId: string;
+  let medicalDirectorRoleId: string;
 
   beforeAll(async () => {
     const session = await loginAsAdmin();
@@ -146,6 +158,8 @@ describe.skipIf(!READY)('Phase 0.5.B two-rail access model', () => {
     clinicalRoleId = randomUUID();
     clinicalDirectorRoleId = randomUUID();
     executiveDirectorRoleId = randomUUID();
+    clinicalManagerRoleId = randomUUID();
+    medicalDirectorRoleId = randomUUID();
     await withTenantContext(clinicId, () =>
       dbAdmin('clinical_roles').insert([
         {
@@ -166,6 +180,18 @@ describe.skipIf(!READY)('Phase 0.5.B two-rail access model', () => {
           name: executiveDirectorRoleName,
           is_active: true,
         },
+        {
+          id: clinicalManagerRoleId,
+          clinic_id: clinicId,
+          name: clinicalManagerRoleName,
+          is_active: true,
+        },
+        {
+          id: medicalDirectorRoleId,
+          clinic_id: clinicId,
+          name: medicalDirectorRoleName,
+          is_active: true,
+        },
       ]),
     );
 
@@ -180,10 +206,13 @@ describe.skipIf(!READY)('Phase 0.5.B two-rail access model', () => {
     await withTenantContext(clinicId, () =>
       dbAdmin('staff').insert([
         mkStaff(clinicianOnTeamAId, 'clinician'),
+        mkStaff(directPrimaryClinicianId, 'clinician'),
         mkStaff(teamLeaderRoleOnlyId, 'clinician'),
         mkStaff(executiveAtFacilityId, 'clinician'),
         mkStaff(clinicalDirectorId, 'clinician'),
         mkStaff(executiveDirectorId, 'clinician'),
+        mkStaff(clinicalManagerId, 'manager'),
+        mkStaff(medicalDirectorId, 'manager'),
         mkStaff(receptionistOnTeamAId, 'receptionist'),
         mkStaff(clinicianOnTeamBId, 'clinician'),
         mkStaff(nominatedAdminId, 'admin'),
@@ -206,7 +235,33 @@ describe.skipIf(!READY)('Phase 0.5.B two-rail access model', () => {
         id: randomUUID(),
         patient_id: patientId,
         org_unit_id: grandchildTeamOrgUnitId,
+        primary_clinician_id: directPrimaryClinicianId,
         is_active: true,
+      });
+    });
+
+    // Second patient where the open episode team is the only current
+    // care-team anchor. This reproduces the staging bug where scribe
+    // users on the allocated MDT were denied because the relationship
+    // guard only seeded from patient_team_assignments.
+    episodeOnlyPatientId = randomUUID();
+    episodeOnlyPatientEpisodeId = randomUUID();
+    await withTenantContext(clinicId, async () => {
+      await dbAdmin('patients').insert({
+        id: episodeOnlyPatientId, clinic_id: clinicId,
+        given_name: 'EpisodeOnly', family_name: 'Patient',
+        date_of_birth: '1988-06-12',
+      });
+      await dbAdmin('episodes').insert({
+        id: episodeOnlyPatientEpisodeId,
+        clinic_id: clinicId,
+        patient_id: episodeOnlyPatientId,
+        team_id: grandchildTeamOrgUnitId,
+        status: 'open',
+        episode_type: 'community',
+        start_date: '2024-01-01',
+        created_at: new Date(),
+        updated_at: new Date(),
       });
     });
 
@@ -273,6 +328,20 @@ describe.skipIf(!READY)('Phase 0.5.B two-rail access model', () => {
           role_type: 'primary',
           start_date: '2024-01-01', is_active: true,
         },
+        {
+          id: randomUUID(), clinic_id: clinicId, staff_id: clinicalManagerId,
+          org_unit_id: teamBOrgUnitId,
+          clinical_role_id: clinicalManagerRoleId,
+          role_type: 'primary',
+          start_date: '2024-01-01', is_active: true,
+        },
+        {
+          id: randomUUID(), clinic_id: clinicId, staff_id: medicalDirectorId,
+          org_unit_id: teamBOrgUnitId,
+          clinical_role_id: medicalDirectorRoleId,
+          role_type: 'primary',
+          start_date: '2024-01-01', is_active: true,
+        },
       ]);
     });
 
@@ -297,6 +366,13 @@ describe.skipIf(!READY)('Phase 0.5.B two-rail access model', () => {
         clinicalDirectorId,
         executiveDirectorId,
       ]).delete();
+      if (episodeOnlyPatientEpisodeId) {
+        await dbAdmin('episodes').where({ id: episodeOnlyPatientEpisodeId }).delete();
+      }
+      if (episodeOnlyPatientId) {
+        await dbAdmin('patient_team_assignments').where({ patient_id: episodeOnlyPatientId }).delete();
+        await dbAdmin('patients').where({ id: episodeOnlyPatientId }).delete();
+      }
       await dbAdmin('staff_team_assignments').whereIn('staff_id', [
         clinicianOnTeamAId, receptionistOnTeamAId, clinicianOnTeamBId,
       ]).delete();
@@ -304,7 +380,9 @@ describe.skipIf(!READY)('Phase 0.5.B two-rail access model', () => {
       if (patientId) await dbAdmin('patients').where({ id: patientId }).delete();
       await dbAdmin('staff').whereIn('id', [
         clinicianOnTeamAId, teamLeaderRoleOnlyId, executiveAtFacilityId,
+        directPrimaryClinicianId,
         clinicalDirectorId, executiveDirectorId,
+        clinicalManagerId, medicalDirectorId,
         receptionistOnTeamAId, clinicianOnTeamBId,
         nominatedAdminId, delegatedAdminId, genericAdminNotNominatedId,
         superadminId,
@@ -313,6 +391,8 @@ describe.skipIf(!READY)('Phase 0.5.B two-rail access model', () => {
         clinicalRoleId,
         clinicalDirectorRoleId,
         executiveDirectorRoleId,
+        clinicalManagerRoleId,
+        medicalDirectorRoleId,
       ]).delete();
       await dbAdmin('org_units').whereIn('id', [
         grandchildTeamOrgUnitId, teamAOrgUnitId, teamBOrgUnitId, facilityOrgUnitId,
@@ -333,39 +413,49 @@ describe.skipIf(!READY)('Phase 0.5.B two-rail access model', () => {
     await expect(inTenant(clinicId, () => requirePatientRelationship(auth, patientId))).resolves.not.toThrow();
   });
 
-  it('T2 — team-leader with staff_role_assignments only (no staff_team_assignments) → passes', async () => {
+  it('T2 — direct patient-team primary clinician without separate team membership → passes', async () => {
+    const auth = buildAuth({ staffId: directPrimaryClinicianId, clinicId, role: 'clinician' });
+    await expect(inTenant(clinicId, () => requirePatientRelationship(auth, patientId))).resolves.not.toThrow();
+  });
+
+  it('T3 — team-leader with staff_role_assignments only (no staff_team_assignments) → passes', async () => {
     const auth = buildAuth({ staffId: teamLeaderRoleOnlyId, clinicId, role: 'clinician' });
     await expect(inTenant(clinicId, () => requirePatientRelationship(auth, patientId))).resolves.not.toThrow();
   });
 
-  it('T3 — executive with staff_role_assignments at facility (ancestor of team) → passes (hierarchy cascade)', async () => {
+  it('T4 — executive with staff_role_assignments at facility (ancestor of team) → passes (hierarchy cascade)', async () => {
     const auth = buildAuth({ staffId: executiveAtFacilityId, clinicId, role: 'clinician' });
     await expect(inTenant(clinicId, () => requirePatientRelationship(auth, patientId))).resolves.not.toThrow();
   });
 
-  it('T4 — superadmin accessing clinical data → 403 NO_PATIENT_RELATIONSHIP (no role bypass)', async () => {
+  it('T4b — role-only MDT member on open episode team passes even without patient_team_assignments', async () => {
+    const auth = buildAuth({ staffId: teamLeaderRoleOnlyId, clinicId, role: 'clinician' });
+    await expect(inTenant(clinicId, () => requirePatientRelationship(auth, episodeOnlyPatientId))).resolves.not.toThrow();
+  });
+
+  it('T5 — superadmin accessing clinical data → 403 NO_PATIENT_RELATIONSHIP (no role bypass)', async () => {
     const auth = buildAuth({ staffId: superadminId, clinicId, role: 'superadmin' });
     await expect(inTenant(clinicId, () => requirePatientRelationship(auth, patientId)))
       .rejects.toMatchObject({ status: 403, code: 'NO_PATIENT_RELATIONSHIP' });
   });
 
-  it('T5 — generic role=admin (NOT nominated/delegated) → 403 (no role bypass)', async () => {
+  it('T6 — generic role=admin (NOT nominated/delegated) → 403 (no role bypass)', async () => {
     const auth = buildAuth({ staffId: genericAdminNotNominatedId, clinicId, role: 'admin' });
     await expect(inTenant(clinicId, () => requirePatientRelationship(auth, patientId)))
       .rejects.toMatchObject({ status: 403, code: 'NO_PATIENT_RELATIONSHIP' });
   });
 
-  it('T6 — nominated_admin_staff_id → passes (clinic-scoped bypass)', async () => {
+  it('T7 — nominated_admin_staff_id → passes (clinic-scoped bypass)', async () => {
     const auth = buildAuth({ staffId: nominatedAdminId, clinicId, role: 'admin' });
     await expect(inTenant(clinicId, () => requirePatientRelationship(auth, patientId))).resolves.not.toThrow();
   });
 
-  it('T7 — delegated_admin_staff_id → passes (clinic-scoped bypass)', async () => {
+  it('T8 — delegated_admin_staff_id → passes (clinic-scoped bypass)', async () => {
     const auth = buildAuth({ staffId: delegatedAdminId, clinicId, role: 'admin' });
     await expect(inTenant(clinicId, () => requirePatientRelationship(auth, patientId))).resolves.not.toThrow();
   });
 
-  it('T8 — receptionist with staff_team_assignments → requireClinicalAccessRole blocks at 403', () => {
+  it('T9 — receptionist with staff_team_assignments → requireClinicalAccessRole blocks at 403', () => {
     const auth = buildAuth({ staffId: receptionistOnTeamAId, clinicId, role: 'receptionist' });
     try {
       requireClinicalAccessRole(auth);
@@ -377,7 +467,7 @@ describe.skipIf(!READY)('Phase 0.5.B two-rail access model', () => {
     }
   });
 
-  it('T9 — clinician on team B accessing patient in team A → 403 (unchanged)', async () => {
+  it('T10 — clinician on team B accessing patient in team A → 403 (unchanged)', async () => {
     const auth = buildAuth({ staffId: clinicianOnTeamBId, clinicId, role: 'clinician' });
     await expect(inTenant(clinicId, () => requirePatientRelationship(auth, patientId)))
       .rejects.toMatchObject({ status: 403, code: 'NO_PATIENT_RELATIONSHIP' });
@@ -477,5 +567,36 @@ describe.skipIf(!READY)('Phase 0.5.B two-rail access model', () => {
   it('T19 — Executive Director role gets clinic-wide patient access across unrelated teams', async () => {
     const auth = buildAuth({ staffId: executiveDirectorId, clinicId, role: 'clinician' });
     await expect(inTenant(clinicId, () => requirePatientRelationship(auth, patientId))).resolves.not.toThrow();
+  });
+
+  it('T20 — Clinical Manager role gets clinic-wide patient access across unrelated teams', async () => {
+    const auth = buildAuth({ staffId: clinicalManagerId, clinicId, role: 'manager', permissions: ['patient:read'] });
+    await expect(inTenant(clinicId, () => requirePatientRelationship(auth, patientId))).resolves.not.toThrow();
+  });
+
+  it('T21 — Medical Director role gets clinic-wide patient access across unrelated teams', async () => {
+    const auth = buildAuth({ staffId: medicalDirectorId, clinicId, role: 'manager', permissions: ['patient:read'] });
+    await expect(inTenant(clinicId, () => requirePatientRelationship(auth, patientId))).resolves.not.toThrow();
+  });
+
+  it('T22 — Clinical Manager may write clinic-wide clinical notes via leadership override', async () => {
+    const auth = buildAuth({ staffId: clinicalManagerId, clinicId, role: 'manager', permissions: ['patient:read'] });
+    await expect(
+      inTenant(clinicId, () => requirePermissionOrClinicalLeadershipOverride(auth, 'note:create')),
+    ).resolves.not.toThrow();
+  });
+
+  it('T23 — Medical Director may read clinic-wide clinical notes via leadership override', async () => {
+    const auth = buildAuth({ staffId: medicalDirectorId, clinicId, role: 'manager', permissions: ['patient:read'] });
+    await expect(
+      inTenant(clinicId, () => requirePermissionOrClinicalLeadershipOverride(auth, 'note:read')),
+    ).resolves.not.toThrow();
+  });
+
+  it('T24 — Generic manager without clinical leadership role cannot gain note write by role alone', async () => {
+    const auth = buildAuth({ staffId: clinicianOnTeamBId, clinicId, role: 'manager', permissions: ['patient:read'] });
+    await expect(
+      inTenant(clinicId, () => requirePermissionOrClinicalLeadershipOverride(auth, 'note:create')),
+    ).rejects.toMatchObject({ status: 403, code: 'FORBIDDEN' });
   });
 });

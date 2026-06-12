@@ -13,6 +13,14 @@ export interface TemplateSectionsRow {
   sort_order?: number | null;
   is_required?: boolean | null;
   created_at: string;
+  field_type?: string | null;
+  soap_field?: string | null;
+  required: boolean;
+  position: number;
+  min_value?: number | null;
+  max_value?: number | null;
+  placeholder?: string | null;
+  updated_at: string;
 }
 
 export const TEMPLATE_SECTIONS_COLUMNS = [
@@ -24,6 +32,14 @@ export const TEMPLATE_SECTIONS_COLUMNS = [
   'sort_order',
   'is_required',
   'created_at',
+  'field_type',
+  'soap_field',
+  'required',
+  'position',
+  'min_value',
+  'max_value',
+  'placeholder',
+  'updated_at',
 ] as const;
 
 export type TemplateSectionsColumn = typeof TEMPLATE_SECTIONS_COLUMNS[number];

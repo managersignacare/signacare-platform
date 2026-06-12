@@ -179,6 +179,7 @@ export const PatientSearchSchema = z.object({
   status: z.string().optional(),
   page: z.coerce.number().int().min(1).optional(),
   limit: z.coerce.number().int().min(1).max(200).optional(),
+  pageSize: z.coerce.number().int().min(1).max(200).optional(),
   myPatients: z.coerce.boolean().optional(),
 });
 export type PatientSearchDTO = z.infer<typeof PatientSearchSchema>;

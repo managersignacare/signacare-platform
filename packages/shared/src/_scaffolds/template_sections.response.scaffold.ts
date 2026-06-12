@@ -14,6 +14,14 @@ export const TemplateSectionsResponseScaffoldSchema = z.object({
   sortOrder: z.number().int().nullable().optional(),
   isRequired: z.boolean().nullable().optional(),
   createdAt: z.string().datetime(),
+  fieldType: z.string().max(50).nullable().optional(),
+  soapField: z.string().max(50).nullable().optional(),
+  required: z.boolean(),
+  position: z.number().int(),
+  minValue: z.number().int().nullable().optional(),
+  maxValue: z.number().int().nullable().optional(),
+  placeholder: z.string().max(255).nullable().optional(),
+  updatedAt: z.string().datetime(),
 });
 
 export type TemplateSectionsResponseScaffold = z.infer<typeof TemplateSectionsResponseScaffoldSchema>;

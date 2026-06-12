@@ -24,6 +24,7 @@ import type {
   AgenticScribeCreateTasksResponse,
   AgenticScribeGenerateDraftsResponse,
 } from '@signacare/shared';
+import { AiGeneratedNoteSaveDialog } from '../../../shared/components/ui/AiGeneratedNoteSaveDialog';
 import { apiClient } from '../../../shared/services/apiClient';
 import { PatientSearchAutocomplete, type PatientOption } from '../../patients/components/PatientSearchAutocomplete';
 
@@ -37,6 +38,63 @@ function emptySelections(): DraftSelectionState {
   return { labs: {}, referrals: {}, followUps: {} };
 }
 
+function buildAgenticDraftSummaryNoteContent(args: {
+  transcript: string;
+  contextNote: string;
+  result: AgenticScribeGenerateDraftsResponse;
+}): string {
+  const { transcript, contextNote, result } = args;
+  const sections: string[] = ['# Agentic AI Draft Summary', ''];
+
+  if (contextNote.trim().length > 0) {
+    sections.push('## Additional Context', contextNote.trim(), '');
+  }
+
+  sections.push('## Consultation Transcript', transcript.trim(), '');
+  sections.push('## Draft Overview');
+  sections.push(`- Lab order drafts: ${result.drafts.labOrders.length}`);
+  sections.push(`- Referral drafts: ${result.drafts.referrals.length}`);
+  sections.push(`- Follow-up drafts: ${result.drafts.followUps.length}`);
+  sections.push('');
+
+  if (result.drafts.labOrders.length > 0) {
+    sections.push('## Lab Order Drafts');
+    for (const draft of result.drafts.labOrders) {
+      sections.push(`- ${draft.testName} [${draft.urgency}]`);
+      sections.push(`  Rationale: ${draft.rationale}`);
+      sections.push(`  Source: ${draft.sourceSnippet}`);
+    }
+    sections.push('');
+  }
+
+  if (result.drafts.referrals.length > 0) {
+    sections.push('## Referral Drafts');
+    for (const draft of result.drafts.referrals) {
+      sections.push(`- ${draft.specialtyOrService} [${draft.urgency}]`);
+      sections.push(`  Reason: ${draft.reason}`);
+      sections.push(`  Source: ${draft.sourceSnippet}`);
+    }
+    sections.push('');
+  }
+
+  if (result.drafts.followUps.length > 0) {
+    sections.push('## Follow-up Drafts');
+    for (const draft of result.drafts.followUps) {
+      sections.push(`- ${draft.appointmentType} (${draft.timeframeText})`);
+      sections.push(`  Mode: ${draft.mode}`);
+      sections.push(`  Rationale: ${draft.rationale}`);
+      sections.push(`  Suggested date: ${draft.suggestedDate ?? 'Not resolved'}`);
+      sections.push(`  Source: ${draft.sourceSnippet}`);
+    }
+    sections.push('');
+  }
+
+  sections.push('## AI Disclaimer');
+  sections.push(result.disclaimer);
+
+  return sections.join('\n');
+}
+
 export default function AgenticScribePage() {
   const [selectedPatient, setSelectedPatient] = useState<PatientOption | null>(null);
   const [transcript, setTranscript] = useState('');
@@ -47,6 +105,7 @@ export default function AgenticScribePage() {
   const [success, setSuccess] = useState('');
   const [result, setResult] = useState<AgenticScribeGenerateDraftsResponse | null>(null);
   const [selections, setSelections] = useState<DraftSelectionState>(emptySelections());
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
 
   const totalDraftCount =
     (result?.drafts.labOrders.length ?? 0) +
@@ -301,6 +360,15 @@ export default function AgenticScribePage() {
                     >
                       {tasking ? 'Creating tasks...' : 'Create Tasks From Selected Drafts'}
                     </Button>
+                    {selectedPatient && (
+                      <Button
+                        variant="outlined"
+                        onClick={() => setSaveDialogOpen(true)}
+                        sx={{ textTransform: 'none' }}
+                      >
+                        Save Draft Summary to Episode
+                      </Button>
+                    )}
                     <Typography variant="caption" color="text.secondary">
                       {result.disclaimer}
                     </Typography>
@@ -311,6 +379,16 @@ export default function AgenticScribePage() {
           </Card>
         </Grid>
       </Grid>
+      <AiGeneratedNoteSaveDialog
+        open={saveDialogOpen && !!result}
+        patientId={selectedPatient?.id ?? null}
+        content={result ? buildAgenticDraftSummaryNoteContent({ transcript, contextNote, result }) : ''}
+        defaultTitle="AI: Agentic Draft Summary"
+        sourceKey="agentic_ai_draft_summary"
+        sourceLabel="Agentic AI draft summary"
+        onClose={() => setSaveDialogOpen(false)}
+        onSaved={() => setSaveDialogOpen(false)}
+      />
     </Box>
   );
 }

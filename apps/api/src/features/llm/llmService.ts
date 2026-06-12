@@ -1,5 +1,6 @@
 // apps/api/src/features/llm/llmService.ts
 import type {
+  AiTextGenerationModelAlias,
   LlmInteractionWriteDTO,
   LlmInteractionResponse,
   LlmInteractionSummaryResponse,
@@ -14,8 +15,15 @@ import type {
   LlmUsageDayRow,
 } from './llmRepository';
 import { logger } from '../../utils/logger';
-import { config } from '../../config/config';
 import { AppError } from '../../shared/errors';
+import { recordLlmInteraction } from '../../shared/recordLlmInteraction';
+import {
+  resolveLockedRuntimeSelection,
+  routeTextGeneration,
+  type LockedAiRuntimeSelection,
+} from './modelRouter/modelRouter';
+
+type SuggestionFeature = LlmSuggestionRequest['feature'];
 
 // ── Mappers ───────────────────────────────────────────────────────────────────
 
@@ -163,30 +171,54 @@ export async function getUserUsageSummary(
   return rows.map(mapDayRow);
 }
 
-// ── Ollama adapter ────────────────────────────────────────────────────────────
-
-async function callOllama(
-  prompt: string,
-  model: string,
-): Promise<{ text: string; promptTokens: number; completionTokens: number }> {
-  const res = await fetch(`${config.ollama.baseUrl}/api/generate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model, prompt, stream: false }),
-  });
-  if (!res.ok) {
-    throw new Error(`Ollama error: ${res.status} ${await res.text()}`);
+function resolveSuggestionAlias(feature: SuggestionFeature): AiTextGenerationModelAlias {
+  switch (feature) {
+    case 'summarisation':
+      return 'best_clinical';
+    case 'coding_assist':
+      return 'best_clinical';
+    case 'suggestion':
+    default:
+      return 'fast_clinical';
   }
-  const data = await res.json() as {
-    response: string;
-    prompt_eval_count?: number;
-    eval_count?: number;
-  };
-  return {
-    text: data.response,
-    promptTokens: data.prompt_eval_count ?? 0,
-    completionTokens: data.eval_count ?? 0,
-  };
+}
+
+function resolveSuggestionTemperature(feature: SuggestionFeature): number {
+  switch (feature) {
+    case 'coding_assist':
+      return 0.1;
+    case 'summarisation':
+      return 0.15;
+    case 'suggestion':
+    default:
+      return 0.2;
+  }
+}
+
+function resolveSuggestionMaxTokens(feature: SuggestionFeature): number {
+  switch (feature) {
+    case 'summarisation':
+      return 2048;
+    case 'coding_assist':
+      return 1536;
+    case 'suggestion':
+    default:
+      return 1536;
+  }
+}
+
+function toProvider(backend: LockedAiRuntimeSelection['backend']): string {
+  return backend === 'azure_openai' ? 'azure_openai' : 'ollama';
+}
+
+function fallbackModelVersion(
+  runtimeSelection: LockedAiRuntimeSelection,
+  requestedModel: string | undefined,
+): string {
+  if (runtimeSelection.backend === 'azure_openai') {
+    return requestedModel?.trim() || 'azure_openai@unknown';
+  }
+  return requestedModel?.trim() || 'local_ollama@unknown';
 }
 
 // ── Suggestion endpoint ───────────────────────────────────────────────────────
@@ -196,27 +228,61 @@ export async function processSuggestion(
   userId: string,
   dto: LlmSuggestionRequest,
 ): Promise<LlmSuggestionResponse> {
+  const alias = resolveSuggestionAlias(dto.feature);
+  const temperature = resolveSuggestionTemperature(dto.feature);
+  const maxTokens = resolveSuggestionMaxTokens(dto.feature);
+  const runtimeSelection = await resolveLockedRuntimeSelection(clinicId);
+  const requestedLocalModel =
+    runtimeSelection.backend === 'local_ollama'
+      ? dto.modelName?.trim() || undefined
+      : undefined;
   const startMs = Date.now();
   let success = true;
   let errorCode: string | undefined;
   let outputRef: string | null = null;
   let promptTokens: number | undefined;
   let completionTokens: number | undefined;
-
-  const model = dto.modelName ?? config.ollama.model;
+  let cachedPromptTokens: number | null | undefined;
+  let promptPrefixHash: string | null | undefined;
+  let modelName = (requestedLocalModel ?? dto.modelName?.trim()) || 'unknown';
+  let modelVersion: string | undefined = fallbackModelVersion(runtimeSelection, dto.modelName);
+  let modelProvider = toProvider(runtimeSelection.backend);
+  let routedDeployment: string | null = null;
+  let localStyleAdapterModelName = runtimeSelection.localStyleAdapterModelName;
 
   try {
     logger.info({
       action: 'llm_suggestion_requested',
       feature: dto.feature,
-      model,
+      routedAlias: alias,
+      runtimeBackend: runtimeSelection.backend,
+      requestedLocalModel: requestedLocalModel ?? null,
+      ignoredRequestedModel:
+        runtimeSelection.backend === 'azure_openai' ? dto.modelName?.trim() || null : null,
       clinicId,
       userId,
     });
-    const result = await callOllama(dto.contextRef, model);
+    const result = await routeTextGeneration({
+      clinicId,
+      runtimeSelection,
+      alias,
+      prompt: dto.contextRef,
+      temperature,
+      maxTokens,
+      requestedModel: requestedLocalModel,
+      action: dto.feature,
+      allowLocalStyleAdapter: false,
+    });
     outputRef = result.text;
-    promptTokens = result.promptTokens;
-    completionTokens = result.completionTokens;
+    promptTokens = result.promptTokens ?? undefined;
+    completionTokens = result.completionTokens ?? undefined;
+    cachedPromptTokens = result.cachedPromptTokens;
+    promptPrefixHash = result.promptPrefixHash;
+    modelName = result.execution.modelName;
+    modelVersion = result.execution.modelVersion ?? modelVersion;
+    modelProvider = toProvider(result.execution.backend);
+    routedDeployment = result.execution.deployment ?? null;
+    localStyleAdapterModelName = result.execution.localStyleAdapterModelName ?? null;
     // Audit Tier 5.5 (MED-G3) — server-appended verify disclaimer.
     // Appended here (server-side) rather than on the client so a
     // client cannot strip it before rendering. Idempotent: if the
@@ -233,6 +299,8 @@ export async function processSuggestion(
     logger.error({
       err,
       action: 'llm_suggestion_error',
+      routedAlias: alias,
+      runtimeBackend: runtimeSelection.backend,
       clinicId,
       userId,
     });
@@ -240,20 +308,39 @@ export async function processSuggestion(
 
   const latencyMs = Date.now() - startMs;
 
-  const interaction = await writeLlmInteraction(clinicId, userId, {
+  const interactionId = await recordLlmInteraction({
+    clinicId,
+    userId,
+    patientId: dto.patientId ?? null,
     feature: dto.feature,
-    modelName: model,
-    modelProvider: dto.modelProvider ?? 'ollama',
+    modelName,
+    modelVersion,
+    modelProvider,
+    temperature,
     promptTokens,
     completionTokens,
     latencyMs,
     success,
     errorCode,
-    inputRef: dto.contextRef,
+    metadata: {
+      routedAlias: alias,
+      routedBackend: runtimeSelection.backend,
+      routedDeployment,
+      localStyleAdapterModelName,
+      requestedLocalModel: requestedLocalModel ?? null,
+      ignoredRequestedModel:
+        runtimeSelection.backend === 'azure_openai' ? dto.modelName?.trim() || null : null,
+      versionSource: modelProvider === 'azure_openai' ? 'provider' : 'tag',
+      cachedPromptTokens: cachedPromptTokens ?? null,
+      promptPrefixHash: promptPrefixHash ?? null,
+    },
+    promptText: dto.contextRef,
+    outputText: outputRef ?? '',
+    consentId: null,
   });
 
   return {
-    interactionId: interaction.id,
+    interactionId,
     outputRef,
     success,
     latencyMs,

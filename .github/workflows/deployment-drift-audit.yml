@@ -1,0 +1,74 @@
+name: Deployment Drift Audit
+
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - prod
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  NAME_PREFIX: signacare
+  AZURE_CLIENT_ID_DEFAULT: fde3acf9-cab9-4aa4-a337-a3a30fde6084
+  AZURE_TENANT_ID_DEFAULT: 156e329f-7ff5-4568-ae3b-223ee6799749
+  AZURE_SUBSCRIPTION_ID_DEFAULT: 769ede88-35d9-4fce-ae26-132b9380ce3d
+
+jobs:
+  audit-staging:
+    name: Audit deployed release drift (staging)
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.environment == 'staging' }}
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID || vars.AZURE_CLIENT_ID || env.AZURE_CLIENT_ID_DEFAULT }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID || vars.AZURE_TENANT_ID || env.AZURE_TENANT_ID_DEFAULT }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID || vars.AZURE_SUBSCRIPTION_ID || env.AZURE_SUBSCRIPTION_ID_DEFAULT }}
+
+      - name: Verify deployed release drift
+        env:
+          ENV: staging
+          EXPECT_AI_RUNTIME: ${{ vars.AZURE_AI_RUNTIME_ENABLED || 'false' }}
+          EXPECT_AZURE_OPENAI: ${{ vars.SMOKE_EXPECT_AI_LANE == 'azure_fast' && 'true' || 'false' }}
+        run: |
+          chmod +x deploy/azure/check-release-drift.sh
+          bash deploy/azure/check-release-drift.sh
+
+  audit-prod:
+    name: Audit deployed release drift (prod)
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'prod' }}
+    environment: prod
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID || vars.AZURE_CLIENT_ID || env.AZURE_CLIENT_ID_DEFAULT }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID || vars.AZURE_TENANT_ID || env.AZURE_TENANT_ID_DEFAULT }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID || vars.AZURE_SUBSCRIPTION_ID || env.AZURE_SUBSCRIPTION_ID_DEFAULT }}
+
+      - name: Verify deployed release drift
+        env:
+          ENV: prod
+          EXPECT_AI_RUNTIME: ${{ vars.AZURE_AI_RUNTIME_ENABLED || 'false' }}
+          EXPECT_AZURE_OPENAI: ${{ vars.SMOKE_EXPECT_AI_LANE == 'azure_fast' && 'true' || 'false' }}
+        run: |
+          chmod +x deploy/azure/check-release-drift.sh
+          bash deploy/azure/check-release-drift.sh

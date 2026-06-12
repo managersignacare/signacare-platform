@@ -8,6 +8,7 @@ export interface PatientSummarySignoffsRow {
   id: string;
   clinic_id: string;
   patient_id: string;
+  summary_section: string;
   signed_off_by_id: string;
   signed_off_at: string;
   review_due_date: string;
@@ -22,6 +23,7 @@ export const PATIENT_SUMMARY_SIGNOFFS_COLUMNS = [
   'id',
   'clinic_id',
   'patient_id',
+  'summary_section',
   'signed_off_by_id',
   'signed_off_at',
   'review_due_date',

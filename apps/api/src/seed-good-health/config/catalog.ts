@@ -18,6 +18,8 @@ export interface CatalogClinic {
   readonly name: string;
   readonly legalName: string;
   readonly abn: string;      // fictional but E.164-valid format
+  readonly hpio: string;     // fictional 16-digit HPI-O-format identifier
+  readonly npdsConformanceId: string;
   readonly timeZone: string;
   readonly suburb: string;
   readonly state: 'VIC' | 'NSW' | 'QLD' | 'WA' | 'SA' | 'TAS' | 'ACT' | 'NT';
@@ -37,6 +39,8 @@ export const CLINICS: readonly CatalogClinic[] = [
     name: 'Good Health Northern Mind Clinic',
     legalName: 'Good Health Northern Mental Health Pty Ltd',
     abn: '11 000 000 001',
+    hpio: '8003620000000001',
+    npdsConformanceId: 'GH-NPDS-NORTHERN-DEMO',
     timeZone: 'Australia/Melbourne',
     suburb: 'Preston',
     state: 'VIC',
@@ -48,6 +52,8 @@ export const CLINICS: readonly CatalogClinic[] = [
     name: 'Good Health Eastern Mind Clinic',
     legalName: 'Good Health Eastern Mental Health Pty Ltd',
     abn: '11 000 000 002',
+    hpio: '8003620000000002',
+    npdsConformanceId: 'GH-NPDS-EASTERN-DEMO',
     timeZone: 'Australia/Melbourne',
     suburb: 'Box Hill',
     state: 'VIC',
@@ -59,6 +65,8 @@ export const CLINICS: readonly CatalogClinic[] = [
     name: 'Good Health Southern Mind Clinic',
     legalName: 'Good Health Southern Mental Health Pty Ltd',
     abn: '11 000 000 003',
+    hpio: '8003620000000003',
+    npdsConformanceId: 'GH-NPDS-SOUTHERN-DEMO',
     timeZone: 'Australia/Melbourne',
     suburb: 'Frankston',
     state: 'VIC',
@@ -70,6 +78,8 @@ export const CLINICS: readonly CatalogClinic[] = [
     name: 'Good Health Western Mind Clinic',
     legalName: 'Good Health Western Mental Health Pty Ltd',
     abn: '11 000 000 004',
+    hpio: '8003620000000004',
+    npdsConformanceId: 'GH-NPDS-WESTERN-DEMO',
     timeZone: 'Australia/Melbourne',
     suburb: 'Footscray',
     state: 'VIC',
@@ -81,6 +91,8 @@ export const CLINICS: readonly CatalogClinic[] = [
     name: 'Good Health Executive',
     legalName: 'Good Health Holdings Pty Ltd',
     abn: '11 000 000 000',
+    hpio: '8003620000000000',
+    npdsConformanceId: 'GH-NPDS-EXECUTIVE-DEMO',
     timeZone: 'Australia/Melbourne',
     suburb: 'Melbourne',
     state: 'VIC',
@@ -118,6 +130,58 @@ export interface CatalogExecutiveStaff {
   readonly role: 'superadmin' | 'admin';
   readonly discipline: string;
 }
+
+/**
+ * Demo-shortcut superadmin / admin logins for the Good Health tenant.
+ *
+ * These rows live alongside `EXECUTIVE_STAFF` in the executive clinic
+ * but carry EXPLICIT email + plaintext password instead of the derived
+ * `firstname.lastname@<clinic>.goodhealth.demo` / `Role!Family2026`
+ * pattern that the standard personas use. The point is to give an
+ * operator one short memorable address+password they can hand to a
+ * demo tester ("just log in with admin@signacare.local") without
+ * looking up Eleanor Whitfield's CEO password.
+ *
+ * Hard rules:
+ *   - These are DEMO ONLY. The `Password1!` literal is fictional and
+ *     the seed entrypoint refuses to run with NODE_ENV=production
+ *     unless ALLOW_DEMO_SEED=1.
+ *   - Each entry must declare role+clinicSlug explicitly. Reusing the
+ *     standard derivation here would defeat the purpose.
+ *   - `email` MUST be unique against every other Good Health staff row
+ *     so the seed re-runs idempotently.
+ */
+export interface CatalogDemoShortcutAdmin {
+  readonly slug: string;
+  readonly givenName: string;
+  readonly familyName: string;
+  readonly titleLabel: string;
+  readonly role: 'superadmin' | 'admin';
+  readonly discipline: string;
+  /** Explicit email — bypasses the buildEmail() derivation. */
+  readonly email: string;
+  /** Explicit plaintext password — bypasses buildPlainPassword(). */
+  readonly plainPassword: string;
+  /** Which Good Health clinic the row attaches to. */
+  readonly clinicSlug: 'executive' | 'northern' | 'eastern' | 'southern' | 'western';
+}
+
+export const DEMO_SHORTCUT_ADMINS: readonly CatalogDemoShortcutAdmin[] = [
+  {
+    // Operator-requested shortcut: lets a demo tester log in with the
+    // same email + password they already use for the canonical-personas
+    // dev fixture, but against the Good Health tenant.
+    slug: 'demo-admin',
+    givenName: 'Demo',
+    familyName: 'Admin',
+    titleLabel: 'Demo Admin (Shortcut Login)',
+    role: 'superadmin',
+    discipline: 'Executive',
+    email: 'admin@signacare.local',
+    plainPassword: 'Password1!',
+    clinicSlug: 'executive',
+  },
+];
 
 export const EXECUTIVE_STAFF: readonly CatalogExecutiveStaff[] = [
   {

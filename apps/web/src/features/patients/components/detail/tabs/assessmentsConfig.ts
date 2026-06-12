@@ -13,19 +13,21 @@ export interface OutcomeMeasure {
 
 export interface OutcomeMeasureTypeDef {
   id: string;
-  label: string;
   items: number;
+  minPerItem: number;
   maxPerItem: number;
 }
 
-export const MEASURE_TYPES: OutcomeMeasureTypeDef[] = [
-  { id: 'honos', label: 'HoNOS (Adult)', items: 12, maxPerItem: 4 },
-  { id: 'honos65', label: 'HoNOS 65+ (Older Persons)', items: 12, maxPerItem: 4 },
-  { id: 'honosca', label: 'HoNOSCA (Child & Adolescent)', items: 13, maxPerItem: 4 },
-  { id: 'k10', label: 'K10 (Psychological Distress)', items: 10, maxPerItem: 5 },
-  { id: 'k10plus', label: 'K10+ (Extended)', items: 14, maxPerItem: 5 },
-  { id: 'lsp16', label: 'LSP-16 (Life Skills Profile)', items: 16, maxPerItem: 4 },
-];
+// UI mechanics only. The canonical list of outcome measures and display
+// names lives in packages/shared/src/assessmentTaxonomy.ts.
+export const OUTCOME_MEASURE_FORM_CONFIG: Record<string, OutcomeMeasureTypeDef> = {
+  honos: { id: 'honos', items: 12, minPerItem: 0, maxPerItem: 4 },
+  honos65: { id: 'honos65', items: 12, minPerItem: 0, maxPerItem: 4 },
+  honosca: { id: 'honosca', items: 13, minPerItem: 0, maxPerItem: 4 },
+  k10: { id: 'k10', items: 10, minPerItem: 1, maxPerItem: 5 },
+  k10plus: { id: 'k10plus', items: 14, minPerItem: 1, maxPerItem: 5 },
+  lsp16: { id: 'lsp16', items: 16, minPerItem: 0, maxPerItem: 4 },
+};
 
 export const OCCASIONS = ['admission', 'review', '91day', 'discharge', 'other'] as const;
 
@@ -54,8 +56,8 @@ export function getK10Severity(score: number): { label: string; color: string } 
   return { label: 'Severe disorder', color: '#C62828' };
 }
 
-export function buildDefaultOutcomeItems(itemCount: number): Record<string, number> {
+export function buildDefaultOutcomeItems(itemCount: number, defaultScore = 0): Record<string, number> {
   const items: Record<string, number> = {};
-  for (let i = 1; i <= itemCount; i += 1) items[String(i)] = 0;
+  for (let i = 1; i <= itemCount; i += 1) items[String(i)] = defaultScore;
   return items;
 }

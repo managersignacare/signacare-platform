@@ -56,6 +56,21 @@ const PatchAttendeeBodySchema = z.object({
   attendanceStatus: AttendanceStatusEnum.optional(),
 });
 
+const DATE_ONLY_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+
+function normaliseAppointmentDateQuery(
+  value: unknown,
+  boundary: 'from' | 'to',
+): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  if (!DATE_ONLY_REGEX.test(trimmed)) return trimmed;
+  return boundary === 'from'
+    ? `${trimmed}T00:00:00.000Z`
+    : `${trimmed}T23:59:59.999Z`;
+}
+
 export const appointmentController = {
   async create(req: Request, res: Response, next: NextFunction) {
     try {
@@ -121,8 +136,8 @@ export const appointmentController = {
         patientId: req.query['patientId'],
         clinicianId: req.query['clinicianId'],
         status: req.query['status'],
-        from: req.query['from'],
-        to: req.query['to'],
+        from: normaliseAppointmentDateQuery(req.query['from'], 'from'),
+        to: normaliseAppointmentDateQuery(req.query['to'], 'to'),
         limit: req.query['limit'] ? Number(req.query['limit']) : undefined,
         offset: req.query['offset'] ? Number(req.query['offset']) : undefined,
       });

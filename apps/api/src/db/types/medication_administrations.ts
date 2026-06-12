@@ -21,6 +21,8 @@ export interface MedicationAdministrationsRow {
   witnessed_by_staff_id?: string | null;
   batch_number?: string | null;
   created_at: string;
+  administration_context?: string | null;
+  prn_reason?: string | null;
   lock_version: number;
 }
 
@@ -41,6 +43,8 @@ export const MEDICATION_ADMINISTRATIONS_COLUMNS = [
   'witnessed_by_staff_id',
   'batch_number',
   'created_at',
+  'administration_context',
+  'prn_reason',
   'lock_version',
 ] as const;
 

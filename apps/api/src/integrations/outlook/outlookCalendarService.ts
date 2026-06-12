@@ -1,6 +1,6 @@
 // apps/api/src/integrations/outlook/outlookCalendarService.ts
 import axios from 'axios';
-import { db } from '../../db/db';
+import { dbAdmin } from '../../db/db';
 import { config } from '../../config';
 
 interface StaffTokens {
@@ -11,7 +11,7 @@ interface StaffTokens {
 }
 
 async function getStaffTokens(staffId: string): Promise<StaffTokens> {
-  const staff = await db('staff')
+  const staff = await dbAdmin('staff')
     .where({ id: staffId })
     .first('outlook_email', 'outlook_refresh_token', 'outlook_token_expires_at');
 
@@ -50,7 +50,7 @@ async function refreshAccessToken(tokens: StaffTokens): Promise<StaffTokens> {
     email: tokens.email,
   };
 
-  await db('staff')
+  await dbAdmin('staff')
     .where({ outlook_email: tokens.email })
     .update({
       outlook_refresh_token: updated.refreshToken,
@@ -69,6 +69,43 @@ async function ensureStaffAccessToken(staffId: string): Promise<StaffTokens> {
   return tokens;
 }
 
+export interface StaffGraphCalendarEvent {
+  id: string;
+  subject?: string | null;
+  start?: { dateTime?: string | null; timeZone?: string | null } | null;
+  end?: { dateTime?: string | null; timeZone?: string | null } | null;
+  location?: { displayName?: string | null } | null;
+  onlineMeeting?: { joinUrl?: string | null } | null;
+  isCancelled?: boolean | null;
+  changeKey?: string | null;
+  lastModifiedDateTime?: string | null;
+}
+
+export interface StaffGraphSubscription {
+  id: string;
+  resource: string;
+  expirationDateTime: string;
+}
+
+function graphRequestHeaders(accessToken: string): Record<string, string> {
+  return {
+    Authorization: `Bearer ${accessToken}`,
+    'Content-Type': 'application/json',
+    Prefer: 'outlook.timezone="UTC"',
+  };
+}
+
+export function buildOutlookSubscriptionResource(email: string): string {
+  return `users/${encodeURIComponent(email)}/events`;
+}
+
+export async function getStaffGraphIdentity(
+  staffId: string,
+): Promise<{ email: string }> {
+  const tokens = await ensureStaffAccessToken(staffId);
+  return { email: tokens.email };
+}
+
 export async function createStaffEvent(
   staffId: string,
   payload: {
@@ -77,10 +114,22 @@ export async function createStaffEvent(
     startIso: string;
     endIso: string;
     location?: string;
+    attendeeEmails?: string[];
+    isTeamsMeeting?: boolean;
   },
-): Promise<string> {
+): Promise<{
+  eventId: string;
+  joinUrl?: string | null;
+  changeKey?: string | null;
+  lastModifiedDateTime?: string | null;
+}> {
   const tokens = await ensureStaffAccessToken(staffId);
-  const res = await axios.post<{ id: string }>(
+  const res = await axios.post<{
+    id: string;
+    changeKey?: string | null;
+    lastModifiedDateTime?: string | null;
+    onlineMeeting?: { joinUrl?: string | null };
+  }>(
     `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(tokens.email)}/calendar/events`,
     {
       subject: payload.subject,
@@ -88,15 +137,29 @@ export async function createStaffEvent(
       start: { dateTime: payload.startIso, timeZone: 'Australia/Melbourne' },
       end: { dateTime: payload.endIso, timeZone: 'Australia/Melbourne' },
       location: payload.location ? { displayName: payload.location } : undefined,
+      attendees: (payload.attendeeEmails ?? []).map((email) => ({
+        emailAddress: { address: email },
+        type: 'required',
+      })),
+      ...(payload.isTeamsMeeting
+        ? {
+          isOnlineMeeting: true,
+          onlineMeetingProvider: 'teamsForBusiness',
+        }
+        : {}),
     },
     {
       headers: {
-        Authorization: `Bearer ${tokens.accessToken}`,
-        'Content-Type': 'application/json',
+        ...graphRequestHeaders(tokens.accessToken),
       },
     },
   );
-  return res.data.id;
+  return {
+    eventId: res.data.id,
+    joinUrl: res.data.onlineMeeting?.joinUrl ?? null,
+    changeKey: res.data.changeKey ?? null,
+    lastModifiedDateTime: res.data.lastModifiedDateTime ?? null,
+  };
 }
 
 export async function updateStaffEvent(
@@ -108,8 +171,14 @@ export async function updateStaffEvent(
     startIso: string;
     endIso: string;
     location?: string;
+    attendeeEmails?: string[];
+    isTeamsMeeting?: boolean;
   },
-): Promise<void> {
+): Promise<{
+  changeKey?: string | null;
+  lastModifiedDateTime?: string | null;
+  joinUrl?: string | null;
+}> {
   const tokens = await ensureStaffAccessToken(staffId);
   await axios.patch(
     `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(tokens.email)}/calendar/events/${eventId}`,
@@ -119,14 +188,29 @@ export async function updateStaffEvent(
       start: { dateTime: payload.startIso, timeZone: 'Australia/Melbourne' },
       end: { dateTime: payload.endIso, timeZone: 'Australia/Melbourne' },
       location: payload.location ? { displayName: payload.location } : undefined,
+      attendees: (payload.attendeeEmails ?? []).map((email) => ({
+        emailAddress: { address: email },
+        type: 'required',
+      })),
+      ...(payload.isTeamsMeeting
+        ? {
+          isOnlineMeeting: true,
+          onlineMeetingProvider: 'teamsForBusiness',
+        }
+        : {}),
     },
     {
       headers: {
-        Authorization: `Bearer ${tokens.accessToken}`,
-        'Content-Type': 'application/json',
+        ...graphRequestHeaders(tokens.accessToken),
       },
     },
   );
+  const refreshed = await getStaffEvent(staffId, eventId);
+  return {
+    changeKey: refreshed.changeKey ?? null,
+    lastModifiedDateTime: refreshed.lastModifiedDateTime ?? null,
+    joinUrl: refreshed.onlineMeeting?.joinUrl ?? null,
+  };
 }
 
 export async function deleteStaffEvent(
@@ -136,6 +220,80 @@ export async function deleteStaffEvent(
   const tokens = await ensureStaffAccessToken(staffId);
   await axios.delete(
     `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(tokens.email)}/calendar/events/${eventId}`,
+    {
+      headers: {
+        Authorization: `Bearer ${tokens.accessToken}`,
+      },
+    },
+  );
+}
+
+export async function getStaffEvent(
+  staffId: string,
+  eventId: string,
+): Promise<StaffGraphCalendarEvent> {
+  const tokens = await ensureStaffAccessToken(staffId);
+  const res = await axios.get<StaffGraphCalendarEvent>(
+    `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(tokens.email)}/calendar/events/${eventId}?$select=id,subject,start,end,location,onlineMeeting,isCancelled,changeKey,lastModifiedDateTime`,
+    {
+      headers: graphRequestHeaders(tokens.accessToken),
+    },
+  );
+  return res.data;
+}
+
+export async function createStaffEventSubscription(
+  staffId: string,
+  input: {
+    changeNotificationUrl: string;
+    lifecycleNotificationUrl?: string | null;
+    clientState: string;
+    expirationDateTime: string;
+  },
+): Promise<StaffGraphSubscription> {
+  const tokens = await ensureStaffAccessToken(staffId);
+  const resource = buildOutlookSubscriptionResource(tokens.email);
+  const res = await axios.post<StaffGraphSubscription>(
+    'https://graph.microsoft.com/v1.0/subscriptions',
+    {
+      changeType: 'created,updated,deleted',
+      notificationUrl: input.changeNotificationUrl,
+      lifecycleNotificationUrl: input.lifecycleNotificationUrl ?? input.changeNotificationUrl,
+      resource,
+      expirationDateTime: input.expirationDateTime,
+      clientState: input.clientState,
+      latestSupportedTlsVersion: 'v1_2',
+    },
+    {
+      headers: graphRequestHeaders(tokens.accessToken),
+    },
+  );
+  return res.data;
+}
+
+export async function renewStaffEventSubscription(
+  staffId: string,
+  subscriptionId: string,
+  expirationDateTime: string,
+): Promise<StaffGraphSubscription> {
+  const tokens = await ensureStaffAccessToken(staffId);
+  const res = await axios.patch<StaffGraphSubscription>(
+    `https://graph.microsoft.com/v1.0/subscriptions/${subscriptionId}`,
+    { expirationDateTime },
+    {
+      headers: graphRequestHeaders(tokens.accessToken),
+    },
+  );
+  return res.data;
+}
+
+export async function deleteStaffEventSubscription(
+  staffId: string,
+  subscriptionId: string,
+): Promise<void> {
+  const tokens = await ensureStaffAccessToken(staffId);
+  await axios.delete(
+    `https://graph.microsoft.com/v1.0/subscriptions/${subscriptionId}`,
     {
       headers: {
         Authorization: `Bearer ${tokens.accessToken}`,

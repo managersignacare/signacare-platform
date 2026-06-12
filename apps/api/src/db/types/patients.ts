@@ -68,6 +68,9 @@ export interface PatientsRow {
   sms_consent_updated_at?: string | null;
   sms_consent_updated_by?: string | null;
   photo_url?: string | null;
+  deceased_date?: string | null;
+  purged_at?: string | null;
+  last_contact_at?: string | null;
   ihi_record_status?: string | null;
   ihi_number_status?: string | null;
   ihi_verified_at?: string | null;
@@ -138,6 +141,9 @@ export const PATIENTS_COLUMNS = [
   'sms_consent_updated_at',
   'sms_consent_updated_by',
   'photo_url',
+  'deceased_date',
+  'purged_at',
+  'last_contact_at',
   'ihi_record_status',
   'ihi_number_status',
   'ihi_verified_at',

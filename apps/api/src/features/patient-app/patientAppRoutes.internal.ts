@@ -92,9 +92,18 @@ import {
   TriageResponseSchema,
   type TrackingEntryInput,
 } from './patientAppSchemas';
+import {
+  handlePatientAppRegistration,
+  normalizeDobInput,
+} from './patientAppRegistrationRoutes';
 import { pathwayRepository } from '../treatment-pathways/pathwayRepository';
 import { pathwayService } from '../treatment-pathways/pathwayService';
 import { digitalPhenotypingService } from '../treatment-pathways/digitalPhenotypingService';
+import { classifyTemplate } from '../assessments/assessmentRegistry';
+import {
+  findClinicSelfRatingDefinition,
+  listClinicSelfRatingDefinitions,
+} from './patientAppSelfRatingSupport';
 
 type TrackingBatchEntry = TrackingEntryInput & {
   type?: string;
@@ -121,6 +130,17 @@ const EpisodeAllocationResponseSchema = z.object({
   mdt: z.array(UnknownRecordSchema),
 });
 const TrackingEntriesResponseSchema = z.object({ entries: z.array(UnknownRecordSchema) });
+const SelfRatingTemplateResponseSchema = UnknownRecordSchema.and(z.object({
+  id: z.string().min(1),
+  slug: z.string().min(1),
+  templateId: z.string().uuid().nullable().optional(),
+}));
+const SelfRatingTemplatesResponseSchema = z.object({
+  templates: z.array(SelfRatingTemplateResponseSchema),
+});
+const PatientAssignedAssessmentResponseSchema = z.object({
+  assessment: UnknownRecordSchema,
+});
 const MobileSyncResponseSchema = z.object({
   notifications: z.array(UnknownRecordSchema),
   appointments: z.array(UnknownRecordSchema),
@@ -136,7 +156,6 @@ const PatientMicroLearningResponseSchema = z.object({
 const PatientMicroLearningStatusSchema = z.object({
   status: z.enum(['opened', 'completed']),
 });
-
 function toIsoString(value: unknown): string | null {
   if (!value) return null;
   if (value instanceof Date) return value.toISOString();
@@ -145,17 +164,6 @@ function toIsoString(value: unknown): string | null {
     return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
   }
   return null;
-}
-
-function normalizeDobInput(input: string): string | null {
-  const trimmed = input.trim();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
-    return trimmed;
-  }
-  const auMatch = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(trimmed);
-  if (!auMatch) return null;
-  const [, dd, mm, yyyy] = auMatch;
-  return `${yyyy}-${mm}-${dd}`;
 }
 
 function resolveActivationCodeInput(rawBody: unknown): string | null {
@@ -244,6 +252,8 @@ async function resolvePathwayForPatient(
   throw new AppError('No treatment pathway found for patient', 404, 'PATHWAY_NOT_FOUND');
 }
 
+router.post('/register', patientAuthLimiter, handlePatientAppRegistration);
+
 router.post('/invite/:patientId', authMiddleware, tenantMiddleware, async (req: Request, res: Response, next: NextFunction) => {
   try {
     await requirePatientOwnership(req, req.params.patientId);
@@ -252,7 +262,7 @@ router.post('/invite/:patientId', authMiddleware, tenantMiddleware, async (req: 
     const staffId = req.user!.id;
 
     const patient = await dbAdmin('patients').where({ id: patientId, clinic_id: clinicId }).first();
-    if (!patient) { res.status(404).json({ error: 'Patient not found' }); return; }
+    if (!patient) throw new AppError('Patient not found', 404, 'NOT_FOUND');
 
     await dbAdmin('patient_invites')
       .where({ patient_id: patientId, clinic_id: clinicId })
@@ -316,8 +326,7 @@ router.post('/activate', patientAuthLimiter, patientActivateCodeLimiter, async (
   try {
     const canonicalCode = resolveActivationCodeInput(req.body);
     if (!canonicalCode) {
-      res.status(400).json({ error: 'Activation code is required' });
-      return;
+      throw new AppError('Activation code is required', 400, 'VALIDATION_ERROR');
     }
     const { code, password, dob, phone } = ActivateSchema.parse({
       ...((req.body && typeof req.body === 'object') ? req.body as Record<string, unknown> : {}),
@@ -336,8 +345,7 @@ router.post('/activate', patientAuthLimiter, patientActivateCodeLimiter, async (
     const invite = inviteCandidates[0];
 
     if (!invite) {
-      res.status(400).json({ error: 'Invalid or expired code. Please ask your clinician for a new code.' });
-      return;
+      throw new AppError('Invalid or expired code. Please ask your clinician for a new code.', 400, 'INVALID_ACTIVATION_CODE');
     }
     if (inviteCandidates.length > 1) {
       logger.warn(
@@ -352,13 +360,11 @@ router.post('/activate', patientAuthLimiter, patientActivateCodeLimiter, async (
         const patientDob = new Date(patient.date_of_birth).toISOString().split('T')[0];
         const normalizedDob = normalizeDobInput(dob);
         if (!normalizedDob) {
-          res.status(400).json({ error: 'Date of birth must be YYYY-MM-DD or DD/MM/YYYY' });
-          return;
+          throw new AppError('Date of birth must be YYYY-MM-DD or DD/MM/YYYY', 400, 'VALIDATION_ERROR');
         }
         const providedDob = new Date(normalizedDob).toISOString().split('T')[0];
         if (patientDob !== providedDob) {
-          res.status(400).json({ error: 'Date of birth does not match our records' });
-          return;
+          throw new AppError('Date of birth does not match our records', 400, 'DOB_MISMATCH');
         }
       }
     }
@@ -403,8 +409,7 @@ router.post('/login', patientAuthLimiter, patientLoginPhoneLimiter, async (req: 
     const { phone, password } = PatientLoginSchema.parse(req.body);
 
     if (!phone || !password) {
-      res.status(400).json({ error: 'Phone and password are required' });
-      return;
+      throw new AppError('Phone and password are required', 400, 'VALIDATION_ERROR');
     }
 
     const account = await dbAdmin('patient_app_accounts')
@@ -413,13 +418,11 @@ router.post('/login', patientAuthLimiter, patientLoginPhoneLimiter, async (req: 
       .first();
 
     if (!account) {
-      res.status(401).json({ error: 'Invalid phone number or password' });
-      return;
+      throw new AppError('Invalid phone number or password', 401, 'INVALID_CREDENTIALS');
     }
 
     if (account.locked_until && new Date(account.locked_until) > new Date()) {
-      res.status(429).json({ error: 'Account locked. Try again later.' });
-      return;
+      throw new AppError('Account locked. Try again later.', 429, 'PATIENT_ACCOUNT_LOCKED');
     }
 
     const bcrypt = await import('bcryptjs');
@@ -436,8 +439,7 @@ router.post('/login', patientAuthLimiter, patientLoginPhoneLimiter, async (req: 
             [lockUntil],
           ),
         });
-      res.status(401).json({ error: 'Invalid phone number or password' });
-      return;
+      throw new AppError('Invalid phone number or password', 401, 'INVALID_CREDENTIALS');
     }
 
     await dbAdmin('patient_app_accounts')
@@ -512,7 +514,7 @@ router.get('/me', authMiddleware, async (req: Request, res: Response, next: Next
     const user = req.user;
     const patientId = user?.patientId ?? user?.id;
     const patient = await dbAdmin('patients').where({ id: patientId }).first();
-    if (!patient) { res.status(404).json({ error: 'Patient not found' }); return; }
+    if (!patient) throw new AppError('Patient not found', 404, 'NOT_FOUND');
 
     res.json({
       id: user?.id,
@@ -1265,14 +1267,12 @@ router.post('/tracking', authMiddleware, async (req: Request, res: Response, nex
     const clinicId = user?.clinicId ?? req.clinicId;
 
     if (!patientId || !clinicId) {
-      res.status(400).json({ error: 'Missing patient context' });
-      return;
+      throw new AppError('Missing patient context', 400, 'PATIENT_CONTEXT_MISSING');
     }
 
     const { entries } = TrackingBatchSchema.parse(req.body);
     if (!Array.isArray(entries) || entries.length === 0) {
-      res.status(400).json({ error: 'entries array is required' });
-      return;
+      throw new AppError('entries array is required', 400, 'VALIDATION_ERROR');
     }
 
     const trackingEntries: TrackingBatchEntry[] = entries;
@@ -1331,12 +1331,12 @@ router.patch('/tracking/:entryId', authMiddleware, async (req: Request, res: Res
     const patch: Record<string, unknown> = {};
     if (value !== undefined) patch.value = Number(value);
     if (note !== undefined) patch.note = note;
-    if (Object.keys(patch).length === 0) { res.status(400).json({ error: 'Nothing to update' }); return; }
+    if (Object.keys(patch).length === 0) throw new AppError('Nothing to update', 400, 'VALIDATION_ERROR');
     const entry = await dbAdmin('patient_tracking')
       .where({ id: req.params.entryId })
       .select('patient_id', 'clinic_id')
       .first() as { patient_id: string; clinic_id: string } | undefined;
-    if (!entry) { res.status(404).json({ error: 'Tracking entry not found' }); return; }
+    if (!entry) throw new AppError('Tracking entry not found', 404, 'NOT_FOUND');
     await requirePatientOwnership(req, entry.patient_id);
     await dbAdmin('patient_tracking')
       .where({ id: req.params.entryId, clinic_id: req.clinicId })
@@ -1351,7 +1351,7 @@ router.delete('/tracking/:entryId', authMiddleware, async (req: Request, res: Re
       .where({ id: req.params.entryId })
       .select('patient_id', 'clinic_id')
       .first() as { patient_id: string; clinic_id: string } | undefined;
-    if (!entry) { res.status(404).json({ error: 'Tracking entry not found' }); return; }
+    if (!entry) throw new AppError('Tracking entry not found', 404, 'NOT_FOUND');
     await requirePatientOwnership(req, entry.patient_id);
     await dbAdmin('patient_tracking')
       .where({ id: req.params.entryId, clinic_id: req.clinicId })
@@ -1375,7 +1375,7 @@ router.post('/med-reminders/:patientId', authMiddleware, tenantMiddleware, async
   try {
     await requirePatientOwnership(req, req.params.patientId);
     const { drugName, dose, instructions, daysOfWeek, reminderTime, medicationId } = MedReminderSchema.parse(req.body);
-    if (!drugName || !instructions) { res.status(400).json({ error: 'drugName and instructions required' }); return; }
+    if (!drugName || !instructions) throw new AppError('drugName and instructions required', 400, 'VALIDATION_ERROR');
     const [row] = await dbAdmin('patient_med_reminders').insert({
       clinic_id: req.clinicId, patient_id: req.params.patientId,
       medication_id: medicationId ?? null, drug_name: drugName, dose: dose ?? null,
@@ -1409,7 +1409,7 @@ router.post('/shared-docs/:patientId', authMiddleware, tenantMiddleware, async (
   try {
     await requirePatientOwnership(req, req.params.patientId);
     const { title, docType, url, filePath } = DocumentUploadSchema.parse(req.body);
-    if (!title) { res.status(400).json({ error: 'title required' }); return; }
+    if (!title) throw new AppError('title required', 400, 'VALIDATION_ERROR');
     const [row] = await dbAdmin('patient_shared_documents').insert({
       clinic_id: req.clinicId, patient_id: req.params.patientId,
       title, doc_type: docType ?? (url ? 'weblink' : 'document'),
@@ -1443,13 +1443,13 @@ router.patch('/appointment-response/:appointmentId', authMiddleware, async (req:
   try {
     const { response } = TriageResponseSchema.parse(req.body);
     if (!['attending', 'not_attending'].includes(response)) {
-      res.status(400).json({ error: 'response must be attending or not_attending' }); return;
+      throw new AppError('response must be attending or not_attending', 400, 'VALIDATION_ERROR');
     }
     const appt = await dbAdmin('appointments')
       .where({ id: req.params.appointmentId })
       .select('patient_id', 'clinic_id')
       .first() as { patient_id: string; clinic_id: string } | undefined;
-    if (!appt) { res.status(404).json({ error: 'Appointment not found' }); return; }
+    if (!appt) throw new AppError('Appointment not found', 404, 'NOT_FOUND');
     await requirePatientOwnership(req, appt.patient_id);
     await dbAdmin('appointments')
       .where({ id: req.params.appointmentId, clinic_id: req.clinicId })
@@ -1474,8 +1474,7 @@ router.post('/thresholds/:patientId', authMiddleware, tenantMiddleware, async (r
     await requirePatientOwnership(req, req.params.patientId);
     const { trackingType, direction, threshold, consecutiveDays } = AlertThresholdSchema.parse(req.body);
     if (!trackingType || threshold == null) {
-      res.status(400).json({ error: 'trackingType and threshold required' });
-      return;
+      throw new AppError('trackingType and threshold required', 400, 'VALIDATION_ERROR');
     }
     const [row] = await dbAdmin('viva_alert_thresholds').insert({
       clinic_id: req.clinicId,
@@ -1544,13 +1543,39 @@ router.get('/threshold-check/:patientId', authMiddleware, async (req: Request, r
 });
 
 
-router.get('/self-rating-templates', authMiddleware, async (_req: Request, res: Response, next: NextFunction) => {
+router.get('/self-rating-templates', authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const rows = await dbAdmin('templates')
-      .where({ category: 'Self-Rating', is_active: true })
-      .whereNull('deleted_at')
-      .orderBy('name');
-    res.json({ templates: rows });
+    // Phase 8 — operator brief: "Self-rated scales must move to the Viva
+    // assessment tab." This endpoint returns ONLY templates classified
+    // by the canonical SCALE_REGISTRY as `rating_scale` + `self_rated`.
+    //
+    // Historical bug: this filter used `category: 'Self-Rating'`, but
+    // the seed scripts use `category: 'Rating Scales'` for every scale
+    // — so the endpoint returned an empty list and the Viva self-rating
+    // flow was broken. The registry-based filter resolves the breakage
+    // structurally (no more free-text category mismatches).
+    const { matched, unknownCount } = await listClinicSelfRatingDefinitions(req.clinicId);
+    if (unknownCount > 0) {
+      logger.warn(
+        { unknownCount, clinicId: req.clinicId },
+        '[patient-app/self-rating-templates] templates with no registry classification skipped',
+      );
+    }
+    // Preserve the historical response shape (templates: row[]) so the
+    // existing Viva client renders unchanged; add the canonical slug so
+    // future clients can join on it without re-parsing the name.
+    res.json(SelfRatingTemplatesResponseSchema.parse({
+      templates: matched.map((m) => ({
+        id: m.id,
+        templateId: m.templateId,
+        slug: m.slug,
+        name: m.name,
+        description: m.description,
+        category: 'Rating Scales',
+        type: 'assessment',
+        content: m.content,
+      })),
+    }));
   } catch (err) { next(err); }
 });
 
@@ -1558,17 +1583,31 @@ router.post('/assessments/:patientId/assign', authMiddleware, tenantMiddleware, 
   try {
     await requirePatientOwnership(req, req.params.patientId);
     const { templateId } = AssessmentStartSchema.parse(req.body);
-    if (!templateId) { res.status(400).json({ error: 'templateId required' }); return; }
+    if (!templateId) throw new AppError('templateId required', 400, 'VALIDATION_ERROR');
 
-    const template = await dbAdmin('templates').where({ id: templateId }).first();
-    if (!template) { res.status(404).json({ error: 'Template not found' }); return; }
+    const template = await findClinicSelfRatingDefinition(req.clinicId, templateId);
+    if (!template) throw new AppError('Template not found', 404, 'NOT_FOUND');
+    const classified = classifyTemplate({
+      id: template.id,
+      name: template.name,
+      category: 'Rating Scales',
+      description: template.description,
+      content: template.content,
+    });
+    if (classified.family !== 'rating_scale' || classified.raterType !== 'self_rated') {
+      throw new AppError(
+        'Only self-rated rating-scale templates can be assigned to Viva assessments',
+        400,
+        'INVALID_SELF_RATING_TEMPLATE',
+      );
+    }
 
     const [row] = await dbAdmin('outcome_measures').insert({
       clinic_id: req.clinicId,
       patient_id: req.params.patientId,
       staff_id: req.user!.id,
       measure_type: template.name,
-      template_id: templateId,
+      template_id: template.templateId,
       template_name: template.name,
       assigned_by: req.user!.id,
       assigned_for_patient: true,
@@ -1579,7 +1618,7 @@ router.post('/assessments/:patientId/assign', authMiddleware, tenantMiddleware, 
     }).returning(OUTCOME_MEASURES_COLUMNS);
 
     logger.info({ patientId: req.params.patientId, templateName: template.name }, 'Self-rating scale assigned to patient');
-    res.status(201).json({ assessment: row });
+    res.status(201).json(PatientAssignedAssessmentResponseSchema.parse({ assessment: row }));
   } catch (err) { next(err); }
 });
 
@@ -1588,6 +1627,7 @@ router.get('/assessments/:patientId', authMiddleware, async (req: Request, res: 
     await requirePatientOwnership(req, req.params.patientId);
     const rows = await dbAdmin('outcome_measures')
       .where({ patient_id: req.params.patientId, clinic_id: req.clinicId, assigned_for_patient: true })
+      .whereNull('deleted_at')
       .orderBy('created_at', 'desc');
     res.json({ assessments: rows });
   } catch (err) { next(err); }
@@ -1600,6 +1640,7 @@ router.patch('/assessments/:patientId/:assessmentId/complete', authMiddleware, a
 
     const existing = await dbAdmin('outcome_measures')
       .where({ id: req.params.assessmentId, patient_id: req.params.patientId, clinic_id: req.clinicId })
+      .whereNull('deleted_at')
       .first(
         'id',
         'clinic_id',
@@ -1642,6 +1683,7 @@ router.patch('/assessments/:patientId/:assessmentId/complete', authMiddleware, a
 
     await dbAdmin('outcome_measures')
       .where({ id: req.params.assessmentId, patient_id: req.params.patientId, clinic_id: req.clinicId })
+      .whereNull('deleted_at')
       .update({
         total_score: Number(riskSignal.totalScore),
         items: responses ? JSON.stringify(responses) : undefined,
@@ -1734,10 +1776,10 @@ router.post('/tasks/:patientId', authMiddleware, async (req: Request, res: Respo
   try {
     await requirePatientOwnership(req, req.params.patientId);
     const { title, description, dueDate, reminderTime } = TaskCreateSchema.parse(req.body);
-    if (!title) { res.status(400).json({ error: 'title required' }); return; }
+    if (!title) throw new AppError('title required', 400, 'VALIDATION_ERROR');
     const isPatient = req.user?.isPatientApp === true;
     const clinicId = req.clinicId;
-    if (!clinicId) { res.status(400).json({ error: 'Missing clinic context' }); return; }
+    if (!clinicId) throw new AppError('Missing clinic context', 400, 'CLINIC_CONTEXT_MISSING');
     const [row] = await dbAdmin('patient_tasks').insert({
       clinic_id: clinicId, patient_id: req.params.patientId,
       title, description: description ?? null,
@@ -1956,7 +1998,7 @@ router.post('/checklists/:patientId', authMiddleware, tenantMiddleware, async (r
   try {
     await requirePatientOwnership(req, req.params.patientId);
     const { item, appointmentId, sortOrder } = ChecklistItemCreateSchema.parse(req.body);
-    if (!item) { res.status(400).json({ error: 'item required' }); return; }
+    if (!item) throw new AppError('item required', 400, 'VALIDATION_ERROR');
     const [row] = await dbAdmin('appointment_checklists').insert({
       clinic_id: req.clinicId, patient_id: req.params.patientId,
       appointment_id: appointmentId ?? null, item,
@@ -1982,16 +2024,14 @@ router.post('/fcm/register-device', authMiddleware, async (req: Request, res: Re
   try {
     const user = req.user as { id: string; patientId?: string; clinicId?: string };
     const patientId = user.patientId ?? null;
-    if (!patientId) { res.status(400).json({ error: 'Patient context missing from token' }); return; }
+    if (!patientId) throw new AppError('Patient context missing from token', 400, 'PATIENT_CONTEXT_MISSING');
 
     const { deviceToken, platform } = RegisterDeviceSchema.parse(req.body);
     if (!deviceToken || deviceToken.length < 10) {
-      res.status(400).json({ error: 'deviceToken is required and must be at least 10 characters' });
-      return;
+      throw new AppError('deviceToken is required and must be at least 10 characters', 400, 'VALIDATION_ERROR');
     }
     if (platform !== 'ios' && platform !== 'android') {
-      res.status(400).json({ error: "platform must be 'ios' or 'android'" });
-      return;
+      throw new AppError("platform must be 'ios' or 'android'", 400, 'VALIDATION_ERROR');
     }
 
     const patient = await dbAdmin('patients')
@@ -1999,7 +2039,7 @@ router.post('/fcm/register-device', authMiddleware, async (req: Request, res: Re
       .whereNull('deleted_at')
       .select('clinic_id')
       .first() as { clinic_id: string } | undefined;
-    if (!patient) { res.status(404).json({ error: 'Patient not found' }); return; }
+    if (!patient) throw new AppError('Patient not found', 404, 'NOT_FOUND');
 
     const existing = await dbAdmin('patient_fcm_tokens')
       .where({ patient_id: patientId, clinic_id: patient.clinic_id, device_token: deviceToken })
@@ -2037,9 +2077,9 @@ router.delete('/fcm/register-device/:token', authMiddleware, async (req: Request
   try {
     const user = req.user as { id: string; patientId?: string };
     const patientId = user.patientId ?? null;
-    if (!patientId) { res.status(400).json({ error: 'Patient context missing from token' }); return; }
+    if (!patientId) throw new AppError('Patient context missing from token', 400, 'PATIENT_CONTEXT_MISSING');
     const patient = await dbAdmin('patients').where({ id: patientId }).select('clinic_id').first() as { clinic_id: string } | undefined;
-    if (!patient) { res.status(404).json({ error: 'Patient not found' }); return; }
+    if (!patient) throw new AppError('Patient not found', 404, 'NOT_FOUND');
     const deleted = await dbAdmin('patient_fcm_tokens')
       .where({ patient_id: patientId, clinic_id: patient.clinic_id, device_token: req.params.token })
       .whereNull('deleted_at')
@@ -2056,10 +2096,10 @@ router.get('/sync-preferences', authMiddleware, async (req: Request, res: Respon
   try {
     const user = req.user as { id: string; patientId?: string };
     const patientId = user.patientId ?? null;
-    if (!patientId) { res.status(400).json({ error: 'Patient context missing from token' }); return; }
+    if (!patientId) throw new AppError('Patient context missing from token', 400, 'PATIENT_CONTEXT_MISSING');
 
     const patient = await dbAdmin('patients').where({ id: patientId }).select('clinic_id').first() as { clinic_id: string } | undefined;
-    if (!patient) { res.status(404).json({ error: 'Patient not found' }); return; }
+    if (!patient) throw new AppError('Patient not found', 404, 'NOT_FOUND');
 
     const rows = await dbAdmin('patient_sync_preferences')
       .where({ patient_id: patientId, clinic_id: patient.clinic_id })
@@ -2089,20 +2129,18 @@ router.patch('/sync-preferences', authMiddleware, async (req: Request, res: Resp
   try {
     const user = req.user as { id: string; patientId?: string };
     const patientId = user.patientId ?? null;
-    if (!patientId) { res.status(400).json({ error: 'Patient context missing from token' }); return; }
+    if (!patientId) throw new AppError('Patient context missing from token', 400, 'PATIENT_CONTEXT_MISSING');
 
     const { moduleKey, enabled } = SyncPreferenceSchema.parse(req.body);
     if (!moduleKey || !(SYNC_MODULE_KEYS as readonly string[]).includes(moduleKey)) {
-      res.status(400).json({ error: `moduleKey must be one of ${SYNC_MODULE_KEYS.join(', ')}` });
-      return;
+      throw new AppError(`moduleKey must be one of ${SYNC_MODULE_KEYS.join(', ')}`, 400, 'VALIDATION_ERROR');
     }
     if (typeof enabled !== 'boolean') {
-      res.status(400).json({ error: 'enabled must be boolean' });
-      return;
+      throw new AppError('enabled must be boolean', 400, 'VALIDATION_ERROR');
     }
 
     const patient = await dbAdmin('patients').where({ id: patientId }).select('clinic_id').first() as { clinic_id: string } | undefined;
-    if (!patient) { res.status(404).json({ error: 'Patient not found' }); return; }
+    if (!patient) throw new AppError('Patient not found', 404, 'NOT_FOUND');
 
     const existing = await dbAdmin('patient_sync_preferences')
       .where({ patient_id: patientId, clinic_id: patient.clinic_id, module_key: moduleKey })
@@ -2162,10 +2200,10 @@ router.get('/mobile-sync', authMiddleware, async (req: Request, res: Response, n
   try {
     const user = req.user as { id: string; patientId?: string };
     const patientId = user.patientId ?? null;
-    if (!patientId) { res.status(400).json({ error: 'Patient context missing from token' }); return; }
+    if (!patientId) throw new AppError('Patient context missing from token', 400, 'PATIENT_CONTEXT_MISSING');
 
     const patient = await dbAdmin('patients').where({ id: patientId }).select('clinic_id').first() as { clinic_id: string } | undefined;
-    if (!patient) { res.status(404).json({ error: 'Patient not found' }); return; }
+    if (!patient) throw new AppError('Patient not found', 404, 'NOT_FOUND');
 
     const rawSince = typeof req.query.since === 'string' ? req.query.since : null;
     const cursor = rawSince ? new Date(rawSince) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);

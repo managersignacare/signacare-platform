@@ -22,6 +22,13 @@ export interface ClinicSettingsRow {
   email_sender_mode: string;
   clinic_sender_email?: string | null;
   clinic_sender_name?: string | null;
+  scribe_audio_retention_adr?: string | null;
+  scribe_audio_retention_clinical_review?: string | null;
+  scribe_audio_retention_approved_by_staff_id?: string | null;
+  scribe_audio_retention_approved_at?: string | null;
+  ai_llm_backend: string;
+  scribe_runtime_mode: string;
+  local_style_adapter_model_name?: string | null;
 }
 
 export const CLINIC_SETTINGS_COLUMNS = [
@@ -42,6 +49,13 @@ export const CLINIC_SETTINGS_COLUMNS = [
   'email_sender_mode',
   'clinic_sender_email',
   'clinic_sender_name',
+  'scribe_audio_retention_adr',
+  'scribe_audio_retention_clinical_review',
+  'scribe_audio_retention_approved_by_staff_id',
+  'scribe_audio_retention_approved_at',
+  'ai_llm_backend',
+  'scribe_runtime_mode',
+  'local_style_adapter_model_name',
 ] as const;
 
 export type ClinicSettingsColumn = typeof CLINIC_SETTINGS_COLUMNS[number];

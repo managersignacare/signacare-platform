@@ -18,6 +18,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { tryAsync, isErr } from '@signacare/shared';
 import { apiClient } from '../../../shared/services/apiClient';
+import { llmAiJobsApi } from '../../../shared/services/llmAiJobsApi';
 import { patientMedicationsKeys, inpatientKeys } from '../../patients/queryKeys';
 
 interface MedicationRecord {
@@ -74,10 +75,6 @@ interface AdministrationCreatePayload {
   administrationContext: string;
   notes?: string;
   prnReason?: string;
-}
-
-interface ClinicalAiResponse {
-  result?: string;
 }
 
 function getScheduledTimes(frequency: string): string[] {
@@ -189,11 +186,11 @@ export function MarChartPanel({ patientId }: MarChartPanelProps) {
     const summary = `Medication adherence: ${given}/${total} doses given (${total > 0 ? Math.round(given/total*100) : 0}%). ` +
       `${refused} refused, ${withheld} withheld.`;
     try {
-      const resp = await apiClient.instance.post<ClinicalAiResponse>('llm/clinical-ai', {
+      const result = await llmAiJobsApi.runClinicalAiJob({
         action: 'medication-adherence',
         data: JSON.stringify({ given, refused, withheld, total, medications: activeMeds.map((m) => m.medicationName ?? m.drug_label).join(', ') }),
-      }, { timeout: 60_000 });
-      setAiSummary(resp.data?.result ?? summary);
+      });
+      setAiSummary(result || summary);
     } catch {
       // (intentional silent — BUG-609) deterministic local computation above
       // already produced a complete numeric summary (given/refused/withheld

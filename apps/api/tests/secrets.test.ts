@@ -136,6 +136,7 @@ describe('SENSITIVE_KEYS allow-list', () => {
     expect(_SENSITIVE_KEYS).toContain('JWT_ACCESS_SECRET');
     expect(_SENSITIVE_KEYS).toContain('JWT_REFRESH_SECRET');
     expect(_SENSITIVE_KEYS).toContain('DB_PASSWORD');
+    expect(_SENSITIVE_KEYS).toContain('BLOB_AZURE_ACCOUNT_KEY');
     expect(_SENSITIVE_KEYS).toContain('BLOB_S3_SECRET_ACCESS_KEY');
     expect(_SENSITIVE_KEYS).toContain('SENTRY_DSN');
   });

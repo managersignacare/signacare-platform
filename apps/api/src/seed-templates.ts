@@ -44,23 +44,11 @@ async function seed() {
         .map(q => ({ type: 'likert', label: q, min: 0, max: 3, options: ['Not at all', 'Several days', 'More than half the days', 'Nearly every day'] })),
       { type: 'score', label: 'Total Score', formula: 'sum', ranges: [{ min: 0, max: 4, label: 'Minimal' }, { min: 5, max: 9, label: 'Mild' }, { min: 10, max: 14, label: 'Moderate' }, { min: 15, max: 21, label: 'Severe' }] },
     ]},
-    { name: 'K10 (Kessler Psychological Distress Scale)', type: 'assessment', category: 'Rating Scales', content: [
-      { type: 'heading', text: 'K10 Psychological Distress' },
-      ...['Tired out for no good reason', 'Nervous', 'So nervous nothing could calm you down', 'Hopeless', 'Restless or fidgety', 'So restless you could not sit still', 'Depressed', 'Everything was an effort', 'So sad nothing could cheer you up', 'Worthless']
-        .map(q => ({ type: 'likert', label: `How often did you feel ${q.toLowerCase()}?`, min: 1, max: 5, options: ['None of the time', 'A little', 'Some of the time', 'Most of the time', 'All of the time'] })),
-    ]},
-    { name: 'HoNOS (Health of the Nation Outcome Scales)', type: 'assessment', category: 'Rating Scales', content: [
-      { type: 'heading', text: 'HoNOS' },
-      ...['Overactive, aggressive, disruptive behaviour', 'Non-accidental self-injury', 'Problem drinking or drug-taking', 'Cognitive problems', 'Physical illness or disability', 'Hallucinations and delusions', 'Depressed mood', 'Other mental and behavioural problems', 'Relationships', 'Activities of daily living', 'Living conditions', 'Occupation and activities']
-        .map(q => ({ type: 'likert', label: q, min: 0, max: 4, options: ['No problem', 'Minor problem', 'Mild problem', 'Moderately severe', 'Severe to very severe'] })),
-    ]},
-    { name: 'LSP-16 (Life Skills Profile)', type: 'assessment', category: 'Rating Scales', content: [
-      { type: 'heading', text: 'LSP-16 Life Skills' },
-      { type: 'instruction', text: 'Rate each item based on the last 3 months.' },
-    ]},
-    { name: 'BPRS (Brief Psychiatric Rating Scale)', type: 'assessment', category: 'Rating Scales', content: [
-      { type: 'heading', text: 'BPRS-24' },
-    ]},
+    // HoNOS/K10/LSP-16 removed from Rating Scales seed — they are outcome measures
+    // and are surfaced via the Outcome Measures tab (canonical SSoT: packages/shared/src/assessmentTaxonomy.ts)
+    // BPRS/AIMS are intentionally not seeded here. Complete clinician-rated
+    // instrument definitions are managed by seed-rating-scales.ts; partial
+    // placeholders create non-comparable clinical scores.
 
     // Assessments
     { name: 'Mental State Examination (MSE)', type: 'assessment', category: 'Assessments', content: [
@@ -85,12 +73,6 @@ async function seed() {
       { type: 'multiple_choice', label: 'Overall risk level', options: ['Low', 'Moderate', 'High', 'Extreme'] },
       { type: 'short_answer', label: 'Risk management plan' },
     ]},
-    { name: 'AIMS (Abnormal Involuntary Movement Scale)', type: 'assessment', category: 'Rating Scales', content: [
-      { type: 'heading', text: 'AIMS Assessment' },
-      ...['Muscles of facial expression', 'Lips and perioral area', 'Jaw', 'Tongue', 'Upper extremities', 'Lower extremities', 'Trunk']
-        .map(q => ({ type: 'likert', label: q, min: 0, max: 4, options: ['None', 'Minimal', 'Mild', 'Moderate', 'Severe'] })),
-    ]},
-
     // Clinical Notes
     { name: 'Progress Note (SOAP)', type: 'note', category: 'Clinical Notes', content: [
       { type: 'heading', text: 'Progress Note' },

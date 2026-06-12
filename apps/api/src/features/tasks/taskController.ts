@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from 'express';
 import * as taskService from './taskService';
 import {
   TaskCreateSchema,
+  TaskMonitoringSummarySchema,
   TaskUpdateSchema,
   TaskListQuerySchema,
 } from '@signacare/shared';
@@ -24,6 +25,17 @@ export async function listTasks(req: Request, res: Response, next: NextFunction)
     const auth = buildAuthContext(req, filters.patientId ?? undefined);
     const tasks = await taskService.listTasks(auth, filters);
     res.json(tasks);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function getTaskMonitoringSummary(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const filters = TaskListQuerySchema.parse(req.query);
+    const auth = buildAuthContext(req, filters.patientId ?? undefined);
+    const summary = await taskService.getTaskMonitoringSummary(auth, filters);
+    res.json(TaskMonitoringSummarySchema.parse(summary));
   } catch (err) {
     next(err);
   }

@@ -1,5 +1,9 @@
 import { Router } from 'express'
 import { z } from 'zod'
+import {
+  ClinicAiRuntimeSettingsSchema,
+  ClinicAiRuntimeSettingsUpdateSchema,
+} from '@signacare/shared'
 import multer from 'multer'
 import path from 'path'
 import type { Knex } from 'knex'
@@ -15,6 +19,10 @@ import { logger } from '../../utils/logger'
 import { AppError, ErrorCode } from '../../shared/errors'
 import { withTenantContext } from '../../shared/tenantContext'
 import { canonicalizeModuleKey, LEGACY_MODULE_KEY_ALIASES } from '../../shared/moduleKeys'
+import {
+  getClinicAiRuntimeSettings,
+  upsertClinicAiRuntimeSettings,
+} from '../llm/modelRouter/clinicAiRuntimeSettings'
 
 // Local Zod schema (Phase R3b / CLAUDE.md §12) — both endpoints toggle
 // a single boolean flag on either specialties or modules.
@@ -208,8 +216,8 @@ async function writeLevelLabelsByClinic(
 // S1.1-DEFERRED-A: Logo upload now goes through the BlobStorage facade
 // using memory storage. The returned URL is the same shape the frontend
 // has always used (`/uploads/logos/...` for local backend), produced by
-// blobStorage.getDownloadUrl, which falls through to S3 presigned URLs
-// when BLOB_STORAGE_BACKEND=s3.
+// blobStorage.getDownloadUrl, which falls through to cloud signed URLs
+// when BLOB_STORAGE_BACKEND is azure-blob or s3.
 const logoUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 2 * 1024 * 1024 }, // 2MB max
@@ -637,6 +645,57 @@ const PowerAccessAdminsSchema = z.object({
 // clinic. Superadmin-only (this is cross-clinic visibility; regular
 // admins use staff/lookup which is clinic-scoped). Filters server-side
 // so the client never handles role strings.
+powerSettingsRoutes.get(
+  '/clinics/:clinicId/ai-runtime',
+  requireRole('superadmin'),
+  async (req, res, next) => {
+    try {
+      const runtime = await getClinicAiRuntimeSettings(req.params.clinicId)
+      res.json(ClinicAiRuntimeSettingsSchema.parse(runtime))
+    } catch (err) { next(err) }
+  },
+)
+
+powerSettingsRoutes.put(
+  '/clinics/:clinicId/ai-runtime',
+  requireRole('superadmin'),
+  async (req, res, next) => {
+    try {
+      if (!req.user?.id) {
+        res.status(401).json({ error: 'Unauthenticated', code: 'UNAUTHENTICATED' })
+        return
+      }
+
+      const clinicId = req.params.clinicId
+      const patch = ClinicAiRuntimeSettingsUpdateSchema.parse(req.body ?? {})
+      const before = await getClinicAiRuntimeSettings(clinicId)
+      const updated = await upsertClinicAiRuntimeSettings(clinicId, patch)
+
+      const { writeAuditLog } = await import('../../utils/audit')
+      await writeAuditLog({
+        clinicId,
+        userId: req.user.id,
+        ipAddress: req.ip,
+        tableName: 'clinic_settings',
+        recordId: clinicId,
+        action: 'UPDATE',
+        oldData: {
+          ai_llm_backend: before.llmBackend,
+          scribe_runtime_mode: before.scribeRuntimeMode,
+          local_style_adapter_model_name: before.localStyleAdapterModelName,
+        },
+        newData: {
+          ai_llm_backend: updated.llmBackend,
+          scribe_runtime_mode: updated.scribeRuntimeMode,
+          local_style_adapter_model_name: updated.localStyleAdapterModelName,
+        },
+      })
+
+      res.json(ClinicAiRuntimeSettingsSchema.parse(updated))
+    } catch (err) { next(err) }
+  },
+)
+
 powerSettingsRoutes.get(
   '/clinics/:clinicId/staff',
   requireRole('superadmin'),

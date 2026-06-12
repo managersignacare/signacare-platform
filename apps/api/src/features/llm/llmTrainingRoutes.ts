@@ -15,6 +15,7 @@ import { requireFeatureEnabled } from '../../middleware/featureFlagMiddleware';
 import { db } from '../../db/db';
 import { logger } from '../../utils/logger';
 import { resolveBinary } from '../../shared/binaryResolver';
+import { listOllamaTags } from '../../shared/ollamaHttpClient';
 
 // ── Local Zod schemas (Phase R3b / CLAUDE.md §12) ────────────────────────────
 // Ollama model name format: `[a-z0-9][a-z0-9._-]*` plus optional `:tag`.
@@ -40,6 +41,13 @@ const RagTestQuerySchema = z.object({
 const TrainingStartSchema = z.object({
   baseModel: z.string().regex(OLLAMA_NAME_RE).optional(),
   adapterName: z.string().regex(OLLAMA_NAME_RE).optional(),
+});
+
+const TrainingAdapterCreateResponseSchema = z.object({
+  ok: z.literal(true),
+  modelName: z.string().regex(OLLAMA_NAME_RE),
+  modelfile: z.string().min(1),
+  registeredAsClinicDefaultAdapter: z.literal(true),
 });
 
 // Explicit column list for .returning() (Phase R3 / CLAUDE.md §1.7).
@@ -428,8 +436,24 @@ ${systemPrompt}
       const execFileAsync = promisify(execFile);
       const ollamaBin = resolveBinary('ollama');
       await execFileAsync(ollamaBin, ['create', name, '-f', modelfilePath], { timeout: 120_000 });
+      await db('clinic_settings')
+        .insert({
+          clinic_id: req.clinicId,
+          local_style_adapter_model_name: name,
+          updated_at: new Date(),
+        })
+        .onConflict('clinic_id')
+        .merge({
+          local_style_adapter_model_name: name,
+          updated_at: new Date(),
+        });
       logger.info({ name, model }, '[AI Training] Modelfile created successfully');
-      res.json({ ok: true, modelName: name, modelfile });
+      res.json(TrainingAdapterCreateResponseSchema.parse({
+        ok: true,
+        modelName: name,
+        modelfile,
+        registeredAsClinicDefaultAdapter: true,
+      }));
     } finally {
       await fs.unlink(modelfilePath).catch(err => { logger.debug({ err }, 'Model file cleanup'); });
     }
@@ -445,9 +469,8 @@ ${systemPrompt}
 // GET /llm/training/adapters — list available custom models in Ollama
 router.get('/training/adapters', requireRoles(ADMIN), async (_req: Request, res: Response, _next: NextFunction) => {
   try {
-    const axios = (await import('axios')).default;
-    const resp = await axios.get('http://localhost:11434/api/tags', { timeout: 5000 });
-    const modelsRaw: unknown = resp.data?.models;
+    const resp = await listOllamaTags();
+    const modelsRaw: unknown = resp.models;
     const models: OllamaModelTag[] = Array.isArray(modelsRaw)
       ? modelsRaw.filter((m): m is OllamaModelTag => !!m && typeof m === 'object')
       : [];

@@ -26,6 +26,13 @@ interface ColumnRow {
   table_name: string;
   column_name: string;
   ordinal_position: number;
+  data_type: string;
+  udt_name: string;
+  is_nullable: 'YES' | 'NO';
+  column_default: string | null;
+  character_maximum_length: number | null;
+  numeric_precision: number | null;
+  numeric_scale: number | null;
 }
 
 // BUG-637 — FK metadata captured for the FK-aware join lint guard.
@@ -50,6 +57,16 @@ interface SchemaSnapshot {
   generatedAtIso: string;
   database: string;
   tables: Record<string, string[]>;
+  columnMetadata: Record<string, Record<string, {
+    dataType: string;
+    udtName: string;
+    isNullable: boolean;
+    hasDefault: boolean;
+    characterMaximumLength: number | null;
+    numericPrecision: number | null;
+    numericScale: number | null;
+    ordinalPosition: number;
+  }>>;
   // BUG-637 — FK relationships keyed by `localTable.localColumn` →
   // `{ foreignTable, foreignColumn }`. Structure preserved as a flat
   // map (not nested) so consumers can lookup `fkByLocalColumn['ma.patient_medication_id']`
@@ -64,18 +81,46 @@ async function main(): Promise<void> {
     .from('columns')
     .where({ table_schema: 'public' })
     .orderBy(['table_name', 'ordinal_position'])
-    .select('table_name', 'column_name', 'ordinal_position')) as ColumnRow[];
+    .select(
+      'table_name',
+      'column_name',
+      'ordinal_position',
+      'data_type',
+      'udt_name',
+      'is_nullable',
+      'column_default',
+      'character_maximum_length',
+      'numeric_precision',
+      'numeric_scale',
+    )) as ColumnRow[];
 
   const tables: Record<string, string[]> = {};
+  const columnMetadata: SchemaSnapshot['columnMetadata'] = {};
   for (const r of rows) {
     if (!tables[r.table_name]) tables[r.table_name] = [];
     tables[r.table_name].push(r.column_name);
+    if (!columnMetadata[r.table_name]) columnMetadata[r.table_name] = {};
+    columnMetadata[r.table_name][r.column_name] = {
+      dataType: r.data_type,
+      udtName: r.udt_name,
+      isNullable: r.is_nullable === 'YES',
+      hasDefault: r.column_default !== null,
+      characterMaximumLength: r.character_maximum_length,
+      numericPrecision: r.numeric_precision,
+      numericScale: r.numeric_scale,
+      ordinalPosition: r.ordinal_position,
+    };
   }
 
   // Sort tables by name so the JSON is deterministic.
   const sortedTables: Record<string, string[]> = {};
+  const sortedColumnMetadata: SchemaSnapshot['columnMetadata'] = {};
   for (const name of Object.keys(tables).sort()) {
     sortedTables[name] = tables[name];
+    sortedColumnMetadata[name] = {};
+    for (const columnName of tables[name]) {
+      sortedColumnMetadata[name][columnName] = columnMetadata[name][columnName];
+    }
   }
 
   // BUG-637 — extract FK relationships for the FK-aware join lint guard.
@@ -120,6 +165,7 @@ async function main(): Promise<void> {
     generatedAtIso: now.toISOString(), // full timestamp — guarantees git-visible diff per regen
     database: dbNameRow.name,
     tables: sortedTables,
+    columnMetadata: sortedColumnMetadata,
     foreignKeys: sortedFks,
   };
 

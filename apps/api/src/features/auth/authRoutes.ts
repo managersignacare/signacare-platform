@@ -22,6 +22,7 @@ import { logger } from '../../utils/logger';
 import { writeAuditLog } from '../../utils/audit';
 import { withTenantContext } from '../../shared/tenantContext';
 import { assertPasswordNotBreached } from './passwordBreachService';
+import { effectiveIdleMinutesForClinic, primeIdleWindow } from '../../middleware/sessionIdleMiddleware';
 import bcrypt from 'bcryptjs';
 import { StaffRepository } from '../staff/staffRepository';
 import { AppError } from '../../shared/errors';
@@ -488,14 +489,14 @@ authRouter.post('/password-reset/confirm', asyncHandler(async (req, res) => {
 
 // ── HIPAA: Password Change ──
 authRouter.post('/change-password', authMiddleware, asyncHandler(async (req, res) => {
-  const { ChangePasswordSchema } = await import('@signacare/shared');
+  const { ChangePasswordResponseSchema, ChangePasswordSchema } = await import('@signacare/shared');
   const { currentPassword, newPassword } = ChangePasswordSchema.parse(req.body);
 
   const authService = new AuthService();
   const ip = (req.headers['x-forwarded-for'] as string) ?? req.ip ?? undefined;
   const userAgent = req.headers['user-agent'];
 
-  await authService.changePassword(
+  const result = await authService.changePassword(
     req.user!.id,
     req.user!.clinicId,
     currentPassword,
@@ -503,7 +504,6 @@ authRouter.post('/change-password', authMiddleware, asyncHandler(async (req, res
     { ipAddress: ip, userAgent },
   );
 
-  // Clear auth cookies — user must log in again with the new password
   const isProd = process.env.NODE_ENV === 'production';
   const cookieOpts = {
     httpOnly: true,
@@ -512,10 +512,34 @@ authRouter.post('/change-password', authMiddleware, asyncHandler(async (req, res
     path: '/',
     ...(process.env.COOKIE_DOMAIN ? { domain: process.env.COOKIE_DOMAIN } : {}),
   };
-  res.clearCookie('signacare_access', cookieOpts);
-  res.clearCookie('signacare_refresh', cookieOpts);
+  res.cookie('signacare_access', result.accessToken, {
+    ...cookieOpts,
+    maxAge: config.jwt.accessTtlMinutes * 60 * 1000,
+  });
+  res.cookie('signacare_refresh', result.refreshToken, {
+    ...cookieOpts,
+    maxAge: config.jwt.refreshTtlDays * 24 * 60 * 60 * 1000,
+  });
 
-  res.status(200).json({ success: true, message: 'Password changed. Please log in again.' });
+  void effectiveIdleMinutesForClinic(result.user.clinicId)
+    .then((minutes) => primeIdleWindow(result.user.id, minutes))
+    .catch((err: unknown) => {
+      logger.warn(
+        { err, staffId: result.user.id, clinicId: result.user.clinicId, op: 'prime' },
+        'sessionIdleMiddleware.primeIdleWindow failed after password change',
+      );
+  });
+
+  const isMobile = req.headers['x-client'] === 'mobile';
+  res.status(200).json(ChangePasswordResponseSchema.parse({
+    success: true,
+    message: 'Password changed successfully.',
+    user: result.user,
+    ...(isMobile && {
+      accessToken: result.accessToken,
+      refreshToken: result.refreshToken,
+    }),
+  }));
 }));
 
 // ── MFA Setup (TOTP) ──

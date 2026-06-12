@@ -3,28 +3,56 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import {
-    Alert, Box, Button, Card, CardContent, Chip, Dialog, DialogActions,
-    DialogContent, DialogTitle, Divider, FormControl, Grid, IconButton, InputLabel,
-    MenuItem, Select, Tab, Tabs, TextField, Tooltip, Typography
+  Alert,
+  Box,
+  Button,
+  Card,
+  CardContent,
+  Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Divider,
+  FormControl,
+  Grid,
+  IconButton,
+  InputLabel,
+  MenuItem,
+  Paper,
+  Select,
+  Tab,
+  Tabs,
+  TextField,
+  Tooltip,
+  Typography,
 } from '@mui/material';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
-import { OPEN_TASK_STATUSES } from '@signacare/shared';
+import type {
+  TaskMonitoringSummary,
+  TaskOwnershipFilter,
+  TaskPriority,
+  TaskStatus,
+} from '@signacare/shared';
 import { apiClient } from '../../../shared/services/apiClient';
-import { DigitalSignatureDialog, useStaffSignature } from '../../../shared/components/ui/DigitalSignature';
+import {
+  DigitalSignatureDialog,
+  useStaffSignature,
+} from '../../../shared/components/ui/DigitalSignature';
 import { useAuthStore } from '../../../shared/store/authStore';
-import { tasksKeys, staffLookupKeys } from '../queryKeys';
-import { getTaskType, type TaskResponseView as Task } from '../types/taskTypes';
 import { orgSettingsApi, type OrgUnit } from '../../org-settings/services/orgSettingsApi';
-
-interface TaskListResponse {
-  data: Task[];
-}
-
-function readTaskRows(payload: Task[] | TaskListResponse | undefined): Task[] {
-  if (!payload) return [];
-  return Array.isArray(payload) ? payload : payload.data ?? [];
-}
+import { useTasks, useTaskSummary } from '../hooks/useTasks';
+import { staffLookupKeys, tasksKeys } from '../queryKeys';
+import { getTaskType, type TaskResponseView as Task } from '../types/taskTypes';
+import {
+  buildMonitoringCards,
+  humanizeTaskStatus,
+  priorityTone,
+  statusTone,
+  workbenchBucketToQuery,
+  type TaskWorkbenchBucket,
+} from '../taskMonitoringSupport';
 
 function flattenUnits(nodes: OrgUnit[]): { id: string; name: string }[] {
   const out: { id: string; name: string }[] = [];
@@ -47,24 +75,244 @@ interface TaskMutationErrorLike {
   };
 }
 
-const asTaskMutationError = (error: unknown): TaskMutationErrorLike =>
-  (error && typeof error === 'object' ? error : {}) as TaskMutationErrorLike;
+type ScopeMode = 'my' | 'team';
+type LayoutMode = 'list' | 'board';
+type BucketMode = 'all' | TaskWorkbenchBucket;
 
-const getTaskMutationErrorMessage = (error: unknown): string => {
-  const parsed = asTaskMutationError(error);
-  return parsed.response?.data?.error ?? parsed.message ?? 'Unknown';
-};
+const STATUS_OPTIONS: Array<{ value: '' | TaskStatus; label: string }> = [
+  { value: '', label: 'All statuses' },
+  { value: 'pending', label: 'Pending' },
+  { value: 'in_progress', label: 'In progress' },
+  { value: 'waiting_external', label: 'Waiting external' },
+  { value: 'blocked', label: 'Blocked' },
+  { value: 'review_pending', label: 'Review pending' },
+  { value: 'completed', label: 'Completed' },
+];
 
-const OPEN_TASK_STATUS_SET: ReadonlySet<string> = new Set<string>(OPEN_TASK_STATUSES);
+const PRIORITY_OPTIONS: Array<{ value: '' | TaskPriority; label: string }> = [
+  { value: '', label: 'All priorities' },
+  { value: 'urgent', label: 'Urgent' },
+  { value: 'high', label: 'High' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'low', label: 'Low' },
+];
 
-function isOpenTaskStatus(status: string | null | undefined): boolean {
-  return OPEN_TASK_STATUS_SET.has(String(status ?? '').toLowerCase());
+const OWNERSHIP_OPTIONS: Array<{ value: '' | TaskOwnershipFilter; label: string }> = [
+  { value: '', label: 'All ownership' },
+  { value: 'assigned', label: 'Assigned' },
+  { value: 'unassigned', label: 'Unassigned' },
+];
+
+const BUCKET_OPTIONS: Array<{ value: BucketMode; label: string }> = [
+  { value: 'all', label: 'All open' },
+  { value: 'overdue', label: 'Overdue' },
+  { value: 'today', label: 'Today' },
+  { value: 'next_7_days', label: 'Next 7 Days' },
+  { value: 'undated', label: 'Undated' },
+  { value: 'waiting_external', label: 'Waiting external' },
+  { value: 'blocked', label: 'Blocked' },
+  { value: 'review_pending', label: 'Review pending' },
+];
+
+const BOARD_STATUSES: TaskStatus[] = [
+  'pending',
+  'in_progress',
+  'waiting_external',
+  'blocked',
+  'review_pending',
+];
+
+function useStaffLookup() {
+  return useQuery({
+    queryKey: staffLookupKeys.all,
+    queryFn: () =>
+      apiClient.get<{ id: string; givenName: string; familyName: string }[]>(
+        'staff/lookup',
+      ),
+    staleTime: 5 * 60 * 1000,
+  });
 }
 
-function useStaffLookup() { return useQuery({ queryKey: staffLookupKeys.all, queryFn: () => apiClient.get<{ id: string; givenName: string; familyName: string }[]>('staff/lookup'), staleTime: 5 * 60 * 1000 }); }
+function formatTaskMutationError(error: unknown): string {
+  const parsed = (error && typeof error === 'object' ? error : {}) as TaskMutationErrorLike;
+  return parsed.response?.data?.error ?? parsed.message ?? 'Unknown error';
+}
+
+function isOverdue(task: Task): boolean {
+  return !!task.dueDate && task.status !== 'completed' && task.dueDate < new Date().toISOString().slice(0, 10);
+}
+
+function buildScopeQuery(args: {
+  scope: ScopeMode;
+  userId?: string;
+  teamId: string;
+  bucket: BucketMode;
+  status: '' | TaskStatus;
+  priority: '' | TaskPriority;
+  ownership: '' | TaskOwnershipFilter;
+  clinicianId: string;
+}) {
+  const scopeQuery = args.scope === 'my'
+    ? { assignedToId: args.userId }
+    : args.teamId
+      ? { teamId: args.teamId }
+      : { teamScope: 'mine' as const };
+  const bucketQuery = args.bucket === 'all' ? {} : workbenchBucketToQuery(args.bucket);
+  return {
+    ...scopeQuery,
+    ...(args.clinicianId ? { assignedToId: args.clinicianId } : {}),
+    ...(args.status ? { status: args.status } : {}),
+    ...(args.priority ? { priority: args.priority } : {}),
+    ...(args.ownership ? { ownership: args.ownership } : {}),
+    ...bucketQuery,
+  };
+}
+
+function TaskRow(props: {
+  task: Task;
+  onView: (task: Task) => void;
+  onEdit: (task: Task) => void;
+  onComplete: (task: Task) => void;
+}) {
+  const { task } = props;
+  const overdue = isOverdue(task);
+  return (
+    <Card
+      variant="outlined"
+      sx={{
+        borderRadius: 3,
+        borderLeft: `4px solid ${overdue ? '#D32F2F' : '#327C8D'}`,
+        bgcolor: overdue ? '#FFF6F4' : '#fff',
+      }}
+    >
+      <CardContent
+        sx={{
+          py: 1.5,
+          '&:last-child': { pb: 1.5 },
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: 2,
+        }}
+      >
+        <Box sx={{ minWidth: 0, flex: 1 }}>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 0.75 }}>
+            <Typography variant="body2" fontWeight={700}>{task.title}</Typography>
+            <Chip label={humanizeTaskStatus(task.status)} size="small" color={statusTone(task.status)} sx={{ textTransform: 'capitalize' }} />
+            <Chip label={task.priority} size="small" color={priorityTone(task.priority)} sx={{ textTransform: 'capitalize' }} />
+            {getTaskType(task) && (
+              <Chip
+                label={getTaskType(task).replace(/_/g, ' ')}
+                size="small"
+                variant="outlined"
+                sx={{ textTransform: 'capitalize' }}
+              />
+            )}
+          </Box>
+          {task.description && (
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+              {task.description}
+            </Typography>
+          )}
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.25, mt: 0.75 }}>
+            {task.patientName && (
+              <Typography variant="caption" color="text.secondary">Patient: {task.patientName}</Typography>
+            )}
+            {task.assignedToName && (
+              <Typography variant="caption" color="text.secondary">Owner: {task.assignedToName}</Typography>
+            )}
+            {!task.assignedToName && (
+              <Typography variant="caption" color="warning.main">Owner: Unassigned</Typography>
+            )}
+            {task.dueDate && (
+              <Typography variant="caption" color={overdue ? 'error.main' : 'text.secondary'}>
+                Due: {new Date(task.dueDate).toLocaleDateString('en-AU')}
+              </Typography>
+            )}
+            {!task.dueDate && (
+              <Typography variant="caption" color="text.secondary">No due date</Typography>
+            )}
+          </Box>
+        </Box>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
+          <Tooltip title="View task">
+            <IconButton size="small" onClick={() => props.onView(task)}>
+              <VisibilityOutlinedIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Edit task">
+            <IconButton size="small" onClick={() => props.onEdit(task)}>
+              <EditOutlinedIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+          {task.status !== 'completed' && (
+            <Tooltip title="Complete task">
+              <IconButton color="success" onClick={() => props.onComplete(task)}>
+                <CheckCircleIcon />
+              </IconButton>
+            </Tooltip>
+          )}
+        </Box>
+      </CardContent>
+    </Card>
+  );
+}
+
+function MonitoringPanel(props: {
+  summary?: TaskMonitoringSummary;
+  title: string;
+  subtitle: string;
+}) {
+  if (!props.summary) return null;
+  const cards = buildMonitoringCards(props.summary);
+  return (
+    <Paper variant="outlined" sx={{ p: 2.25, borderRadius: 3 }}>
+      <Typography variant="h6" fontWeight={800}>{props.title}</Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        {props.subtitle}
+      </Typography>
+      <Grid container spacing={1.5} sx={{ mb: 2 }}>
+        {cards.map((card) => (
+          <Grid key={card.id} size={{ xs: 6, md: 4 }}>
+            <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2, bgcolor: '#FCFBF9' }}>
+              <Typography variant="caption" color="text.secondary">{card.label}</Typography>
+              <Typography variant="h6" fontWeight={800}>{card.value}</Typography>
+            </Paper>
+          </Grid>
+        ))}
+      </Grid>
+      <Typography variant="subtitle2" fontWeight={800} sx={{ mb: 1 }}>
+        Ownership radar
+      </Typography>
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+        {props.summary.assigneeBreakdown.slice(0, 6).map((row) => (
+          <Box
+            key={row.staffId ?? 'unassigned'}
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: '1.4fr repeat(5, minmax(0, 72px))',
+              gap: 1,
+              alignItems: 'center',
+              py: 0.75,
+              borderBottom: '1px solid',
+              borderColor: 'divider',
+            }}
+          >
+            <Typography variant="body2" fontWeight={700}>{row.displayName}</Typography>
+            <Typography variant="caption" color="text.secondary">Open {row.openCount}</Typography>
+            <Typography variant="caption" color={row.overdueCount > 0 ? 'error.main' : 'text.secondary'}>OD {row.overdueCount}</Typography>
+            <Typography variant="caption" color={row.dueTodayCount > 0 ? 'warning.main' : 'text.secondary'}>Today {row.dueTodayCount}</Typography>
+            <Typography variant="caption" color={row.blockedCount > 0 ? 'error.main' : 'text.secondary'}>Blocked {row.blockedCount}</Typography>
+            <Typography variant="caption" color={row.waitingExternalCount > 0 ? 'warning.main' : 'text.secondary'}>Waiting {row.waitingExternalCount}</Typography>
+          </Box>
+        ))}
+      </Box>
+    </Paper>
+  );
+}
 
 export default function TasksPage() {
-  const user = useAuthStore(s => s.user);
+  const user = useAuthStore((s) => s.user);
   const qc = useQueryClient();
   const { data: staffList } = useStaffLookup();
   const { data: teamTree = [] } = useQuery({
@@ -73,243 +321,358 @@ export default function TasksPage() {
     staleTime: 5 * 60 * 1000,
   });
   const flatUnits = useMemo(() => flattenUnits(teamTree), [teamTree]);
-  const [view, setView] = useState<'my' | 'team'>('my');
-  const [addOpen, setAddOpen] = useState(false);
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [priority, setPriority] = useState('medium');
-  const [assignTo, setAssignTo] = useState('');
-  const [dueDate, setDueDate] = useState('');
+
+  const [scope, setScope] = useState<ScopeMode>('my');
+  const [layout, setLayout] = useState<LayoutMode>('list');
+  const [bucket, setBucket] = useState<BucketMode>('all');
+  const [statusFilter, setStatusFilter] = useState<'' | TaskStatus>('');
+  const [priorityFilter, setPriorityFilter] = useState<'' | TaskPriority>('');
+  const [ownershipFilter, setOwnershipFilter] = useState<'' | TaskOwnershipFilter>('');
   const [teamFilter, setTeamFilter] = useState('');
   const [clinicianFilter, setClinicianFilter] = useState('');
   const [patientFilter, setPatientFilter] = useState('');
-  const [periodFilter, setPeriodFilter] = useState('all');
-  const [editTask, setEditTask] = useState<Task | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [priority, setPriority] = useState<TaskPriority>('medium');
+  const [assignTo, setAssignTo] = useState('');
+  const [dueDate, setDueDate] = useState('');
   const [viewTask, setViewTask] = useState<Task | null>(null);
+  const [editTask, setEditTask] = useState<Task | null>(null);
   const [editTitle, setEditTitle] = useState('');
-  const [editPriority, setEditPriority] = useState('medium');
+  const [editDescription, setEditDescription] = useState('');
+  const [editPriority, setEditPriority] = useState<TaskPriority>('medium');
   const [editAssign, setEditAssign] = useState('');
   const [editDueDate, setEditDueDate] = useState('');
-  const [editTags, setEditTags] = useState('');
-
-  // My tasks are always explicitly scoped to the signed-in clinician.
-  const { data: myTasksData = [] } = useQuery({
-    queryKey: tasksKeys.list({ assignedToId: user?.id || undefined }),
-    queryFn: () =>
-      apiClient.get<Task[] | TaskListResponse>('tasks', user?.id ? { assignedToId: user.id } : undefined),
-    enabled: !!user?.id,
-  });
-
-  // Team tasks default to "my team scope" and can be narrowed to a specific team.
-  const { data: teamTasksData = [] } = useQuery({
-    queryKey: tasksKeys.list(
-      teamFilter
-        ? { teamId: teamFilter }
-        : { teamScope: 'mine' },
-    ),
-    queryFn: () =>
-      apiClient.get<Task[] | TaskListResponse>(
-        'tasks',
-        teamFilter ? { teamId: teamFilter } : { teamScope: 'mine' },
-      ),
-  });
-
-  const myTasks = readTaskRows(myTasksData).filter((t) => isOpenTaskStatus(t.status));
-  const teamTasks = readTaskRows(teamTasksData).filter((t) => isOpenTaskStatus(t.status));
-  const completedTasks = (view === 'my' ? readTaskRows(myTasksData) : readTaskRows(teamTasksData))
-    .filter((t) => t.status === 'completed');
+  const [editStatus, setEditStatus] = useState<TaskStatus>('pending');
   const [showArchive, setShowArchive] = useState(false);
-  const [dueDateFilter, setDueDateFilter] = useState('');
+  const [signTask, setSignTask] = useState<Task | null>(null);
+  const { signature: savedSignature } = useStaffSignature();
+
+  const taskQuery = useMemo(() => buildScopeQuery({
+    scope,
+    userId: user?.id,
+    teamId: teamFilter,
+    bucket,
+    status: statusFilter,
+    priority: priorityFilter,
+    ownership: ownershipFilter,
+    clinicianId: scope === 'team' ? clinicianFilter : '',
+  }), [bucket, clinicianFilter, ownershipFilter, priorityFilter, scope, statusFilter, teamFilter, user?.id]);
+
+  const { data: openTasks = [], isLoading, isError } = useTasks(taskQuery);
+  const { data: completedTasks = [] } = useTasks({
+    ...(scope === 'my' ? { assignedToId: user?.id } : teamFilter ? { teamId: teamFilter } : { teamScope: 'mine' as const }),
+    ...(scope === 'team' && clinicianFilter ? { assignedToId: clinicianFilter } : {}),
+    status: 'completed',
+  });
+  const { data: summary } = useTaskSummary({
+    ...(scope === 'my' ? { assignedToId: user?.id } : teamFilter ? { teamId: teamFilter } : { teamScope: 'mine' as const }),
+    ...(scope === 'team' && clinicianFilter ? { assignedToId: clinicianFilter } : {}),
+  });
+
+  const displayTasks = useMemo(
+    () => openTasks.filter((task) => (
+      !patientFilter || task.patientName?.toLowerCase().includes(patientFilter.toLowerCase())
+    )),
+    [openTasks, patientFilter],
+  );
+
+  const boardColumns = useMemo(
+    () => BOARD_STATUSES.map((status) => ({
+      status,
+      label: humanizeTaskStatus(status),
+      tasks: displayTasks.filter((task) => task.status === status),
+    })),
+    [displayTasks],
+  );
 
   const createMut = useMutation({
-    mutationFn: (dto: { title: string; description?: string; priority: string; assignedToId?: string; dueDate?: string }) =>
-      apiClient.post('tasks', dto),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: tasksKeys.all }); },
+    mutationFn: (dto: {
+      title: string;
+      description?: string;
+      priority: TaskPriority;
+      assignedToId?: string;
+      dueDate?: string;
+    }) => apiClient.post('tasks', dto),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: tasksKeys.all });
+      setAddOpen(false);
+      setTitle('');
+      setDescription('');
+      setAssignTo('');
+      setDueDate('');
+      setPriority('medium');
+    },
   });
 
   const updateMut = useMutation({
-    mutationFn: ({ id, ...data }: { id: string; title?: string; priority?: string; assignedToId?: string; dueDate?: string }) =>
-      apiClient.patch(`tasks/${id}`, data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: tasksKeys.all }); setEditTask(null); },
+    mutationFn: (payload: {
+      id: string;
+      title?: string;
+      description?: string | null;
+      priority?: TaskPriority;
+      assignedToId?: string | null;
+      dueDate?: string | null;
+      status?: TaskStatus;
+    }) => apiClient.patch(`tasks/${payload.id}`, payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: tasksKeys.all });
+      setEditTask(null);
+    },
   });
 
   const completeMut = useMutation({
     mutationFn: (id: string) => apiClient.patch(`tasks/${id}`, { status: 'completed' }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: tasksKeys.all }); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: tasksKeys.all });
+    },
   });
-
-  const handleAdd = () => {
-    if (!title.trim()) return;
-    createMut.mutate({
-      title: title.trim(),
-      description: description.trim() || undefined,
-      priority,
-      assignedToId: assignTo || undefined,
-      dueDate: dueDate || undefined,
-    });
-    setAddOpen(false); setTitle(''); setDescription(''); setAssignTo(''); setDueDate('');
-  };
-
-  const [signTask, setSignTask] = useState<Task | null>(null);
-  const { signature: savedSignature } = useStaffSignature();
 
   const signMut = useMutation({
     mutationFn: async (task: Task) => {
-      // Determine which sign endpoint to call based on task_type
-      const tt = getTaskType(task);
-      // Find the episode ID from the task description
-      const epMatch = task.description?.match(/episode\s+([0-9a-f-]{36})/i);
-      const episodeId = epMatch?.[1] ?? task.related_entity_id ?? task.episodeId;
-      if (tt === 'discharge_review' && episodeId) {
+      const taskType = getTaskType(task);
+      const episodeMatch = task.description?.match(/episode\s+([0-9a-f-]{36})/i);
+      const episodeId = episodeMatch?.[1] ?? task.related_entity_id ?? task.episodeId;
+      if (taskType === 'discharge_review' && episodeId) {
         await apiClient.post(`episodes/${episodeId}/discharge-summary/sign`, { signature: savedSignature });
-      } else if (tt === 'closure_review' && episodeId) {
+      } else if (taskType === 'closure_review' && episodeId) {
         await apiClient.post(`episodes/${episodeId}/close-sign`, { signature: savedSignature });
       }
-      // Also mark task as completed
       await apiClient.patch(`tasks/${task.id}`, { status: 'completed' });
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: tasksKeys.all }); setSignTask(null); },
-    onError: (error: unknown) => alert(`Sign failed: ${getTaskMutationErrorMessage(error)}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: tasksKeys.all });
+      setSignTask(null);
+    },
+    onError: (error: unknown) => window.alert(`Sign failed: ${formatTaskMutationError(error)}`),
   });
 
   const handleComplete = (task: Task) => {
-    const tt = getTaskType(task);
-    if (tt === 'discharge_review' || tt === 'closure_review') {
+    const taskType = getTaskType(task);
+    if (taskType === 'discharge_review' || taskType === 'closure_review') {
       if (savedSignature) {
         signMut.mutate(task);
       } else {
         setSignTask(task);
       }
-    } else {
-      completeMut.mutate(task.id);
+      return;
     }
+    completeMut.mutate(task.id);
   };
-  const baseTasks = view === 'my' ? myTasks : teamTasks;
-  const displayTasks = baseTasks.filter(t => {
-    if (patientFilter && !t.patientName?.toLowerCase().includes(patientFilter.toLowerCase())) return false;
-    if (clinicianFilter && t.assignedToId !== clinicianFilter) return false;
-    if (periodFilter !== 'all') {
-      const days = periodFilter === '7d' ? 7 : periodFilter === '30d' ? 30 : 90;
-      const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - days);
-      if (t.createdAt && new Date(t.createdAt) < cutoff) return false;
-    }
-    if (dueDateFilter) {
-      const due = t.dueDate;
-      if (!due || new Date(due).toISOString().split('T')[0] > dueDateFilter) return false;
-    }
-    return true;
-  });
 
   return (
     <Box sx={{ px: { xs: 2, sm: 3, md: 4 }, py: 3, bgcolor: '#FBF8F5', minHeight: '100vh' }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', mb: 3, gap: 2 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', mb: 3, gap: 2, flexWrap: 'wrap' }}>
         <Box>
-          <Typography variant="h5" fontWeight={700} fontFamily="Albert Sans, sans-serif" sx={{ color: '#3D484B' }}>Tasks</Typography>
-          <Typography variant="body2" color="text.secondary">Manage and delegate clinical tasks</Typography>
+          <Typography variant="h5" fontWeight={800} fontFamily="Albert Sans, sans-serif" sx={{ color: '#3D484B' }}>
+            Clinical Task Workbench
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Own the next action, track what is blocked, and monitor follow-up drift across the team.
+          </Typography>
         </Box>
-        <Button startIcon={<AddIcon />} variant="contained" onClick={() => setAddOpen(true)} sx={{ bgcolor: '#b8621a', '&:hover': { bgcolor: '#d6741f' } }}>New Task</Button>
+        <Button
+          startIcon={<AddIcon />}
+          variant="contained"
+          onClick={() => setAddOpen(true)}
+          sx={{ bgcolor: '#b8621a', '&:hover': { bgcolor: '#d6741f' } }}
+        >
+          New Task
+        </Button>
       </Box>
 
-      <Tabs aria-label="Navigation tabs" value={view} onChange={(_, v) => setView(v)} sx={{ mb: 2, '& .MuiTab-root': { textTransform: 'none' } }}>
-        <Tab label={`My Tasks (${myTasks.length})`} value="my" />
-        <Tab label={`Team Tasks (${teamTasks.length})`} value="team" />
+      <Tabs value={scope} onChange={(_, value) => setScope(value)} sx={{ mb: 2, '& .MuiTab-root': { textTransform: 'none' } }}>
+        <Tab label="My Tasks" value="my" />
+        <Tab label="Team Tasks" value="team" />
       </Tabs>
 
-      {/* Filters */}
-      <Box sx={{ display: 'flex', gap: 1.5, mb: 2, flexWrap: 'wrap' }}>
-        <TextField size="small" placeholder="Filter by patient..." value={patientFilter} onChange={e => setPatientFilter(e.target.value)}
-          sx={{ minWidth: 160, '& .MuiOutlinedInput-root': { bgcolor: '#fff' } }} />
-        <FormControl size="small" sx={{ minWidth: 180 }}>
-          <InputLabel>Clinician</InputLabel>
-          <Select value={clinicianFilter} onChange={e => setClinicianFilter(e.target.value)} label="Clinician" sx={{ bgcolor: '#fff' }}>
-            <MenuItem value="">All Clinicians</MenuItem>
-            {(staffList ?? []).map(s => <MenuItem key={s.id} value={s.id}>{s.givenName} {s.familyName}</MenuItem>)}
-          </Select>
-        </FormControl>
-        <FormControl size="small" sx={{ minWidth: 140 }}>
-          <InputLabel>Team</InputLabel>
-          <Select value={teamFilter} onChange={e => setTeamFilter(e.target.value)} label="Team" sx={{ bgcolor: '#fff' }}>
-            <MenuItem value="">All Teams</MenuItem>
-            {flatUnits.map((u) => (
-              <MenuItem key={u.id} value={u.id}>{u.name}</MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-        <FormControl size="small" sx={{ minWidth: 140 }}>
-          <InputLabel>Period</InputLabel>
-          <Select value={periodFilter} onChange={e => setPeriodFilter(e.target.value)} label="Period" sx={{ bgcolor: '#fff' }}>
-            <MenuItem value="all">All Time</MenuItem>
-            <MenuItem value="7d">Last 7 Days</MenuItem>
-            <MenuItem value="30d">Last 30 Days</MenuItem>
-            <MenuItem value="90d">Last 90 Days</MenuItem>
-          </Select>
-        </FormControl>
-        <TextField size="small" type="date" label="Due Before" value={dueDateFilter} onChange={e => setDueDateFilter(e.target.value)}
-          slotProps={{ inputLabel: { shrink: true } }} sx={{ width: 160, '& .MuiOutlinedInput-root': { bgcolor: '#fff' } }} />
-      </Box>
+      <Grid container spacing={2} sx={{ mb: 2 }}>
+        <Grid size={{ xs: 12, lg: 8 }}>
+          <Paper variant="outlined" sx={{ p: 2.25, borderRadius: 3 }}>
+            <Typography variant="subtitle1" fontWeight={800} sx={{ mb: 1.5 }}>
+              Workbench buckets
+            </Typography>
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
+              {BUCKET_OPTIONS.map((option) => (
+                <Chip
+                  key={option.value}
+                  label={option.label}
+                  color={bucket === option.value ? 'primary' : 'default'}
+                  variant={bucket === option.value ? 'filled' : 'outlined'}
+                  onClick={() => setBucket(option.value)}
+                />
+              ))}
+            </Box>
 
-      {displayTasks.length === 0 ? (
-        <Alert severity="info">No {view === 'my' ? 'personal' : 'team'} tasks.</Alert>
-      ) : (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-          {displayTasks.map(t => (
-            <Card key={t.id} variant="outlined" sx={{ borderLeft: `4px solid ${t.priority === 'high' ? '#D32F2F' : t.priority === 'medium' ? '#b8621a' : '#327C8D'}` }}>
-              <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 }, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2 }}>
-                <Box sx={{ minWidth: 0, flex: 1 }}>
-                  <Typography variant="body2" fontWeight={600}>{t.title}</Typography>
-                  <Typography variant="caption" color="text.secondary">{t.description}</Typography>
-                  <Box sx={{ display: 'flex', gap: 0.5, mt: 0.5 }}>
-                    <Chip label={t.priority} size="small" color={t.priority === 'high' ? 'error' : 'warning'} sx={{ fontSize: 9, height: 18 }} />
-                    {getTaskType(t) && <Chip label={getTaskType(t).replace('_', ' ')} size="small" variant="outlined" sx={{ fontSize: 9, height: 18, textTransform: 'capitalize' }} />}
-                    {t.dueDate && <Typography variant="caption" color={new Date(t.dueDate) < new Date() ? 'error' : 'text.secondary'}>Due: {new Date(t.dueDate).toLocaleDateString('en-AU')}</Typography>}
-                  </Box>
-                </Box>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
-                  <Tooltip title="View full task">
-                    <IconButton size="small" onClick={() => setViewTask(t)}>
-                      <VisibilityOutlinedIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                  <Tooltip title="Edit task">
-                    <IconButton size="small" onClick={() => {
-                      setEditTask(t); setEditTitle(t.title); setEditPriority(t.priority ?? 'medium');
-                      setEditAssign(t.assignedToId ?? ''); setEditDueDate(t.dueDate ?? '');
-                    }}>
-                      <EditOutlinedIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                  <Tooltip title={(() => { const tt = getTaskType(t); return tt === 'discharge_review' || tt === 'closure_review' ? 'Sign & Complete' : 'Complete'; })()}>
-                    <IconButton color="success" onClick={() => handleComplete(t)}><CheckCircleIcon /></IconButton>
-                  </Tooltip>
-                </Box>
-              </CardContent>
-            </Card>
-          ))}
-        </Box>
+            <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+              <TextField
+                size="small"
+                placeholder="Filter by patient..."
+                value={patientFilter}
+                onChange={(event) => setPatientFilter(event.target.value)}
+                sx={{ minWidth: 180, '& .MuiOutlinedInput-root': { bgcolor: '#fff' } }}
+              />
+              {scope === 'team' && (
+                <FormControl size="small" sx={{ minWidth: 180 }}>
+                  <InputLabel>Clinician</InputLabel>
+                  <Select value={clinicianFilter} onChange={(event) => setClinicianFilter(event.target.value)} label="Clinician" sx={{ bgcolor: '#fff' }}>
+                    <MenuItem value="">All clinicians</MenuItem>
+                    {(staffList ?? []).map((staff) => (
+                      <MenuItem key={staff.id} value={staff.id}>
+                        {staff.givenName} {staff.familyName}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              )}
+              {scope === 'team' && (
+                <FormControl size="small" sx={{ minWidth: 180 }}>
+                  <InputLabel>Team</InputLabel>
+                  <Select value={teamFilter} onChange={(event) => setTeamFilter(event.target.value)} label="Team" sx={{ bgcolor: '#fff' }}>
+                    <MenuItem value="">My teams</MenuItem>
+                    {flatUnits.map((unit) => (
+                      <MenuItem key={unit.id} value={unit.id}>{unit.name}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              )}
+              <FormControl size="small" sx={{ minWidth: 170 }}>
+                <InputLabel>Status</InputLabel>
+                <Select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as '' | TaskStatus)} label="Status" sx={{ bgcolor: '#fff' }}>
+                  {STATUS_OPTIONS.map((option) => (
+                    <MenuItem key={option.label} value={option.value}>{option.label}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <FormControl size="small" sx={{ minWidth: 160 }}>
+                <InputLabel>Priority</InputLabel>
+                <Select value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value as '' | TaskPriority)} label="Priority" sx={{ bgcolor: '#fff' }}>
+                  {PRIORITY_OPTIONS.map((option) => (
+                    <MenuItem key={option.label} value={option.value}>{option.label}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <FormControl size="small" sx={{ minWidth: 160 }}>
+                <InputLabel>Ownership</InputLabel>
+                <Select value={ownershipFilter} onChange={(event) => setOwnershipFilter(event.target.value as '' | TaskOwnershipFilter)} label="Ownership" sx={{ bgcolor: '#fff' }}>
+                  {OWNERSHIP_OPTIONS.map((option) => (
+                    <MenuItem key={option.label} value={option.value}>{option.label}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <FormControl size="small" sx={{ minWidth: 150 }}>
+                <InputLabel>Layout</InputLabel>
+                <Select value={layout} onChange={(event) => setLayout(event.target.value as LayoutMode)} label="Layout" sx={{ bgcolor: '#fff' }}>
+                  <MenuItem value="list">List</MenuItem>
+                  <MenuItem value="board">Board</MenuItem>
+                </Select>
+              </FormControl>
+            </Box>
+          </Paper>
+        </Grid>
+        <Grid size={{ xs: 12, lg: 4 }}>
+          <MonitoringPanel
+            summary={summary}
+            title={scope === 'my' ? 'My monitoring snapshot' : 'Team monitoring snapshot'}
+            subtitle={scope === 'my'
+              ? 'Track what needs attention before it silently becomes overdue.'
+              : 'Use this to spot unowned work, blocked follow-up, and overload before governance drifts.'}
+          />
+        </Grid>
+      </Grid>
+
+      {isError && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          Failed to load tasks.
+        </Alert>
       )}
 
-      {/* Archive section — completed tasks */}
+      {isLoading ? (
+        <Alert severity="info">Loading tasks…</Alert>
+      ) : displayTasks.length === 0 ? (
+        <Alert severity="info">No open tasks match the current workbench filters.</Alert>
+      ) : layout === 'list' ? (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
+          {displayTasks.map((task) => (
+            <TaskRow
+              key={task.id}
+              task={task}
+              onView={setViewTask}
+              onEdit={(selectedTask) => {
+                setEditTask(selectedTask);
+                setEditTitle(selectedTask.title);
+                setEditDescription(selectedTask.description ?? '');
+                setEditPriority(selectedTask.priority);
+                setEditAssign(selectedTask.assignedToId ?? '');
+                setEditDueDate(selectedTask.dueDate ?? '');
+                setEditStatus(selectedTask.status);
+              }}
+              onComplete={handleComplete}
+            />
+          ))}
+        </Box>
+      ) : (
+        <Grid container spacing={2}>
+          {boardColumns.map((column) => (
+            <Grid key={column.status} size={{ xs: 12, md: 6, lg: 4, xl: 3 }}>
+              <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 3, minHeight: 220, bgcolor: '#FCFBF9' }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                  <Typography variant="subtitle2" fontWeight={800}>
+                    {column.label}
+                  </Typography>
+                  <Chip label={column.tasks.length} size="small" />
+                </Box>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                  {column.tasks.length === 0 ? (
+                    <Typography variant="caption" color="text.secondary">No tasks in this lane.</Typography>
+                  ) : (
+                    column.tasks.map((task) => (
+                      <Paper key={task.id} variant="outlined" sx={{ p: 1.25, borderRadius: 2 }}>
+                        <Typography variant="body2" fontWeight={700}>{task.title}</Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {task.assignedToName ?? 'Unassigned'}{task.dueDate ? ` · ${task.dueDate}` : ''}
+                        </Typography>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 0.75 }}>
+                          <Chip label={task.priority} size="small" color={priorityTone(task.priority)} sx={{ textTransform: 'capitalize' }} />
+                          <Button size="small" onClick={() => setViewTask(task)} sx={{ textTransform: 'none' }}>
+                            View
+                          </Button>
+                        </Box>
+                      </Paper>
+                    ))
+                  )}
+                </Box>
+              </Paper>
+            </Grid>
+          ))}
+        </Grid>
+      )}
+
       <Box sx={{ mt: 3 }}>
-        <Button onClick={() => setShowArchive(!showArchive)} size="small" sx={{ color: '#757575', textTransform: 'none', fontWeight: 600 }}>
+        <Button
+          onClick={() => setShowArchive((current) => !current)}
+          size="small"
+          sx={{ color: '#757575', textTransform: 'none', fontWeight: 700 }}
+        >
           Completed ({completedTasks.length}) {showArchive ? '▲' : '▼'}
         </Button>
         {showArchive && (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, mt: 1 }}>
-            {completedTasks.slice(0, 20).map(t => (
-              <Card key={t.id} variant="outlined" sx={{ opacity: 0.6, borderLeft: '4px solid #2E7D32' }}>
+            {completedTasks.slice(0, 20).map((task) => (
+              <Card key={task.id} variant="outlined" sx={{ opacity: 0.72, borderLeft: '4px solid #2E7D32' }}>
                 <CardContent sx={{ py: 1, '&:last-child': { pb: 1 }, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <Box>
-                    <Typography variant="body2" sx={{ textDecoration: 'line-through' }}>{t.title}</Typography>
-                    <Typography variant="caption" color="text.secondary">{t.createdAt ? new Date(t.createdAt).toLocaleDateString('en-AU') : ''}</Typography>
+                    <Typography variant="body2" sx={{ textDecoration: 'line-through' }}>{task.title}</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {task.completedAt ? new Date(task.completedAt).toLocaleDateString('en-AU') : ''}
+                    </Typography>
                   </Box>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                    <Chip label="Completed" size="small" color="success" sx={{ fontSize: 9, height: 18 }} />
-                    <Tooltip title="View full task">
-                      <IconButton size="small" onClick={() => setViewTask(t)}>
-                        <VisibilityOutlinedIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                  </Box>
+                  <Tooltip title="View task">
+                    <IconButton size="small" onClick={() => setViewTask(task)}>
+                      <VisibilityOutlinedIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
                 </CardContent>
               </Card>
             ))}
@@ -317,22 +680,65 @@ export default function TasksPage() {
         )}
       </Box>
 
-      <Dialog aria-labelledby="dialog-title" open={addOpen} onClose={() => setAddOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle id="dialog-title">New Task</DialogTitle><Divider />
+      <Dialog open={addOpen} onClose={() => setAddOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>New Task</DialogTitle>
+        <Divider />
         <DialogContent>
           <Grid container spacing={2} sx={{ mt: 0.5 }}>
-            <Grid size={{ xs: 12 }}><TextField autoFocus label="Task Title *" fullWidth size="small" value={title} onChange={e => setTitle(e.target.value)} /></Grid>
-            <Grid size={{ xs: 12 }}><TextField label="Description" fullWidth size="small" multiline rows={2} value={description} onChange={e => setDescription(e.target.value)} /></Grid>
-            <Grid size={{ xs: 12, sm: 4 }}><FormControl fullWidth size="small"><InputLabel>Priority</InputLabel><Select value={priority} onChange={e => setPriority(e.target.value)} label="Priority"><MenuItem value="low">Low</MenuItem><MenuItem value="medium">Medium</MenuItem><MenuItem value="high">High</MenuItem></Select></FormControl></Grid>
-            <Grid size={{ xs: 12, sm: 4 }}><FormControl fullWidth size="small"><InputLabel>Assign To</InputLabel><Select value={assignTo} onChange={e => setAssignTo(e.target.value)} label="Assign To"><MenuItem value="">Self</MenuItem>{(staffList ?? []).map(s => <MenuItem key={s.id} value={s.id}>{s.givenName} {s.familyName}</MenuItem>)}</Select></FormControl></Grid>
-            <Grid size={{ xs: 12, sm: 4 }}><TextField label="Due Date" type="date" fullWidth size="small" value={dueDate} onChange={e => setDueDate(e.target.value)} slotProps={{ inputLabel: { shrink: true } }} /></Grid>
+            <Grid size={{ xs: 12 }}>
+              <TextField autoFocus label="Task title *" fullWidth size="small" value={title} onChange={(event) => setTitle(event.target.value)} />
+            </Grid>
+            <Grid size={{ xs: 12 }}>
+              <TextField label="Description" fullWidth size="small" multiline rows={2} value={description} onChange={(event) => setDescription(event.target.value)} />
+            </Grid>
+            <Grid size={{ xs: 12, sm: 4 }}>
+              <FormControl fullWidth size="small">
+                <InputLabel>Priority</InputLabel>
+                <Select value={priority} onChange={(event) => setPriority(event.target.value as TaskPriority)} label="Priority">
+                  {PRIORITY_OPTIONS.filter((option) => option.value).map((option) => (
+                    <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid size={{ xs: 12, sm: 4 }}>
+              <FormControl fullWidth size="small">
+                <InputLabel>Assign to</InputLabel>
+                <Select value={assignTo} onChange={(event) => setAssignTo(event.target.value)} label="Assign to">
+                  <MenuItem value="">Unassigned</MenuItem>
+                  {(staffList ?? []).map((staff) => (
+                    <MenuItem key={staff.id} value={staff.id}>{staff.givenName} {staff.familyName}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid size={{ xs: 12, sm: 4 }}>
+              <TextField label="Due date" type="date" fullWidth size="small" value={dueDate} onChange={(event) => setDueDate(event.target.value)} slotProps={{ inputLabel: { shrink: true } }} />
+            </Grid>
           </Grid>
-        </DialogContent><Divider />
-        <DialogActions sx={{ px: 3, py: 2 }}><Button onClick={() => setAddOpen(false)} sx={{ color: 'text.secondary' }}>Cancel</Button><Button variant="contained" onClick={handleAdd} disabled={!title.trim()} sx={{ bgcolor: '#b8621a', '&:hover': { bgcolor: '#d6741f' } }}>Create Task</Button></DialogActions>
+        </DialogContent>
+        <Divider />
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          <Button onClick={() => setAddOpen(false)} sx={{ color: 'text.secondary' }}>Cancel</Button>
+          <Button
+            variant="contained"
+            onClick={() => createMut.mutate({
+              title: title.trim(),
+              description: description.trim() || undefined,
+              priority,
+              assignedToId: assignTo || undefined,
+              dueDate: dueDate || undefined,
+            })}
+            disabled={!title.trim() || createMut.isPending}
+            sx={{ bgcolor: '#b8621a', '&:hover': { bgcolor: '#d6741f' } }}
+          >
+            Create task
+          </Button>
+        </DialogActions>
       </Dialog>
 
       <Dialog open={!!viewTask} onClose={() => setViewTask(null)} maxWidth="sm" fullWidth>
-        <DialogTitle>Task Details</DialogTitle>
+        <DialogTitle>Task details</DialogTitle>
         <DialogContent>
           {viewTask && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
@@ -341,8 +747,8 @@ export default function TasksPage() {
                 {viewTask.description?.trim() ? viewTask.description : 'No description'}
               </Typography>
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
-                <Chip label={`Status: ${viewTask.status ?? 'open'}`} size="small" />
-                <Chip label={`Priority: ${viewTask.priority ?? 'medium'}`} size="small" />
+                <Chip label={`Status: ${humanizeTaskStatus(viewTask.status)}`} size="small" />
+                <Chip label={`Priority: ${viewTask.priority}`} size="small" />
                 {viewTask.patientName && <Chip label={`Patient: ${viewTask.patientName}`} size="small" variant="outlined" />}
                 {viewTask.assignedToName && <Chip label={`Assigned: ${viewTask.assignedToName}`} size="small" variant="outlined" />}
                 {viewTask.dueDate && <Chip label={`Due: ${new Date(viewTask.dueDate).toLocaleDateString('en-AU')}`} size="small" variant="outlined" />}
@@ -355,54 +761,81 @@ export default function TasksPage() {
         </DialogActions>
       </Dialog>
 
-      {/* Digital Signature Dialog for vetting tasks */}
       {signTask && (
         <DigitalSignatureDialog
           open={!!signTask}
           onClose={() => setSignTask(null)}
-          onSign={() => {
-            // Save signature first, then sign the document
-            signMut.mutate(signTask);
-          }}
+          onSign={() => signMut.mutate(signTask)}
           signerName={`${user?.givenName ?? ''} ${user?.familyName ?? ''}`}
           documentTitle={signTask.title}
           savedSignature={savedSignature}
         />
       )}
 
-      {/* Edit Task Dialog */}
       <Dialog open={!!editTask} onClose={() => setEditTask(null)} maxWidth="sm" fullWidth>
         <DialogTitle sx={{ fontWeight: 700 }}>Edit Task</DialogTitle>
         <Divider />
         <DialogContent>
           <Grid container spacing={2} sx={{ mt: 0.5 }}>
-            <Grid size={{ xs: 12 }}><TextField label="Title" fullWidth size="small" value={editTitle} onChange={e => setEditTitle(e.target.value)} /></Grid>
-            <Grid size={{ xs: 12, sm: 4 }}>
-              <FormControl fullWidth size="small"><InputLabel>Priority</InputLabel>
-                <Select value={editPriority} onChange={e => setEditPriority(e.target.value)} label="Priority">
-                  <MenuItem value="low">Low</MenuItem><MenuItem value="medium">Medium</MenuItem>
-                  <MenuItem value="high">High</MenuItem><MenuItem value="urgent">Urgent</MenuItem>
+            <Grid size={{ xs: 12 }}>
+              <TextField label="Title" fullWidth size="small" value={editTitle} onChange={(event) => setEditTitle(event.target.value)} />
+            </Grid>
+            <Grid size={{ xs: 12 }}>
+              <TextField label="Description" fullWidth size="small" multiline rows={3} value={editDescription} onChange={(event) => setEditDescription(event.target.value)} />
+            </Grid>
+            <Grid size={{ xs: 12, sm: 3 }}>
+              <FormControl fullWidth size="small">
+                <InputLabel>Priority</InputLabel>
+                <Select value={editPriority} onChange={(event) => setEditPriority(event.target.value as TaskPriority)} label="Priority">
+                  {PRIORITY_OPTIONS.filter((option) => option.value).map((option) => (
+                    <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
+                  ))}
                 </Select>
               </FormControl>
             </Grid>
-            <Grid size={{ xs: 12, sm: 4 }}>
-              <FormControl fullWidth size="small"><InputLabel>Assign To</InputLabel>
-                <Select value={editAssign} onChange={e => setEditAssign(e.target.value)} label="Assign To">
+            <Grid size={{ xs: 12, sm: 3 }}>
+              <FormControl fullWidth size="small">
+                <InputLabel>Assign to</InputLabel>
+                <Select value={editAssign} onChange={(event) => setEditAssign(event.target.value)} label="Assign to">
                   <MenuItem value="">Unassigned</MenuItem>
-                  {(staffList ?? []).map(s => <MenuItem key={s.id} value={s.id}>{s.givenName} {s.familyName}</MenuItem>)}
+                  {(staffList ?? []).map((staff) => (
+                    <MenuItem key={staff.id} value={staff.id}>{staff.givenName} {staff.familyName}</MenuItem>
+                  ))}
                 </Select>
               </FormControl>
             </Grid>
-            <Grid size={{ xs: 12, sm: 4 }}><TextField label="Due Date" type="date" fullWidth size="small" value={editDueDate} onChange={e => setEditDueDate(e.target.value)} slotProps={{ inputLabel: { shrink: true } }} /></Grid>
-            <Grid size={{ xs: 12 }}><TextField label="Tags (comma separated)" fullWidth size="small" value={editTags} onChange={e => setEditTags(e.target.value)} placeholder="e.g. urgent, follow-up, review" /></Grid>
+            <Grid size={{ xs: 12, sm: 3 }}>
+              <TextField label="Due date" type="date" fullWidth size="small" value={editDueDate} onChange={(event) => setEditDueDate(event.target.value)} slotProps={{ inputLabel: { shrink: true } }} />
+            </Grid>
+            <Grid size={{ xs: 12, sm: 3 }}>
+              <FormControl fullWidth size="small">
+                <InputLabel>Status</InputLabel>
+                <Select value={editStatus} onChange={(event) => setEditStatus(event.target.value as TaskStatus)} label="Status">
+                  {STATUS_OPTIONS.filter((option) => option.value).map((option) => (
+                    <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
           </Grid>
         </DialogContent>
         <DialogActions sx={{ px: 3, py: 2 }}>
           <Button onClick={() => setEditTask(null)}>Cancel</Button>
-          <Button variant="contained" onClick={() => editTask && updateMut.mutate({
-            id: editTask.id, title: editTitle || undefined, priority: editPriority || undefined,
-            assignedToId: editAssign || undefined, dueDate: editDueDate || undefined,
-          })} sx={{ bgcolor: '#2563EB', '&:hover': { bgcolor: '#1D4ED8' } }}>Save Changes</Button>
+          <Button
+            variant="contained"
+            onClick={() => editTask && updateMut.mutate({
+              id: editTask.id,
+              title: editTitle || undefined,
+              description: editDescription || null,
+              priority: editPriority,
+              assignedToId: editAssign || null,
+              dueDate: editDueDate || null,
+              status: editStatus,
+            })}
+            sx={{ bgcolor: '#2563EB', '&:hover': { bgcolor: '#1D4ED8' } }}
+          >
+            Save changes
+          </Button>
         </DialogActions>
       </Dialog>
     </Box>

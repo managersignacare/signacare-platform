@@ -29,7 +29,9 @@ export * from './medicationAdministration.schemas';
 export * from './dashboard.schemas';
 export * from './voice.schemas';
 export * from './llm.schemas';
+export * from './modelRouter.schemas';
 export * from './agenticScribe.schemas';
+export * from './aiScribeParity.schemas';
 export * from './llmPromptProfiles.schemas';
 export * from './scribeMseStructured.schemas';
 export * from './clinicalReview.schemas';
@@ -79,8 +81,41 @@ export * from './outcome.Schemas'
 export * from './staffSettingsAdmin.Schemas'
 export * from './contactRecord.Schemas';
 export * from './au_reference_data'
+export * from './generated/openapi';
 
 // BUG-530 — UIStatus + Result canonical SSoT (Phase A item 5).
 export * from './errors/appError';
 export * from './errors/result';
 export * from './ui/statusMachine';
+
+// PART 23 — Clinical Context Orchestrator contract foundation (slice 1).
+export * from './clinicalContext.schemas';
+export * from './clinicalAiAsync.schemas';
+
+// Phase 7 — ASR (Whisper) backend selection contract.
+export * from './whisperBackend.schemas';
+
+// Phase 8 — Assessment taxonomy SSoT (outcome measures vs rating scales,
+// rater type, diagnosis category).
+export * from './assessmentTaxonomy';
+
+// Phase 8 — Assessment visualisation contract (latest-score / trend /
+// cross-instrument summary read shape for the OutcomeMeasures + Rating
+// Scales + Viva tabs).
+export * from './assessmentVisualization.schemas';
+
+// Phase 8 — Per-instrument scoring metadata (max / min raw score, severity
+// bands). Used by the visualisation contract for severity chips + max-score
+// references; consumed by both the backend aggregation endpoint and the
+// frontend chart components.
+export * from './assessmentScoring';
+export * from './systemRoles';
+export * from './patientDutyRelationship';
+
+// Dashboard options — additive cockpit dashboards + user preference
+// contract. The existing /dashboard remains unchanged; these schemas
+// govern selectable dashboard variants and safety-critical widget locks.
+export * from './dashboardPreferences.schemas';
+
+// Phase 9 — model shadow-mode governance + promotion safety contracts.
+export * from './aiModelGovernance.schemas';

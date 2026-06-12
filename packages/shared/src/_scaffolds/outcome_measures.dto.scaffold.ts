@@ -25,6 +25,7 @@ export const OutcomeMeasuresDtoScaffoldSchema = z.object({
   assignedBy: z.string().uuid().nullable().optional(),
   completedAt: z.string().datetime().nullable().optional(),
   lockVersion: z.number().int(),
+  deletedAt: z.string().datetime().nullable().optional(),
 });
 
 export type OutcomeMeasuresDtoScaffold = z.infer<typeof OutcomeMeasuresDtoScaffoldSchema>;

@@ -9,19 +9,23 @@ import {
 import { clinicId } from '../src/seed-good-health/config/ids';
 
 const EXPECTED_COUNT =
-  MENTAL_HEALTH_CLINICS.length * TEAM_SLUGS.length * CLINIC_ROLE_ROSTER.length;
+  MENTAL_HEALTH_CLINICS.length * (1 + TEAM_SLUGS.length * CLINIC_ROLE_ROSTER.length);
 
 describe('seed-good-health generator 04: clinic staff', () => {
-  it('emits exactly 80 staff rows (4 clinics × 2 teams × 10 slots)', async () => {
+  it('emits exactly 84 staff rows (4 clinics × (1 superadmin + 2 teams × 10 slots))', async () => {
     const { staffRows } = await buildClinicStaff(stubHash);
     expect(staffRows).toHaveLength(EXPECTED_COUNT);
-    expect(staffRows.length).toBe(80);
+    expect(staffRows.length).toBe(84);
   });
 
-  it('emits one staff_specialties row per staff row', async () => {
+  it('emits one staff_specialties row per non-superadmin clinical staff row', async () => {
     const { staffRows, specialtyRows } = await buildClinicStaff(stubHash);
-    expect(specialtyRows).toHaveLength(staffRows.length);
+    const superadminIds = new Set(
+      staffRows.filter((row) => row.role === 'superadmin').map((row) => row.id),
+    );
+    expect(specialtyRows).toHaveLength(staffRows.length - superadminIds.size);
     for (const row of specialtyRows) {
+      expect(superadminIds.has(row.staff_id)).toBe(false);
       expect(row.specialty_code).toBe('mental_health');
       expect(row.is_primary).toBe(true);
     }
@@ -37,7 +41,7 @@ describe('seed-good-health generator 04: clinic staff', () => {
     }
   });
 
-  it('each clinic has exactly 20 staff (2 teams × 10 roster)', async () => {
+  it('each clinic has exactly 21 staff (1 superadmin + 2 teams × 10 roster)', async () => {
     const { staffRows } = await buildClinicStaff(stubHash);
     const counts = new Map<string, number>();
     for (const row of staffRows) {
@@ -45,14 +49,32 @@ describe('seed-good-health generator 04: clinic staff', () => {
     }
     expect(counts.size).toBe(MENTAL_HEALTH_CLINICS.length);
     for (const [, count] of counts) {
-      expect(count).toBe(20);
+      expect(count).toBe(21);
     }
   });
 
-  it('all 80 staff ids are distinct', async () => {
+  it('all 84 staff ids are distinct', async () => {
     const { staffRows } = await buildClinicStaff(stubHash);
     const ids = new Set(staffRows.map((r) => r.id));
-    expect(ids.size).toBe(80);
+    expect(ids.size).toBe(84);
+  });
+
+  it('adds one deterministic superadmin account per mental-health clinic', async () => {
+    const { staffRows, loginTable } = await buildClinicStaff(stubHash);
+    for (const clinic of MENTAL_HEALTH_CLINICS) {
+      const cid = clinicId(clinic.slug);
+      const expectedEmail = `superadmin@${clinic.slug}.goodhealth.demo`;
+      const row = staffRows.find((staff) => staff.email === expectedEmail);
+      expect(row).toBeDefined();
+      expect(row?.clinic_id).toBe(cid);
+      expect(row?.role).toBe('superadmin');
+      expect(row?.discipline).toBe('Clinic Administration');
+
+      const login = loginTable.find((entry) => entry.email === expectedEmail);
+      expect(login?.clinicSlug).toBe(clinic.slug);
+      expect(login?.role).toBe('superadmin');
+      expect(login?.plainPassword).toMatch(/^Superadmin!.*2026$/);
+    }
   });
 
   it('emails are unique within each clinic tenant', async () => {
@@ -66,13 +88,15 @@ describe('seed-good-health generator 04: clinic staff', () => {
     }
   });
 
-  it('role mix per team matches the roster (9 clinician + 1 receptionist)', async () => {
+  it('role mix matches the roster plus one superadmin per clinic', async () => {
     const { staffRows } = await buildClinicStaff(stubHash);
     const clinicianCount = staffRows.filter((r) => r.role === 'clinician').length;
     const receptionistCount = staffRows.filter((r) => r.role === 'receptionist').length;
+    const superadminCount = staffRows.filter((r) => r.role === 'superadmin').length;
     // 9 clinician slots + 1 admin receptionist slot × 8 teams = 72 + 8
     expect(clinicianCount).toBe(72);
     expect(receptionistCount).toBe(8);
+    expect(superadminCount).toBe(MENTAL_HEALTH_CLINICS.length);
   });
 
   it('ids are byte-stable across two builds (idempotency proof)', async () => {

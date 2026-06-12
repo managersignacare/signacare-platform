@@ -9,9 +9,8 @@ Signacare EMR — Whisper Large V3 Turbo Transcription Server
 All processing is local — no audio data leaves the network.
 
 Usage:
-    python server.py                    # Auto-detect device
-    python server.py --device cpu       # Force CPU
-    python server.py --port 8080        # Custom port
+    gunicorn --bind 0.0.0.0:8080 server:app
+    python server.py                    # Local dev only
 
 First run will download whisper-large-v3-turbo (~1.6GB).
 """
@@ -46,7 +45,7 @@ CORS(app)
 #   bare 64-hex digest; the TS audit helper composes the canonical
 #   `<name>@sha256:<digest>` string before writing to llm_interactions.
 WHISPER_MODEL = None
-DEVICE = 'auto'
+DEVICE = os.environ.get('WHISPER_DEVICE', 'auto')
 MODEL_NAME = os.environ.get('WHISPER_MODEL', 'large-v3-turbo')
 MODEL_DIGEST = None  # set by load_whisper(); None until weights loaded
 
@@ -505,6 +504,13 @@ def models():
             {'name': 'large-v3-turbo', 'params': '809M', 'vram': '~6GB', 'speed': '~3x (recommended)'},
         ],
     })
+
+
+if os.environ.get('WHISPER_PRELOAD_MODEL', 'false').lower() in {'1', 'true', 'yes'}:
+    try:
+        load_whisper()
+    except Exception as e:
+        log.warning(f"Model pre-load failed during WSGI import (will retry on first request): {e}")
 
 
 if __name__ == '__main__':

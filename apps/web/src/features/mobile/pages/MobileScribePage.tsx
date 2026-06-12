@@ -53,6 +53,10 @@ import StopIcon from '@mui/icons-material/Stop';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { ScribeStreamingClient } from '../../patients/components/notes/scribeStreamingClient';
+import {
+  formatLiveTranscriptCadence,
+  LIVE_TRANSCRIPT_BATCH_MS,
+} from '../../../shared/services/scribeLiveTranscriptConfig';
 
 type RecorderState = 'idle' | 'recording' | 'stopping' | 'finalising' | 'done' | 'error';
 
@@ -107,10 +111,10 @@ export default function MobileScribePage(): React.ReactElement {
       const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
 
       const client = new ScribeStreamingClient({
-        batchMs: 5000,
+        batchMs: LIVE_TRANSCRIPT_BATCH_MS,
         onPartial: (delta) => {
           if (delta.text) {
-            setTranscript((prev) => (prev.length > 0 ? `${prev} ${delta.text}` : delta.text));
+            setTranscript(delta.text);
             setChunkCount((n) => n + 1);
           }
         },
@@ -138,8 +142,7 @@ export default function MobileScribePage(): React.ReactElement {
 
       // MediaRecorder fires ondataavailable each timeslice (ms). 1000ms
       // gives the streaming client one blob per second which it then
-      // batches into 5-second uploads — matches the existing
-      // ScribeStreamingClient batchMs.
+      // batches into short rolling uploads for near-live transcript updates.
       recorder.start(1000);
       recorderRef.current = recorder;
       startedAtRef.current = Date.now();
@@ -174,7 +177,7 @@ export default function MobileScribePage(): React.ReactElement {
     }
     setState('finalising');
     try {
-      await clientRef.current?.flushBuffer();
+      await clientRef.current?.finish();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Finalisation failed');
       setState('error');
@@ -340,7 +343,7 @@ export default function MobileScribePage(): React.ReactElement {
             >
               {transcript || (
                 <Typography variant="body2" color="text.disabled">
-                  Partial transcripts appear here as Whisper processes each 5-second audio batch…
+                  Partial transcripts appear here as Whisper processes each rolling batch. {formatLiveTranscriptCadence(LIVE_TRANSCRIPT_BATCH_MS)}.
                 </Typography>
               )}
             </Box>
@@ -372,7 +375,7 @@ export default function MobileScribePage(): React.ReactElement {
         )}
 
         <Typography variant="caption" sx={{ display: 'block', mt: 3, color: 'text.secondary' }}>
-          Audio is uploaded in 5-second batches to your clinic's on-prem Whisper instance. No audio is sent to the cloud.
+          Audio is uploaded in short rolling batches to your clinic&apos;s on-prem Whisper instance. No audio is sent to the cloud.
         </Typography>
       </Box>
     </Box>

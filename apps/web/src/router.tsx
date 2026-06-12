@@ -2,6 +2,10 @@ import React, { Suspense, useState, useEffect } from 'react';
 import { createBrowserRouter, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { AuthGuard } from './shared/components/guards/AuthGuard';
 import { RouteAccessGuard } from './shared/components/guards/RouteAccessGuard';
+import {
+  SETTINGS_ASYNC_AI_JOBS_PATH,
+  SETTINGS_DASHBOARD_OPTIONS_PATH,
+} from './shared/navigation/settingsNavigation';
 import { AppShell } from './shared/components/ui/AppShell';
 import { LoadingOverlay } from './shared/components/ui/LoadingOverlay';
 import { ErrorBoundary } from './shared/components/ui/ErrorBoundary';
@@ -50,6 +54,10 @@ const LoginPage          = React.lazy(() => import('./features/auth/pages/LoginP
 const MfaPage            = React.lazy(() => import('./features/auth/pages/MfaPage'));
 const ChangePasswordPage = React.lazy(() => import('./features/auth/pages/ChangePasswordPage'));
 const DashboardPage      = React.lazy(() => import('./features/dashboard/pages/DashboardPage'));
+const MyWorkCockpitPage = React.lazy(() => import('./features/dashboard/pages/MyWorkCockpitPage'));
+const TeamCommandBoardPage = React.lazy(() => import('./features/dashboard/pages/TeamCommandBoardPage'));
+const ManagerCommandBoardPage = React.lazy(() => import('./features/dashboard/pages/ManagerCommandBoardPage'));
+const PatientCommandBoardPage = React.lazy(() => import('./features/dashboard/pages/PatientCommandBoardPage'));
 const PatientsPage       = React.lazy(() => import('./features/patients/pages/PatientsPage'));
 const PatientDetailPage  = React.lazy(() => import('./features/patients/pages/PatientDetailPage'));
 const EpisodeDetailPage  = React.lazy(() => import('./features/episodes/pages/EpisodeDetailPage'));
@@ -160,6 +168,11 @@ export const router = createBrowserRouter([
     children: [
       { path: '/',               element: <Navigate to="/dashboard" replace /> },
       { path: '/dashboard',      element: <DashboardPage /> },
+      { path: '/dashboards',     element: <Navigate to={SETTINGS_DASHBOARD_OPTIONS_PATH} replace /> },
+      { path: '/dashboards/my-work', element: <MyWorkCockpitPage /> },
+      { path: '/dashboards/team-command', element: <TeamCommandBoardPage /> },
+      { path: '/dashboards/manager-command', element: <ManagerCommandBoardPage /> },
+      { path: '/dashboards/patient-command', element: <PatientCommandBoardPage /> },
       { path: '/patients',       element: <PatientsPage /> },
       { path: '/patients/:id',   element: <PatientDetailPage /> },
       { path: '/episodes/:id',   element: <EpisodeDetailPage /> },
@@ -207,6 +220,8 @@ export const router = createBrowserRouter([
         ),
       },
       { path: '/settings',       element: <SettingsPage /> },
+      { path: '/settings/async-ai-jobs', element: <Navigate to={SETTINGS_ASYNC_AI_JOBS_PATH} replace /> },
+      { path: '/settings/dashboard-options', element: <Navigate to={SETTINGS_DASHBOARD_OPTIONS_PATH} replace /> },
       {
         path: '/power-settings',
         element: (

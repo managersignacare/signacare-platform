@@ -22,6 +22,8 @@ export const MedicationAdministrationsDtoScaffoldSchema = z.object({
   witnessedByStaffId: z.string().uuid().nullable().optional(),
   batchNumber: z.string().max(100).nullable().optional(),
   createdAt: z.string().datetime(),
+  administrationContext: z.string().max(50).nullable().optional(),
+  prnReason: z.string().nullable().optional(),
   lockVersion: z.number().int(),
 });
 

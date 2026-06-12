@@ -2,9 +2,10 @@
 # Signacare EMR — Azure deploy (S8.1)
 # ─────────────────────────────────────────────────────────────────────────────
 #
-# Builds and pushes the apps/api + apps/web Docker images to the environment's
-# Azure Container Registry, then deploys them to the corresponding App Service
-# site. Uses slot swaps for prod (blue-green) and direct deploy for staging.
+# Dev/staging builds produce immutable image digests and a release manifest.
+# Production does not rebuild: it downloads a reviewed staging release manifest,
+# imports those exact image digests into the production ACR, creates a prod
+# promotion manifest, then deploys by digest to the production staging slot.
 #
 # Triggers:
 #   - Manual workflow_dispatch with an environment input (staging / prod).
@@ -12,12 +13,15 @@
 #     which gates on reviewer approval.
 #   - push to main → auto-deploy to staging.
 #
-# Required repository secrets:
-#   AZURE_CREDENTIALS           Service principal JSON for az login
-#                               (Contributor + Key Vault Secrets User + ACR push)
-#   AZURE_SUBSCRIPTION_ID       Subscription to deploy into
-#   ACR_NAME_STAGING            Registry name, e.g. signacarecrstaging
-#   ACR_NAME_PROD               Registry name, e.g. signacarecrprod
+# Azure authentication:
+#   Preferred: GitHub OIDC with an Azure federated app registration.
+#   The checked-in defaults below target the Signacare Azure tenant and can be
+#   overridden with repo/environment vars or secrets:
+#     AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID
+#
+# Required deployment config:
+#   ACR_NAME_STAGING            Optional override. Default: signacarecrstaging
+#   ACR_NAME_PROD               Optional override. Default: signacarecrprod
 #
 # The Bicep template is NOT run from this workflow — infrastructure changes
 # go through deploy/azure/deploy.sh so infra diffs are visible in a PR review
@@ -38,7 +42,6 @@ on:
         default: 'staging'
         type: choice
         options:
-          - dev
           - staging
           - prod
       swap_after_deploy:
@@ -46,14 +49,38 @@ on:
         required: false
         default: false
         type: boolean
+      staging_run_id:
+        description: 'Required for prod — GitHub Actions run ID of the reviewed staging deploy'
+        required: false
+        default: ''
+        type: string
+      staging_image_tag:
+        description: 'Required for prod — staging image tag / manifest artifact suffix to promote'
+        required: false
+        default: ''
+        type: string
+      ai_model_promotion_alias:
+        description: 'Prod model change only — text-generation alias being promoted, e.g. best_clinical'
+        required: false
+        default: ''
+        type: string
+      ai_model_promotion_record:
+        description: 'Prod model change only — repo-relative promotion record JSON path'
+        required: false
+        default: ''
+        type: string
   push:
     branches:
       - main
     paths:
+      - '.github/workflows/azure-deploy.yml'
       - 'apps/api/**'
       - 'apps/web/**'
       - 'packages/shared/**'
       - 'Dockerfile*'
+      - 'deploy/ai/**'
+      - 'deploy/azure/**'
+      - 'deploy/whisper-server/**'
 
 concurrency:
   # One deploy per environment at a time. Queued runs override older ones
@@ -63,16 +90,54 @@ concurrency:
 
 env:
   NAME_PREFIX: signacare
+  AZURE_CLIENT_ID_DEFAULT: fde3acf9-cab9-4aa4-a337-a3a30fde6084
+  AZURE_TENANT_ID_DEFAULT: 156e329f-7ff5-4568-ae3b-223ee6799749
+  AZURE_SUBSCRIPTION_ID_DEFAULT: 769ede88-35d9-4fce-ae26-132b9380ce3d
+  ACR_NAME_STAGING_DEFAULT: signacarecrstaging
+  ACR_NAME_PROD_DEFAULT: signacarecrprod
+  OLLAMA_MODEL_NAME: llama3.2:signacare-35f39aa1
+  OLLAMA_MODEL_MANIFEST_SHA256: sha256:35f39aa10ab6344466b66afa2681446fc66e9631e013b047068177842d9afc58
+  WHISPER_MODEL_NAME: small
+  WHISPER_MODEL_SHA256: 9ecf779972d90ba49c06d968637d720dd632c55bbf19d441fb42bf17a411e794
+
+permissions:
+  contents: read
+  actions: read
+  id-token: write
 
 jobs:
   build-and-push:
-    name: Build + push images
+    name: Build or promote images
     runs-on: ubuntu-latest
     environment: ${{ github.event.inputs.environment || 'staging' }}
     outputs:
-      image_tag: ${{ steps.meta.outputs.image_tag }}
+      image_tag: ${{ steps.promote_manifest.outputs.image_tag || steps.meta.outputs.image_tag }}
       env_name: ${{ steps.meta.outputs.env_name }}
       acr_name: ${{ steps.meta.outputs.acr_name }}
+      api_image: ${{ steps.promote_manifest.outputs.api_image || steps.build_api.outputs.api_image }}
+      web_image: ${{ steps.promote_manifest.outputs.web_image || steps.build_web.outputs.web_image }}
+      ollama_image: ${{ steps.promote_manifest.outputs.ollama_image || steps.build_ai.outputs.ollama_image }}
+      whisper_image: ${{ steps.promote_manifest.outputs.whisper_image || steps.build_ai.outputs.whisper_image }}
+      release_manifest_sha256: ${{ steps.promote_manifest.outputs.release_manifest_sha256 || steps.release_manifest.outputs.release_manifest_sha256 }}
+      openapi_sha256: ${{ steps.promote_manifest.outputs.openapi_sha256 || steps.release_manifest.outputs.openapi_sha256 }}
+      config_contract_sha256: ${{ steps.promote_manifest.outputs.config_contract_sha256 || steps.release_manifest.outputs.config_contract_sha256 }}
+      migration_head: ${{ steps.promote_manifest.outputs.migration_head || steps.release_manifest.outputs.migration_head }}
+      commit_sha: ${{ steps.promote_manifest.outputs.commit_sha || steps.release_manifest.outputs.commit_sha }}
+      pipeline_workflow: ${{ steps.promote_manifest.outputs.pipeline_workflow || steps.release_manifest.outputs.pipeline_workflow }}
+      pipeline_run_id: ${{ steps.promote_manifest.outputs.pipeline_run_id || steps.release_manifest.outputs.pipeline_run_id }}
+      pipeline_origin: ${{ steps.promote_manifest.outputs.pipeline_origin || steps.release_manifest.outputs.pipeline_origin }}
+      release_promotable_to_prod: ${{ steps.promote_manifest.outputs.release_promotable_to_prod || steps.release_manifest.outputs.release_promotable_to_prod }}
+      release_non_promotable_reason: ${{ steps.promote_manifest.outputs.release_non_promotable_reason || steps.release_manifest.outputs.release_non_promotable_reason }}
+      built_at: ${{ steps.promote_manifest.outputs.built_at || steps.release_manifest.outputs.built_at }}
+      promotion_source_env: ${{ steps.promote_manifest.outputs.promotion_source_env }}
+      promotion_source_acr_name: ${{ steps.promote_manifest.outputs.promotion_source_acr_name }}
+      promotion_source_release_manifest_sha256: ${{ steps.promote_manifest.outputs.promotion_source_release_manifest_sha256 }}
+      promotion_source_pipeline_run_id: ${{ steps.promote_manifest.outputs.promotion_source_pipeline_run_id }}
+      promoted_at: ${{ steps.promote_manifest.outputs.promoted_at }}
+      ai_model_promotion_alias: ${{ steps.model_promotion_gate.outputs.alias }}
+      ai_model_promotion_record: ${{ steps.model_promotion_gate.outputs.record }}
+      ai_model_promotion_record_sha256: ${{ steps.model_promotion_gate.outputs.record_sha256 }}
+      ai_runtime_enabled: ${{ steps.meta.outputs.ai_runtime_enabled }}
     steps:
       - uses: actions/checkout@v4
 
@@ -81,58 +146,309 @@ jobs:
         run: |
           set -euo pipefail
           ENV="${{ github.event.inputs.environment || 'staging' }}"
-          API_URL="https://${{ env.NAME_PREFIX }}-api-${ENV}.azurewebsites.net/api"
+          API_URL="/api/v1"
           echo "env_name=$ENV" >> "$GITHUB_OUTPUT"
           echo "api_url=$API_URL" >> "$GITHUB_OUTPUT"
-          # Phase R3 dev/test deploy support (2026-04-30): per-tier ACR
-          # so dev/test images cannot be confused with staging or prod
-          # registry contents (separation of environments per ISO 27001
-          # A.8.31). ACR_NAME_DEV must be configured as a repo secret
-          # before first dev deploy.
-          if [[ "$ENV" == "prod" ]]; then
-            echo "acr_name=${{ secrets.ACR_NAME_PROD }}" >> "$GITHUB_OUTPUT"
-          elif [[ "$ENV" == "dev" ]]; then
-            echo "acr_name=${{ secrets.ACR_NAME_DEV }}" >> "$GITHUB_OUTPUT"
+          if [[ "$ENV" == "staging" ]]; then
+            echo "ai_runtime_enabled=true" >> "$GITHUB_OUTPUT"
           else
-            echo "acr_name=${{ secrets.ACR_NAME_STAGING }}" >> "$GITHUB_OUTPUT"
+            echo "ai_runtime_enabled=${{ vars.AZURE_AI_RUNTIME_ENABLED || 'false' }}" >> "$GITHUB_OUTPUT"
+          fi
+          if [[ "$ENV" == "prod" ]]; then
+            echo "acr_name=${{ secrets.ACR_NAME_PROD || vars.ACR_NAME_PROD || env.ACR_NAME_PROD_DEFAULT }}" >> "$GITHUB_OUTPUT"
+            echo "source_acr_name=${{ secrets.ACR_NAME_STAGING || vars.ACR_NAME_STAGING || env.ACR_NAME_STAGING_DEFAULT }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "acr_name=${{ secrets.ACR_NAME_STAGING || vars.ACR_NAME_STAGING || env.ACR_NAME_STAGING_DEFAULT }}" >> "$GITHUB_OUTPUT"
+            echo "source_acr_name=" >> "$GITHUB_OUTPUT"
           fi
           # Tag format: short SHA + UTC timestamp. Human-readable + unique.
           TAG="$(git rev-parse --short HEAD)-$(date -u +%Y%m%d%H%M%S)"
           echo "image_tag=$TAG" >> "$GITHUB_OUTPUT"
 
+      - name: Validate production promotion inputs
+        if: ${{ steps.meta.outputs.env_name == 'prod' }}
+        env:
+          STAGING_RUN_ID: ${{ github.event.inputs.staging_run_id }}
+          STAGING_IMAGE_TAG: ${{ github.event.inputs.staging_image_tag }}
+          AI_MODEL_PROMOTION_ALIAS: ${{ github.event.inputs.ai_model_promotion_alias }}
+          AI_MODEL_PROMOTION_RECORD: ${{ github.event.inputs.ai_model_promotion_record }}
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" != "workflow_dispatch" ]]; then
+            echo "Production deploys must be manual promotions from a reviewed staging manifest." >&2
+            exit 2
+          fi
+          if [[ -z "$STAGING_RUN_ID" || -z "$STAGING_IMAGE_TAG" ]]; then
+            echo "Production deploy requires staging_run_id and staging_image_tag." >&2
+            exit 2
+          fi
+          if [[ ! "$STAGING_RUN_ID" =~ ^[0-9]+$ ]]; then
+            echo "staging_run_id must be a numeric GitHub Actions run ID." >&2
+            exit 2
+          fi
+          if [[ ! "$STAGING_IMAGE_TAG" =~ ^[A-Za-z0-9_.-]+$ ]]; then
+            echo "staging_image_tag contains invalid characters." >&2
+            exit 2
+          fi
+
+          if [[ -z "${AI_MODEL_PROMOTION_ALIAS:-}" || -z "${AI_MODEL_PROMOTION_RECORD:-}" ]]; then
+            echo "Production deploy requires both ai_model_promotion_alias and ai_model_promotion_record." >&2
+            exit 2
+          fi
+          if [[ ! "$AI_MODEL_PROMOTION_ALIAS" =~ ^[a-z0-9_]+$ ]]; then
+            echo "ai_model_promotion_alias contains invalid characters." >&2
+            exit 2
+          fi
+          if [[ "$AI_MODEL_PROMOTION_RECORD" = /* || "$AI_MODEL_PROMOTION_RECORD" == *..* || "$AI_MODEL_PROMOTION_RECORD" != docs/quality/ai-model-governance/*.json ]]; then
+            echo "ai_model_promotion_record must be a repo-relative docs/quality/ai-model-governance/*.json path." >&2
+            exit 2
+          fi
+
+      - name: Setup Node for AI model promotion gate
+        if: ${{ steps.meta.outputs.env_name == 'prod' }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install validator dependencies
+        if: ${{ steps.meta.outputs.env_name == 'prod' }}
+        run: npm ci
+
+      - name: Validate AI model promotion gate
+        id: model_promotion_gate
+        if: ${{ steps.meta.outputs.env_name == 'prod' }}
+        env:
+          AI_MODEL_PROMOTION_ALIAS: ${{ github.event.inputs.ai_model_promotion_alias }}
+          AI_MODEL_PROMOTION_RECORD: ${{ github.event.inputs.ai_model_promotion_record }}
+        run: |
+          set -euo pipefail
+          npm run ai:model-promotion:validate -- \
+            --alias "$AI_MODEL_PROMOTION_ALIAS" \
+            --record "$AI_MODEL_PROMOTION_RECORD"
+          record_sha256="$(sha256sum "$AI_MODEL_PROMOTION_RECORD" | awk '{print $1}')"
+          echo "alias=$AI_MODEL_PROMOTION_ALIAS" >> "$GITHUB_OUTPUT"
+          echo "record=$AI_MODEL_PROMOTION_RECORD" >> "$GITHUB_OUTPUT"
+          echo "record_sha256=$record_sha256" >> "$GITHUB_OUTPUT"
+
+      - name: Upload AI model promotion evidence
+        if: ${{ steps.meta.outputs.env_name == 'prod' && steps.model_promotion_gate.outputs.record_sha256 != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-model-promotion-${{ steps.meta.outputs.image_tag }}
+          path: ${{ steps.model_promotion_gate.outputs.record }}
+          if-no-files-found: error
+
       - name: Azure login
         uses: azure/login@v2
         with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          client-id: ${{ secrets.AZURE_CLIENT_ID || vars.AZURE_CLIENT_ID || env.AZURE_CLIENT_ID_DEFAULT }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID || vars.AZURE_TENANT_ID || env.AZURE_TENANT_ID_DEFAULT }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID || vars.AZURE_SUBSCRIPTION_ID || env.AZURE_SUBSCRIPTION_ID_DEFAULT }}
 
       - name: Setup Docker Buildx
+        if: ${{ steps.meta.outputs.env_name != 'prod' }}
         uses: docker/setup-buildx-action@v3
 
       - name: ACR login
+        if: ${{ steps.meta.outputs.env_name != 'prod' }}
         run: az acr login --name "${{ steps.meta.outputs.acr_name }}"
 
       - name: Build + push apps/api image
+        if: ${{ steps.meta.outputs.env_name != 'prod' }}
+        id: build_api
         run: |
           set -euo pipefail
-          IMAGE="${{ steps.meta.outputs.acr_name }}.azurecr.io/signacare-api:${{ steps.meta.outputs.image_tag }}"
+          REPO="${{ steps.meta.outputs.acr_name }}.azurecr.io/signacare-api"
+          IMAGE="$REPO:${{ steps.meta.outputs.image_tag }}"
           docker buildx build \
             --platform linux/amd64 \
             -f apps/api/Dockerfile \
             -t "$IMAGE" \
-            -t "${{ steps.meta.outputs.acr_name }}.azurecr.io/signacare-api:latest" \
             --push .
+          DIGEST="$(docker buildx imagetools inspect "$IMAGE" --format '{{.Manifest.Digest}}')"
+          echo "api_image=$REPO@$DIGEST" >> "$GITHUB_OUTPUT"
 
       - name: Build + push apps/web image
+        if: ${{ steps.meta.outputs.env_name != 'prod' }}
+        id: build_web
         run: |
           set -euo pipefail
-          IMAGE="${{ steps.meta.outputs.acr_name }}.azurecr.io/signacare-web:${{ steps.meta.outputs.image_tag }}"
+          REPO="${{ steps.meta.outputs.acr_name }}.azurecr.io/signacare-web"
+          IMAGE="$REPO:${{ steps.meta.outputs.image_tag }}"
           docker buildx build \
             --platform linux/amd64 \
             -f apps/web/Dockerfile \
             --build-arg VITE_API_URL="${{ steps.meta.outputs.api_url }}" \
+            --build-arg VITE_SCRIBE_LIVE_TRANSCRIPT=true \
+            --build-arg VITE_SCRIBE_ASYNC_AMBIENT=true \
+            --build-arg VITE_SCRIBE_ASYNC_AMBIENT_MIN_SECONDS=60 \
+            --build-arg VITE_BUILD_SHA="${{ github.sha }}" \
+            --build-arg VITE_ASSET_VERSION="${{ steps.meta.outputs.image_tag }}" \
             -t "$IMAGE" \
-            -t "${{ steps.meta.outputs.acr_name }}.azurecr.io/signacare-web:latest" \
             --push .
+          DIGEST="$(docker buildx imagetools inspect "$IMAGE" --format '{{.Manifest.Digest}}')"
+          echo "web_image=$REPO@$DIGEST" >> "$GITHUB_OUTPUT"
+
+      - name: Build + push AI runtime images (separate services)
+        if: ${{ steps.meta.outputs.env_name != 'prod' }}
+        id: build_ai
+        run: |
+          set -euo pipefail
+          if [[ "${{ steps.meta.outputs.ai_runtime_enabled }}" != "true" ]]; then
+            echo "ollama_image=" >> "$GITHUB_OUTPUT"
+            echo "whisper_image=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          ENV="${{ steps.meta.outputs.env_name }}"
+          if [[ "$ENV" != "staging" ]]; then
+            echo "AI runtime services are staging-only in this workflow. Production requires the reviewed private/GPU AI topology." >&2
+            exit 2
+          fi
+
+          ACR="${{ steps.meta.outputs.acr_name }}.azurecr.io"
+          OLLAMA_REPO="$ACR/signacare-ollama"
+          WHISPER_REPO="$ACR/signacare-whisper"
+          OLLAMA_IMAGE="$OLLAMA_REPO:${{ steps.meta.outputs.image_tag }}"
+          WHISPER_IMAGE="$WHISPER_REPO:${{ steps.meta.outputs.image_tag }}"
+
+          docker buildx build \
+            --platform linux/amd64 \
+            -f deploy/ai/ollama/Dockerfile \
+            --build-arg OLLAMA_MODEL=${{ env.OLLAMA_MODEL_NAME }} \
+            --build-arg OLLAMA_REGISTRY_MODEL_PATH=library/llama3.2 \
+            --build-arg OLLAMA_MODEL_MANIFEST_SHA256=${{ env.OLLAMA_MODEL_MANIFEST_SHA256 }} \
+            -t "$OLLAMA_IMAGE" \
+            --push .
+          OLLAMA_DIGEST="$(docker buildx imagetools inspect "$OLLAMA_IMAGE" --format '{{.Manifest.Digest}}')"
+
+          docker buildx build \
+            --platform linux/amd64 \
+            -f deploy/ai/whisper/Dockerfile \
+            --build-arg WHISPER_MODEL=${{ env.WHISPER_MODEL_NAME }} \
+            --build-arg WHISPER_MODEL_URL=https://openaipublic.azureedge.net/main/whisper/models/9ecf779972d90ba49c06d968637d720dd632c55bbf19d441fb42bf17a411e794/small.pt \
+            --build-arg WHISPER_MODEL_SHA256=${{ env.WHISPER_MODEL_SHA256 }} \
+            -t "$WHISPER_IMAGE" \
+            --push .
+          WHISPER_DIGEST="$(docker buildx imagetools inspect "$WHISPER_IMAGE" --format '{{.Manifest.Digest}}')"
+
+          echo "ollama_image=$OLLAMA_REPO@$OLLAMA_DIGEST" >> "$GITHUB_OUTPUT"
+          echo "whisper_image=$WHISPER_REPO@$WHISPER_DIGEST" >> "$GITHUB_OUTPUT"
+
+      - name: Create immutable release manifest
+        if: ${{ steps.meta.outputs.env_name != 'prod' }}
+        id: release_manifest
+        env:
+          SIGNACARE_RELEASE_ENV: ${{ steps.meta.outputs.env_name }}
+          SIGNACARE_ACR_NAME: ${{ steps.meta.outputs.acr_name }}
+          SIGNACARE_IMAGE_TAG: ${{ steps.meta.outputs.image_tag }}
+          SIGNACARE_API_IMAGE: ${{ steps.build_api.outputs.api_image }}
+          SIGNACARE_WEB_IMAGE: ${{ steps.build_web.outputs.web_image }}
+          SIGNACARE_OLLAMA_IMAGE: ${{ steps.build_ai.outputs.ollama_image }}
+          SIGNACARE_WHISPER_IMAGE: ${{ steps.build_ai.outputs.whisper_image }}
+          SIGNACARE_OLLAMA_MODEL: ${{ env.OLLAMA_MODEL_NAME }}
+          SIGNACARE_OLLAMA_MODEL_MANIFEST_SHA256: ${{ env.OLLAMA_MODEL_MANIFEST_SHA256 }}
+          SIGNACARE_WHISPER_MODEL: ${{ env.WHISPER_MODEL_NAME }}
+          SIGNACARE_WHISPER_MODEL_SHA256: ${{ env.WHISPER_MODEL_SHA256 }}
+        run: node scripts/release/create-release-manifest.mjs
+
+      - name: Upload immutable release manifest
+        if: ${{ steps.meta.outputs.env_name != 'prod' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: signacare-release-manifest-${{ steps.meta.outputs.env_name }}-${{ steps.meta.outputs.image_tag }}
+          path: |
+            artifacts/release/release-manifest.json
+            artifacts/release/release-manifest.json.sha256
+          if-no-files-found: error
+
+      - name: Download reviewed staging release manifest (prod only)
+        if: ${{ steps.meta.outputs.env_name == 'prod' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: signacare-release-manifest-staging-${{ github.event.inputs.staging_image_tag }}
+          run-id: ${{ github.event.inputs.staging_run_id }}
+          github-token: ${{ github.token }}
+          path: artifacts/downloaded-staging-release
+
+      - name: Normalize downloaded staging release manifest (prod only)
+        if: ${{ steps.meta.outputs.env_name == 'prod' }}
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/release
+          MANIFEST="$(find artifacts/downloaded-staging-release -name release-manifest.json -type f | head -n 1)"
+          CHECKSUM="$(find artifacts/downloaded-staging-release -name release-manifest.json.sha256 -type f | head -n 1)"
+          if [[ -z "$MANIFEST" || -z "$CHECKSUM" ]]; then
+            echo "Downloaded staging artifact is missing release-manifest.json or checksum sidecar." >&2
+            exit 2
+          fi
+          cp "$MANIFEST" artifacts/release/release-manifest.json
+          cp "$CHECKSUM" artifacts/release/release-manifest.json.sha256
+          EXPECTED_SHA="$(awk '{print $1}' artifacts/release/release-manifest.json.sha256)"
+          ACTUAL_SHA="sha256:$(sha256sum artifacts/release/release-manifest.json | awk '{print $1}')"
+          if [[ "$EXPECTED_SHA" != "$ACTUAL_SHA" ]]; then
+            echo "Downloaded staging release manifest checksum mismatch: expected $EXPECTED_SHA actual $ACTUAL_SHA" >&2
+            exit 2
+          fi
+
+      - name: Import staging image digests into prod ACR
+        if: ${{ steps.meta.outputs.env_name == 'prod' }}
+        env:
+          STAGING_IMAGE_TAG: ${{ github.event.inputs.staging_image_tag }}
+        run: |
+          set -euo pipefail
+          TARGET_ACR="${{ steps.meta.outputs.acr_name }}"
+          IMAGE_TAG="$STAGING_IMAGE_TAG"
+          python3 - <<'PY' > /tmp/signacare-promotion-images.tsv
+          import json
+
+          with open("artifacts/release/release-manifest.json", encoding="utf-8") as fh:
+              manifest = json.load(fh)
+
+          if manifest.get("deployment", {}).get("environment") != "staging":
+              raise SystemExit("Only staging release manifests can be promoted to production")
+
+          for key in ("apiImage", "webImage", "ollamaImage", "whisperImage"):
+              artifact = manifest.get("artifacts", {}).get(key)
+              if not artifact:
+                  continue
+              repository = artifact["repository"]
+              repo_path = repository.split(".azurecr.io/", 1)[1]
+              print("\t".join([key, artifact["ref"], repo_path, artifact["digest"]]))
+          PY
+
+          while IFS=$'\t' read -r key source_ref repo_path digest; do
+            echo "Importing $key $source_ref into $TARGET_ACR/$repo_path:$IMAGE_TAG"
+            az acr import \
+              --name "$TARGET_ACR" \
+              --source "$source_ref" \
+              --image "$repo_path:$IMAGE_TAG" \
+              --force
+            az acr manifest show-metadata \
+              --registry "$TARGET_ACR" \
+              --name "$repo_path@$digest" \
+              --only-show-errors >/dev/null
+          done < /tmp/signacare-promotion-images.tsv
+
+      - name: Create production promotion manifest
+        if: ${{ steps.meta.outputs.env_name == 'prod' }}
+        id: promote_manifest
+        env:
+          SIGNACARE_RELEASE_ENV: prod
+          SIGNACARE_TARGET_ACR_NAME: ${{ steps.meta.outputs.acr_name }}
+          SIGNACARE_EXPECTED_IMAGE_TAG: ${{ github.event.inputs.staging_image_tag }}
+        run: node scripts/release/promote-release-manifest.mjs
+
+      - name: Upload production promotion manifest
+        if: ${{ steps.meta.outputs.env_name == 'prod' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: signacare-release-manifest-prod-${{ steps.promote_manifest.outputs.image_tag }}
+          path: |
+            artifacts/release/release-manifest.json
+            artifacts/release/release-manifest.json.sha256
+          if-no-files-found: error
 
   deploy:
     name: Deploy to App Service
@@ -145,7 +461,9 @@ jobs:
       - name: Azure login
         uses: azure/login@v2
         with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          client-id: ${{ secrets.AZURE_CLIENT_ID || vars.AZURE_CLIENT_ID || env.AZURE_CLIENT_ID_DEFAULT }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID || vars.AZURE_TENANT_ID || env.AZURE_TENANT_ID_DEFAULT }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID || vars.AZURE_SUBSCRIPTION_ID || env.AZURE_SUBSCRIPTION_ID_DEFAULT }}
 
       - name: Compute site names
         id: sites
@@ -157,14 +475,113 @@ jobs:
           echo "web_site=${{ env.NAME_PREFIX }}-web-$ENV" >> "$GITHUB_OUTPUT"
           if [[ "$ENV" == "prod" ]]; then
             echo "slot=staging" >> "$GITHUB_OUTPUT"
+          elif [[ "$ENV" == "staging" ]]; then
+            echo "slot=next" >> "$GITHUB_OUTPUT"
           else
-            echo "slot=" >> "$GITHUB_OUTPUT"
+            echo "Unsupported deployment environment: $ENV" >&2
+            exit 2
           fi
+
+      - name: Validate deployment slot topology
+        run: |
+          set -euo pipefail
+          SLOT="${{ steps.sites.outputs.slot }}"
+          if [[ -z "$SLOT" ]]; then
+            echo "Blue-green deployment requires an explicit App Service slot." >&2
+            exit 2
+          fi
+
+          for site in "${{ steps.sites.outputs.api_site }}" "${{ steps.sites.outputs.web_site }}"; do
+            az webapp show \
+              --name "$site" \
+              --resource-group "${{ steps.sites.outputs.rg }}" \
+              --slot "$SLOT" \
+              >/dev/null
+          done
+
+      - name: Validate smoke credential policy
+        env:
+          ENV_NAME: ${{ needs.build-and-push.outputs.env_name }}
+          SMOKE_LOGIN_EMAIL: ${{ secrets.SMOKE_LOGIN_EMAIL }}
+          SMOKE_LOGIN_PASSWORD: ${{ secrets.SMOKE_LOGIN_PASSWORD }}
+          SMOKE_REQUIRE_AUTHENTICATED_CHECKS: ${{ vars.SMOKE_REQUIRE_AUTHENTICATED_CHECKS || (needs.build-and-push.outputs.env_name == 'prod' && 'true' || 'false') }}
+        run: |
+          set -euo pipefail
+          case "${SMOKE_REQUIRE_AUTHENTICATED_CHECKS:-false}" in
+            true|TRUE|1|yes|YES) require_auth=true ;;
+            *) require_auth=false ;;
+          esac
+
+          if [[ "$ENV_NAME" == "prod" || "$require_auth" == "true" ]]; then
+            if [[ -z "${SMOKE_LOGIN_EMAIL:-}" || -z "${SMOKE_LOGIN_PASSWORD:-}" ]]; then
+              echo "Authenticated smoke credentials are required for $ENV_NAME. Set SMOKE_LOGIN_EMAIL and SMOKE_LOGIN_PASSWORD." >&2
+              exit 2
+            fi
+            echo "Authenticated smoke credential policy passed for $ENV_NAME."
+          else
+            echo "Authenticated smoke credentials are optional for $ENV_NAME; unauthenticated smoke will still run."
+          fi
+
+      - name: Validate database release-control proof
+        env:
+          ENV: ${{ needs.build-and-push.outputs.env_name }}
+          DB_RELEASE_CONTROLS_REQUIRED: ${{ vars.DB_RELEASE_CONTROLS_REQUIRED || (needs.build-and-push.outputs.env_name == 'prod' && 'true' || 'false') }}
+          DB_STAGING_CLONE_MIGRATION_PROOF: ${{ vars.DB_STAGING_CLONE_MIGRATION_PROOF }}
+          DB_EXPAND_CONTRACT_PROOF: ${{ vars.DB_EXPAND_CONTRACT_PROOF }}
+          DB_RESTORE_DRILL_PROOF: ${{ vars.DB_RESTORE_DRILL_PROOF }}
+          DB_ROLLBACK_REHEARSAL_PROOF: ${{ vars.DB_ROLLBACK_REHEARSAL_PROOF }}
+        run: bash deploy/azure/verify-database-release-controls.sh
+
+      - name: Stamp API runtime release metadata
+        run: |
+          set -euo pipefail
+          ENV="${{ needs.build-and-push.outputs.env_name }}"
+          SLOT_ARGS=()
+          if [[ -n "${{ steps.sites.outputs.slot }}" ]]; then
+            SLOT_ARGS=(--slot "${{ steps.sites.outputs.slot }}")
+          fi
+          az webapp config appsettings set \
+            --name "${{ steps.sites.outputs.api_site }}" \
+            --resource-group "${{ steps.sites.outputs.rg }}" \
+            "${SLOT_ARGS[@]}" \
+            --settings \
+              SIGNACARE_RELEASE_ENV="$ENV" \
+              SIGNACARE_COMMIT_SHA="${{ needs.build-and-push.outputs.commit_sha }}" \
+              SIGNACARE_PIPELINE_WORKFLOW="${{ needs.build-and-push.outputs.pipeline_workflow }}" \
+              SIGNACARE_PIPELINE_RUN_ID="${{ needs.build-and-push.outputs.pipeline_run_id }}" \
+              SIGNACARE_PIPELINE_RUN_ATTEMPT="${{ github.run_attempt }}" \
+              SIGNACARE_PIPELINE_ORIGIN="${{ needs.build-and-push.outputs.pipeline_origin }}" \
+              SIGNACARE_RELEASE_PROMOTABLE_TO_PROD="${{ needs.build-and-push.outputs.release_promotable_to_prod }}" \
+              SIGNACARE_RELEASE_NON_PROMOTABLE_REASON="${{ needs.build-and-push.outputs.release_non_promotable_reason }}" \
+              SIGNACARE_IMAGE_TAG="${{ needs.build-and-push.outputs.image_tag }}" \
+              SIGNACARE_BUILD_TIME="${{ needs.build-and-push.outputs.built_at }}" \
+              SIGNACARE_API_IMAGE_DIGEST="${{ needs.build-and-push.outputs.api_image }}" \
+              SIGNACARE_WEB_IMAGE_DIGEST="${{ needs.build-and-push.outputs.web_image }}" \
+              SIGNACARE_OLLAMA_IMAGE_DIGEST="${{ needs.build-and-push.outputs.ollama_image }}" \
+              SIGNACARE_WHISPER_IMAGE_DIGEST="${{ needs.build-and-push.outputs.whisper_image }}" \
+              SIGNACARE_RELEASE_MANIFEST_SHA256="${{ needs.build-and-push.outputs.release_manifest_sha256 }}" \
+              SIGNACARE_OPENAPI_SHA256="${{ needs.build-and-push.outputs.openapi_sha256 }}" \
+              SIGNACARE_CONFIG_CONTRACT_SHA256="${{ needs.build-and-push.outputs.config_contract_sha256 }}" \
+              SIGNACARE_MIGRATION_HEAD="${{ needs.build-and-push.outputs.migration_head }}" \
+              SIGNACARE_OLLAMA_MODEL="${{ env.OLLAMA_MODEL_NAME }}" \
+              SIGNACARE_OLLAMA_MODEL_MANIFEST_SHA256="${{ env.OLLAMA_MODEL_MANIFEST_SHA256 }}" \
+              SIGNACARE_WHISPER_MODEL="${{ env.WHISPER_MODEL_NAME }}" \
+              SIGNACARE_WHISPER_MODEL_SHA256="${{ env.WHISPER_MODEL_SHA256 }}" \
+              SIGNACARE_RUN_MIGRATIONS_ON_STARTUP="true" \
+              SIGNACARE_PROMOTION_SOURCE_ENV="${{ needs.build-and-push.outputs.promotion_source_env }}" \
+              SIGNACARE_PROMOTION_SOURCE_ACR_NAME="${{ needs.build-and-push.outputs.promotion_source_acr_name }}" \
+              SIGNACARE_PROMOTION_SOURCE_RELEASE_MANIFEST_SHA256="${{ needs.build-and-push.outputs.promotion_source_release_manifest_sha256 }}" \
+              SIGNACARE_PROMOTION_SOURCE_PIPELINE_RUN_ID="${{ needs.build-and-push.outputs.promotion_source_pipeline_run_id }}" \
+              SIGNACARE_AI_MODEL_PROMOTION_ALIAS="${{ needs.build-and-push.outputs.ai_model_promotion_alias }}" \
+              SIGNACARE_AI_MODEL_PROMOTION_RECORD="${{ needs.build-and-push.outputs.ai_model_promotion_record }}" \
+              SIGNACARE_AI_MODEL_PROMOTION_RECORD_SHA256="${{ needs.build-and-push.outputs.ai_model_promotion_record_sha256 }}" \
+              SIGNACARE_PROMOTED_AT="${{ needs.build-and-push.outputs.promoted_at }}"
 
       - name: Deploy API image to App Service
         run: |
           set -euo pipefail
-          IMAGE="${{ needs.build-and-push.outputs.acr_name }}.azurecr.io/signacare-api:${{ needs.build-and-push.outputs.image_tag }}"
+          ENV="${{ needs.build-and-push.outputs.env_name }}"
+          IMAGE="${{ needs.build-and-push.outputs.api_image }}"
           SLOT_FLAG=""
           if [[ -n "${{ steps.sites.outputs.slot }}" ]]; then
             SLOT_FLAG="--slot ${{ steps.sites.outputs.slot }}"
@@ -175,11 +592,37 @@ jobs:
             $SLOT_FLAG \
             --docker-custom-image-name "$IMAGE" \
             --docker-registry-server-url "https://${{ needs.build-and-push.outputs.acr_name }}.azurecr.io"
+
+      - name: Wait for API readiness on deployment target
+        run: |
+          set -euo pipefail
+          if [[ -n "${{ steps.sites.outputs.slot }}" ]]; then
+            API_READY_URL="https://${{ steps.sites.outputs.api_site }}-${{ steps.sites.outputs.slot }}.azurewebsites.net/ready"
+          else
+            API_READY_URL="https://${{ steps.sites.outputs.api_site }}.azurewebsites.net/ready"
+          fi
+
+          deadline=$(( $(date +%s) + 900 ))
+          attempt=0
+          while true; do
+            attempt=$((attempt + 1))
+            status="$(curl --max-time 20 -ksS -o /dev/null -w '%{http_code}' "$API_READY_URL" || true)"
+            if [[ "$status" == "200" ]]; then
+              echo "API readiness passed after rollout on attempt $attempt."
+              break
+            fi
+            if [[ "$(date +%s)" -ge "$deadline" ]]; then
+              echo "API did not reach /ready=200 within 15 minutes after rollout (last status: ${status:-curl_failed})." >&2
+              exit 1
+            fi
+            echo "API not ready yet (attempt $attempt, status: ${status:-curl_failed}); waiting 15s..."
+            sleep 15
+          done
 
       - name: Deploy Web image to App Service
         run: |
           set -euo pipefail
-          IMAGE="${{ needs.build-and-push.outputs.acr_name }}.azurecr.io/signacare-web:${{ needs.build-and-push.outputs.image_tag }}"
+          IMAGE="${{ needs.build-and-push.outputs.web_image }}"
           SLOT_FLAG=""
           if [[ -n "${{ steps.sites.outputs.slot }}" ]]; then
             SLOT_FLAG="--slot ${{ steps.sites.outputs.slot }}"
@@ -191,29 +634,148 @@ jobs:
             --docker-custom-image-name "$IMAGE" \
             --docker-registry-server-url "https://${{ needs.build-and-push.outputs.acr_name }}.azurecr.io"
 
+      - name: Configure Web API upstream for deployment target
+        run: |
+          set -euo pipefail
+          SLOT_ARGS=()
+          API_UPSTREAM="https://${{ steps.sites.outputs.api_site }}.azurewebsites.net/api"
+          if [[ -n "${{ steps.sites.outputs.slot }}" ]]; then
+            SLOT_ARGS=(--slot "${{ steps.sites.outputs.slot }}")
+            API_UPSTREAM="https://${{ steps.sites.outputs.api_site }}-${{ steps.sites.outputs.slot }}.azurewebsites.net/api"
+          fi
+          az webapp config appsettings set \
+            --name "${{ steps.sites.outputs.web_site }}" \
+            --resource-group "${{ steps.sites.outputs.rg }}" \
+            "${SLOT_ARGS[@]}" \
+            --settings API_UPSTREAM="$API_UPSTREAM"
+
+      - name: Deploy AI runtime service images (staging only)
+        if: ${{ needs.build-and-push.outputs.ai_runtime_enabled == 'true' && needs.build-and-push.outputs.env_name == 'staging' }}
+        env:
+          AI_OLLAMA_IMAGE: ${{ needs.build-and-push.outputs.ollama_image }}
+          AI_WHISPER_IMAGE: ${{ needs.build-and-push.outputs.whisper_image }}
+          OLLAMA_MODEL: ${{ env.OLLAMA_MODEL_NAME }}
+          OLLAMA_MODEL_MANIFEST_SHA256: ${{ env.OLLAMA_MODEL_MANIFEST_SHA256 }}
+          WHISPER_MODEL: ${{ env.WHISPER_MODEL_NAME }}
+          WHISPER_MODEL_SHA256: ${{ env.WHISPER_MODEL_SHA256 }}
+        run: |
+          set -euo pipefail
+          ENV="${{ needs.build-and-push.outputs.env_name }}"
+          if [[ "$ENV" != "staging" ]]; then
+            echo "AI runtime App Service deployment is staging-only here. Production requires reviewed private/GPU topology evidence." >&2
+            exit 2
+          fi
+          if [[ -z "$AI_OLLAMA_IMAGE" || -z "$AI_WHISPER_IMAGE" ]]; then
+            echo "AI runtime requested but immutable Ollama/Whisper image digests were not produced." >&2
+            exit 2
+          fi
+          bash deploy/azure/deploy-ai-runtime-services.sh "$ENV"
+
       - name: Wait for containers to come up (120s grace)
         run: sleep 120
 
-      - name: Smoke test
+      - name: Wait for deployment-slot web proxy readiness
+        if: ${{ steps.sites.outputs.slot != '' }}
+        run: |
+          set -euo pipefail
+          WEB_PROXY_URL="https://${{ steps.sites.outputs.web_site }}-${{ steps.sites.outputs.slot }}.azurewebsites.net/api/v1/fhir/metadata"
+          for attempt in {1..18}; do
+            status="$(curl -fsS -o /dev/null -w '%{http_code}' --max-time 10 "$WEB_PROXY_URL" || true)"
+            if [[ "$status" == "200" ]]; then
+              echo "Deployment-slot web proxy ready on attempt $attempt."
+              exit 0
+            fi
+            echo "Waiting for deployment-slot web proxy readiness (attempt $attempt/18, status=${status:-none})..."
+            sleep 10
+          done
+          echo "Deployment-slot web proxy did not reach 200 at $WEB_PROXY_URL within 180s." >&2
+          exit 1
+
+      - name: Wait for deployment-slot authenticated readiness
+        if: ${{ steps.sites.outputs.slot != '' }}
+        env:
+          SMOKE_LOGIN_EMAIL: ${{ secrets.SMOKE_LOGIN_EMAIL }}
+          SMOKE_LOGIN_PASSWORD: ${{ secrets.SMOKE_LOGIN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${SMOKE_LOGIN_EMAIL:-}" || -z "${SMOKE_LOGIN_PASSWORD:-}" ]]; then
+            echo "Smoke login credentials are not configured; skipping deployment-slot authenticated warm-up."
+            exit 0
+          fi
+
+          AUTH_API_URL="https://${{ steps.sites.outputs.api_site }}-${{ steps.sites.outputs.slot }}.azurewebsites.net/api/v1/auth/login"
+          LOGIN_PAYLOAD="$(python3 -c 'import json, os; print(json.dumps({"email": os.environ["SMOKE_LOGIN_EMAIL"], "password": os.environ["SMOKE_LOGIN_PASSWORD"]}))')"
+
+          for attempt in {1..12}; do
+            status="$(curl -sS --max-time 20 -o /tmp/signacare-slot-auth-ready.json -w '%{http_code}' \
+              -H "Content-Type: application/json" \
+              -d "$LOGIN_PAYLOAD" \
+              "$AUTH_API_URL" || echo '000')"
+            if [[ "$status" == "200" ]]; then
+              echo "Deployment-slot authenticated path warmed on attempt $attempt."
+              exit 0
+            fi
+            echo "Waiting for deployment-slot authenticated readiness (attempt $attempt/12, status=${status:-none})..."
+            sleep 10
+          done
+
+          echo "Deployment-slot authenticated readiness did not reach login=200 at $AUTH_API_URL within 120s." >&2
+          exit 1
+
+      - name: Smoke test deployment slot
+        env:
+          SMOKE_LOGIN_EMAIL: ${{ secrets.SMOKE_LOGIN_EMAIL }}
+          SMOKE_LOGIN_PASSWORD: ${{ secrets.SMOKE_LOGIN_PASSWORD }}
+          SMOKE_REQUIRE_AUTHENTICATED_CHECKS: ${{ vars.SMOKE_REQUIRE_AUTHENTICATED_CHECKS || (needs.build-and-push.outputs.env_name == 'prod' && 'true' || 'false') }}
+          SMOKE_REQUIRE_OBSERVABILITY: ${{ vars.SMOKE_REQUIRE_OBSERVABILITY || (needs.build-and-push.outputs.env_name == 'prod' && 'true' || 'false') }}
+          SMOKE_REQUIRE_AI_SCRIBE_PARITY: ${{ vars.SMOKE_REQUIRE_AI_SCRIBE_PARITY || ((needs.build-and-push.outputs.env_name == 'staging' || needs.build-and-push.outputs.env_name == 'prod') && 'true' || 'false') }}
+          SMOKE_REQUIRE_AI_CAPABILITIES: ${{ vars.SMOKE_REQUIRE_AI_CAPABILITIES || ((needs.build-and-push.outputs.env_name == 'staging' || needs.build-and-push.outputs.env_name == 'prod') && 'true' || 'false') }}
+          SMOKE_REQUIRE_PROMPT_CACHE_TELEMETRY: ${{ vars.SMOKE_REQUIRE_PROMPT_CACHE_TELEMETRY }}
+          SMOKE_EXPECT_AI_LANE: ${{ vars.SMOKE_EXPECT_AI_LANE }}
+          SMOKE_AZURE_RESOURCE_GROUP: ${{ steps.sites.outputs.rg }}
+          SMOKE_AZURE_API_APP_NAME: ${{ steps.sites.outputs.api_site }}
+          SMOKE_AZURE_API_SLOT: ${{ steps.sites.outputs.slot }}
+          EXPECTED_SIGNACARE_RELEASE_MANIFEST_SHA256: ${{ needs.build-and-push.outputs.release_manifest_sha256 }}
+          EXPECTED_SIGNACARE_COMMIT_SHA: ${{ needs.build-and-push.outputs.commit_sha }}
+          EXPECTED_SIGNACARE_PIPELINE_WORKFLOW: ${{ needs.build-and-push.outputs.pipeline_workflow }}
+          EXPECTED_SIGNACARE_PIPELINE_ORIGIN: ${{ needs.build-and-push.outputs.pipeline_origin }}
+          EXPECTED_SIGNACARE_RELEASE_PROMOTABLE_TO_PROD: ${{ needs.build-and-push.outputs.release_promotable_to_prod }}
+          EXPECTED_SIGNACARE_RELEASE_NON_PROMOTABLE_REASON: ${{ needs.build-and-push.outputs.release_non_promotable_reason }}
+          EXPECTED_SIGNACARE_API_IMAGE_DIGEST: ${{ needs.build-and-push.outputs.api_image }}
+          EXPECTED_SIGNACARE_WEB_IMAGE_DIGEST: ${{ needs.build-and-push.outputs.web_image }}
+          EXPECTED_SIGNACARE_OLLAMA_MODEL: ${{ env.OLLAMA_MODEL_NAME }}
+          EXPECTED_SIGNACARE_OLLAMA_MODEL_MANIFEST_SHA256: ${{ env.OLLAMA_MODEL_MANIFEST_SHA256 }}
+          EXPECTED_SIGNACARE_WHISPER_MODEL: ${{ env.WHISPER_MODEL_NAME }}
+          EXPECTED_SIGNACARE_WHISPER_MODEL_SHA256: ${{ env.WHISPER_MODEL_SHA256 }}
+          EXPECTED_SIGNACARE_OPENAPI_SHA256: ${{ needs.build-and-push.outputs.openapi_sha256 }}
+          EXPECTED_SIGNACARE_CONFIG_CONTRACT_SHA256: ${{ needs.build-and-push.outputs.config_contract_sha256 }}
+          EXPECTED_SIGNACARE_MIGRATION_HEAD: ${{ needs.build-and-push.outputs.migration_head }}
+          EXPECTED_SIGNACARE_PROMOTION_SOURCE_RELEASE_MANIFEST_SHA256: ${{ needs.build-and-push.outputs.promotion_source_release_manifest_sha256 }}
         run: |
           set -euo pipefail
           chmod +x deploy/azure/post-deploy-smoke.sh
           if [[ -n "${{ steps.sites.outputs.slot }}" ]]; then
-            # Prod: smoke-test the staging slot before swap.
-            export NAME_PREFIX="${{ env.NAME_PREFIX }}"
+            # Blue-green proof always runs against the deployment slot first.
             # Slot FQDN pattern: <site>-<slot>.azurewebsites.net
-            API="https://${{ steps.sites.outputs.api_site }}-${{ steps.sites.outputs.slot }}.azurewebsites.net"
-            WEB="https://${{ steps.sites.outputs.web_site }}-${{ steps.sites.outputs.slot }}.azurewebsites.net"
-            curl -fsS "$API/health" >/dev/null
-            curl -fsS "$API/ready" >/dev/null
-            curl -fsS "$WEB/" >/dev/null
-            echo "Slot smoke test passed."
+            AI_RUNTIME_SMOKE="${{ needs.build-and-push.outputs.ai_runtime_enabled }}"
+            if [[ "${{ needs.build-and-push.outputs.env_name }}" == "prod" ]]; then
+              AI_RUNTIME_SMOKE="false"
+            fi
+            SMOKE_API_URL="https://${{ steps.sites.outputs.api_site }}-${{ steps.sites.outputs.slot }}.azurewebsites.net" \
+              SMOKE_AUTH_API_URL="https://${{ steps.sites.outputs.api_site }}-${{ steps.sites.outputs.slot }}.azurewebsites.net" \
+              SMOKE_WEB_URL="https://${{ steps.sites.outputs.web_site }}-${{ steps.sites.outputs.slot }}.azurewebsites.net" \
+              AZURE_AI_RUNTIME_ENABLED="$AI_RUNTIME_SMOKE" \
+              ENV="${{ needs.build-and-push.outputs.env_name }}" \
+              NAME_PREFIX="${{ env.NAME_PREFIX }}" \
+              bash deploy/azure/post-deploy-smoke.sh
           else
-            ENV="${{ needs.build-and-push.outputs.env_name }}" bash deploy/azure/post-deploy-smoke.sh
+            AZURE_AI_RUNTIME_ENABLED="${{ needs.build-and-push.outputs.ai_runtime_enabled }}" \
+              ENV="${{ needs.build-and-push.outputs.env_name }}" \
+              bash deploy/azure/post-deploy-smoke.sh
           fi
 
-      - name: Swap slot to production (prod only, gated)
-        if: ${{ needs.build-and-push.outputs.env_name == 'prod' && github.event.inputs.swap_after_deploy == 'true' }}
+      - name: Swap deployment slot into live site
+        if: ${{ needs.build-and-push.outputs.env_name == 'staging' || (needs.build-and-push.outputs.env_name == 'prod' && github.event.inputs.swap_after_deploy == 'true') }}
         run: |
           az webapp deployment slot swap \
             --name "${{ steps.sites.outputs.api_site }}" \
@@ -226,10 +788,110 @@ jobs:
             --slot "${{ steps.sites.outputs.slot }}" \
             --target-slot production
 
-      - name: Post-swap smoke test (prod only)
-        if: ${{ needs.build-and-push.outputs.env_name == 'prod' && github.event.inputs.swap_after_deploy == 'true' }}
+      - name: Normalize Web API upstream after swap
+        if: ${{ needs.build-and-push.outputs.env_name == 'staging' || (needs.build-and-push.outputs.env_name == 'prod' && github.event.inputs.swap_after_deploy == 'true') }}
         run: |
-          ENV=prod NAME_PREFIX=${{ env.NAME_PREFIX }} bash deploy/azure/post-deploy-smoke.sh
+          set -euo pipefail
+          RG="${{ steps.sites.outputs.rg }}"
+          WEB_SITE="${{ steps.sites.outputs.web_site }}"
+          API_SITE="${{ steps.sites.outputs.api_site }}"
+          SLOT="${{ steps.sites.outputs.slot }}"
+
+          az webapp config appsettings set \
+            --name "$WEB_SITE" \
+            --resource-group "$RG" \
+            --settings API_UPSTREAM="https://${API_SITE}.azurewebsites.net/api"
+
+          if [[ -n "$SLOT" ]]; then
+            az webapp config appsettings set \
+              --name "$WEB_SITE" \
+              --resource-group "$RG" \
+              --slot "$SLOT" \
+              --settings API_UPSTREAM="https://${API_SITE}-${SLOT}.azurewebsites.net/api"
+          fi
+
+      - name: Wait for web proxy normalization
+        if: ${{ needs.build-and-push.outputs.env_name == 'staging' || (needs.build-and-push.outputs.env_name == 'prod' && github.event.inputs.swap_after_deploy == 'true') }}
+        run: |
+          set -euo pipefail
+          WEB_PROXY_URL="https://${{ steps.sites.outputs.web_site }}.azurewebsites.net/api/v1/fhir/metadata"
+          for attempt in {1..18}; do
+            status="$(curl -fsS -o /dev/null -w '%{http_code}' --max-time 10 "$WEB_PROXY_URL" || true)"
+            if [[ "$status" == "200" ]]; then
+              echo "Web proxy normalized on attempt $attempt."
+              exit 0
+            fi
+            echo "Waiting for web proxy normalization (attempt $attempt/18, status=${status:-none})..."
+            sleep 10
+          done
+          echo "Web proxy did not normalize at $WEB_PROXY_URL within 180s." >&2
+          exit 1
+
+      - name: Wait for authenticated smoke readiness
+        if: ${{ needs.build-and-push.outputs.env_name == 'staging' || (needs.build-and-push.outputs.env_name == 'prod' && github.event.inputs.swap_after_deploy == 'true') }}
+        env:
+          SMOKE_LOGIN_EMAIL: ${{ secrets.SMOKE_LOGIN_EMAIL }}
+          SMOKE_LOGIN_PASSWORD: ${{ secrets.SMOKE_LOGIN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${SMOKE_LOGIN_EMAIL:-}" || -z "${SMOKE_LOGIN_PASSWORD:-}" ]]; then
+            echo "Smoke login credentials are not configured; skipping authenticated readiness warm-up."
+            exit 0
+          fi
+
+          AUTH_API_URL="https://${{ steps.sites.outputs.api_site }}.azurewebsites.net/api/v1/auth/login"
+          LOGIN_PAYLOAD="$(python3 -c 'import json, os; print(json.dumps({"email": os.environ["SMOKE_LOGIN_EMAIL"], "password": os.environ["SMOKE_LOGIN_PASSWORD"]}))')"
+
+          for attempt in {1..12}; do
+            status="$(curl -sS --max-time 20 -o /tmp/signacare-auth-ready.json -w '%{http_code}' \
+              -H "Content-Type: application/json" \
+              -d "$LOGIN_PAYLOAD" \
+              "$AUTH_API_URL" || echo '000')"
+            if [[ "$status" == "200" ]]; then
+              echo "Authenticated smoke path warmed on attempt $attempt."
+              exit 0
+            fi
+            echo "Waiting for authenticated smoke readiness (attempt $attempt/12, status=${status:-none})..."
+            sleep 10
+          done
+
+          echo "Authenticated smoke readiness did not reach login=200 at $AUTH_API_URL within 120s." >&2
+          exit 1
+
+      - name: Post-swap smoke test on live site
+        if: ${{ needs.build-and-push.outputs.env_name == 'staging' || (needs.build-and-push.outputs.env_name == 'prod' && github.event.inputs.swap_after_deploy == 'true') }}
+        env:
+          SMOKE_LOGIN_EMAIL: ${{ secrets.SMOKE_LOGIN_EMAIL }}
+          SMOKE_LOGIN_PASSWORD: ${{ secrets.SMOKE_LOGIN_PASSWORD }}
+          SMOKE_REQUIRE_AUTHENTICATED_CHECKS: ${{ vars.SMOKE_REQUIRE_AUTHENTICATED_CHECKS || (needs.build-and-push.outputs.env_name == 'prod' && 'true' || 'false') }}
+          SMOKE_REQUIRE_OBSERVABILITY: ${{ vars.SMOKE_REQUIRE_OBSERVABILITY || (needs.build-and-push.outputs.env_name == 'prod' && 'true' || 'false') }}
+          SMOKE_REQUIRE_AI_SCRIBE_PARITY: 'true'
+          SMOKE_REQUIRE_AI_CAPABILITIES: 'true'
+          SMOKE_REQUIRE_PROMPT_CACHE_TELEMETRY: ${{ vars.SMOKE_REQUIRE_PROMPT_CACHE_TELEMETRY }}
+          SMOKE_EXPECT_AI_LANE: ${{ vars.SMOKE_EXPECT_AI_LANE }}
+          SMOKE_AZURE_RESOURCE_GROUP: ${{ steps.sites.outputs.rg }}
+          SMOKE_AZURE_API_APP_NAME: ${{ steps.sites.outputs.api_site }}
+          EXPECTED_SIGNACARE_RELEASE_MANIFEST_SHA256: ${{ needs.build-and-push.outputs.release_manifest_sha256 }}
+          EXPECTED_SIGNACARE_COMMIT_SHA: ${{ needs.build-and-push.outputs.commit_sha }}
+          EXPECTED_SIGNACARE_PIPELINE_WORKFLOW: ${{ needs.build-and-push.outputs.pipeline_workflow }}
+          EXPECTED_SIGNACARE_PIPELINE_ORIGIN: ${{ needs.build-and-push.outputs.pipeline_origin }}
+          EXPECTED_SIGNACARE_RELEASE_PROMOTABLE_TO_PROD: ${{ needs.build-and-push.outputs.release_promotable_to_prod }}
+          EXPECTED_SIGNACARE_RELEASE_NON_PROMOTABLE_REASON: ${{ needs.build-and-push.outputs.release_non_promotable_reason }}
+          EXPECTED_SIGNACARE_API_IMAGE_DIGEST: ${{ needs.build-and-push.outputs.api_image }}
+          EXPECTED_SIGNACARE_WEB_IMAGE_DIGEST: ${{ needs.build-and-push.outputs.web_image }}
+          EXPECTED_SIGNACARE_OLLAMA_MODEL: ${{ env.OLLAMA_MODEL_NAME }}
+          EXPECTED_SIGNACARE_OLLAMA_MODEL_MANIFEST_SHA256: ${{ env.OLLAMA_MODEL_MANIFEST_SHA256 }}
+          EXPECTED_SIGNACARE_WHISPER_MODEL: ${{ env.WHISPER_MODEL_NAME }}
+          EXPECTED_SIGNACARE_WHISPER_MODEL_SHA256: ${{ env.WHISPER_MODEL_SHA256 }}
+          EXPECTED_SIGNACARE_OPENAPI_SHA256: ${{ needs.build-and-push.outputs.openapi_sha256 }}
+          EXPECTED_SIGNACARE_CONFIG_CONTRACT_SHA256: ${{ needs.build-and-push.outputs.config_contract_sha256 }}
+          EXPECTED_SIGNACARE_MIGRATION_HEAD: ${{ needs.build-and-push.outputs.migration_head }}
+          EXPECTED_SIGNACARE_PROMOTION_SOURCE_RELEASE_MANIFEST_SHA256: ${{ needs.build-and-push.outputs.promotion_source_release_manifest_sha256 }}
+        run: |
+          AZURE_AI_RUNTIME_ENABLED="${{ needs.build-and-push.outputs.ai_runtime_enabled }}" \
+            ENV="${{ needs.build-and-push.outputs.env_name }}" \
+            NAME_PREFIX="${{ env.NAME_PREFIX }}" \
+            bash deploy/azure/post-deploy-smoke.sh
 
       - name: Slack notify on success
         if: ${{ success() }}

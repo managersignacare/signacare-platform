@@ -4,6 +4,7 @@ import {
   useMediaQuery,
   useTheme,
 } from '@mui/material';
+import { lazy, Suspense } from 'react';
 import { useUiStore } from '../../store/uiStore';
 import { useSidebarColors } from '../../theme/ThemeProvider';
 import { Sidebar } from './Sidebar';
@@ -11,11 +12,14 @@ import { PatientTabBar } from './PatientTabBar';
 import { KeyboardShortcutHandler } from './KeyboardShortcuts';
 import { CommandPalette } from './CommandPalette';
 import { NotificationBell } from '../../../features/notifications/NotificationBell';
-import { GuidedTourOverlay } from './GuidedTour';
 import { useEventStream } from '../../hooks/useEventStream';
+import { BuildStamp } from './BuildStamp';
 
 const DRAWER_WIDTH = 240;
 const COLLAPSED_WIDTH = 64;
+const GuidedTourOverlay = lazy(() =>
+  import('./GuidedTour').then((module) => ({ default: module.GuidedTourOverlay })),
+);
 
 interface Props {
   children: React.ReactNode;
@@ -135,7 +139,10 @@ export function AppShell({ children }: Props): React.ReactElement {
         </Box>
       </Box>
       <CommandPalette />
-      <GuidedTourOverlay />
+      <Suspense fallback={null}>
+        <GuidedTourOverlay />
+      </Suspense>
+      <BuildStamp />
     </Box>
   );
 }

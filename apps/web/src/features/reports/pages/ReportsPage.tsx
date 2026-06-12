@@ -18,8 +18,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import React, { useMemo, useState } from 'react';
 import { MarkdownRenderer } from '../../../shared/components/ui/MarkdownRenderer';
 import { apiClient } from '../../../shared/services/apiClient';
+import { llmAiJobsApi } from '../../../shared/services/llmAiJobsApi';
 import { useAuthStore } from '../../../shared/store/authStore';
-import { AdminReportWorkbench } from '../components/AdminReportWorkbench';
 import {
   adminOverviewKeys,
   reportSchedulesKeys,
@@ -47,6 +47,11 @@ import {
   readStaffLookup,
   toNumber,
 } from './reportsPageSupport';
+import { BarRow, ReportTabLoading, StatCard } from './reportsPagePrimitives';
+
+const AdminReportWorkbench = React.lazy(() =>
+  import('../components/AdminReportWorkbench').then((module) => ({ default: module.AdminReportWorkbench })),
+);
 
 interface AdminOverview {
   period: string;
@@ -95,12 +100,12 @@ export default function ReportsPage() {
     if (!data) return;
     setAiLoading(true);
     try {
-      const resp = await apiClient.instance.post<{ result: string }>('llm/clinical-ai', {
+      const result = await llmAiJobsApi.runClinicalAiJob({
         action: 'admin-report',
         data: JSON.stringify(data, null, 2),
         enhance: false,
-      }, { timeout: 180_000 });
-      setAiReport(resp.data.result);
+      });
+      setAiReport(result);
     } catch (err: unknown) {
       setAiReport(`Error generating report: ${readErrorMessage(err, 'AI unavailable')}`);
     } finally {
@@ -159,7 +164,11 @@ export default function ReportsPage() {
         {isAdmin && <Tab label="Quality Audit" value="audit" />}
       </Tabs>
 
-      {canViewAdminReport && tab === 'admin-report' && <AdminReportWorkbench />}
+      {canViewAdminReport && tab === 'admin-report' && (
+        <React.Suspense fallback={<ReportTabLoading label="Loading admin report workbench..." />}>
+          <AdminReportWorkbench />
+        </React.Suspense>
+      )}
       {isAdmin && tab === 'overview' && (data ? <OverviewReport data={data} /> : <Typography color="text.secondary" sx={{ py: 4, textAlign: 'center' }}>Loading overview data...</Typography>)}
       {isAdmin && tab === 'clinical' && (data ? <ClinicalReport data={data} /> : <Typography color="text.secondary" sx={{ py: 4, textAlign: 'center' }}>Loading...</Typography>)}
       {isAdmin && tab === 'compliance' && (data ? <ComplianceReport data={data} /> : <Typography color="text.secondary" sx={{ py: 4, textAlign: 'center' }}>Loading...</Typography>)}
@@ -168,36 +177,6 @@ export default function ReportsPage() {
       {isAdmin && tab === 'builder' && <ReportBuilderPanel />}
       {tab === 'caseload' && <CaseloadReport />}
       {isAdmin && tab === 'audit' && <QualityAuditPanel />}
-    </Box>
-  );
-}
-
-interface StatCardProps { icon: React.ReactNode; color: string; label: string; value: string | number; sub?: string }
-function StatCard({ icon, color, label, value, sub }: StatCardProps) {
-  return (
-    <Card elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
-      <CardContent sx={{ py: 2, '&:last-child': { pb: 2 }, display: 'flex', alignItems: 'center', gap: 2 }}>
-        <Box sx={{ width: 44, height: 44, borderRadius: 2, bgcolor: color + '15', display: 'flex', alignItems: 'center', justifyContent: 'center', color }}>{icon}</Box>
-        <Box sx={{ flex: 1 }}>
-          <Typography variant="h5" fontWeight={800} sx={{ color, lineHeight: 1 }}>{value}</Typography>
-          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem' }}>{label}</Typography>
-          {sub && <Typography variant="caption" display="block" sx={{ fontSize: '0.6rem', color: '#D32F2F', fontWeight: 600 }}>{sub}</Typography>}
-        </Box>
-      </CardContent>
-    </Card>
-  );
-}
-
-interface BarRowProps { label: string; value: number; max: number; color: string }
-function BarRow({ label, value, max, color }: BarRowProps) {
-  const pct = max > 0 ? Math.round(value / max * 100) : 0;
-  return (
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-      <Typography variant="body2" sx={{ width: 160, fontSize: 12 }}>{label}</Typography>
-      <Box sx={{ flex: 1, bgcolor: '#E0E0E0', borderRadius: 1, height: 16 }}>
-        <Box sx={{ width: `${pct}%`, bgcolor: color, borderRadius: 1, height: 16, minWidth: pct > 0 ? 8 : 0 }} />
-      </Box>
-      <Typography variant="caption" fontWeight={600} sx={{ minWidth: 24, textAlign: 'right' }}>{value}</Typography>
     </Box>
   );
 }
@@ -805,11 +784,17 @@ function ReportBuilderPanel() {
     if (!reportData) return;
     setAiLoading(true);
     try {
-      const resp = await apiClient.instance.post<{ result?: string }>('llm/clinical-ai', {
-        action: 'report-insight',
-        data: JSON.stringify({ metrics: selectedMetrics, dimension, dateRange: `${dateFrom} to ${dateTo}`, data: reportData }),
-      }, { timeout: 120_000 });
-      setAiInsight(resp.data?.result ?? 'No insights generated');
+      const result = await llmAiJobsApi.runClinicalAiJob({
+        action: 'admin-report',
+        data: JSON.stringify({
+          reportType: 'metrics-insight',
+          metrics: selectedMetrics,
+          dimension,
+          dateRange: `${dateFrom} to ${dateTo}`,
+          data: reportData,
+        }),
+      });
+      setAiInsight(result ?? 'No insights generated');
     } catch { setAiInsight('AI insights unavailable'); }
     setAiLoading(false);
   };

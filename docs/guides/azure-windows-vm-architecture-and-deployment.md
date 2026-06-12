@@ -1,5 +1,11 @@
 # Signacare EMR — Azure Windows VM Architecture & Deployment Reference
 
+> **Legacy / reference only:** This Windows VM architecture is retained for
+> traceability and Windows-only exception cases. It is not the active production
+> deployment lane. Current Azure Linux deployment work should use
+> `deploy/azure/main.bicep` and the Linux App Service runbook. See
+> [`docs/operations/deployment-learnings.md`](../operations/deployment-learnings.md).
+
 **Last updated:** 2026-05-20  
 **Scope:** Single-VM Windows Server 2022 deployment (dev/test today, hardenable to production)  
 **Primary runbook:** [azure-windows-server-deployment.md](./azure-windows-server-deployment.md)
@@ -144,7 +150,7 @@ Windows deployment runbook:
 
 Related Azure/Lifecycle docs:
 - [docs/plans/azure-staging-deployment.md](/Users/drprakashkamath/Projects/Signacare/docs/plans/azure-staging-deployment.md)
-- [docs/guides/azure-dev-test-deployment.md](/Users/drprakashkamath/Projects/Signacare/docs/guides/azure-dev-test-deployment.md)
+- [deploy/azure/README.md](/Users/drprakashkamath/Projects/Signacare/deploy/azure/README.md)
 
 ## 8) Production Hardening Checklist
 
@@ -169,4 +175,3 @@ From operator workstation:
 curl -k https://<vm-fqdn>/health
 curl -k https://<vm-fqdn>/ready
 ```
-

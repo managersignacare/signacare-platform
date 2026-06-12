@@ -120,6 +120,23 @@ export async function createDraftLetter(
       await requireMedicoLegalRole(auth);
       await requirePatientRelationship(auth, input.patientId);
     }
+    if (input.episodeId) {
+      const episode = await trx('episodes')
+        .where({
+          id: input.episodeId,
+          clinic_id: auth.clinicId,
+          patient_id: input.patientId,
+        })
+        .whereNull('deleted_at')
+        .first('id');
+      if (!episode) {
+        throw new HttpError(
+          409,
+          'EPISODE_PATIENT_MISMATCH',
+          'Episode does not belong to this patient.',
+        );
+      }
+    }
 
     const [letter] = await trx('letters')
       .insert({

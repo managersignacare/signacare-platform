@@ -14,6 +14,7 @@ export interface TreatmentPathwaysRow {
   created_at: string;
   updated_at?: string | null;
   lock_version: number;
+  updated_by_staff_id?: string | null;
 }
 
 export const TREATMENT_PATHWAYS_COLUMNS = [
@@ -26,6 +27,7 @@ export const TREATMENT_PATHWAYS_COLUMNS = [
   'created_at',
   'updated_at',
   'lock_version',
+  'updated_by_staff_id',
 ] as const;
 
 export type TreatmentPathwaysColumn = typeof TREATMENT_PATHWAYS_COLUMNS[number];

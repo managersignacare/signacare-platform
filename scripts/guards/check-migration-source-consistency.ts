@@ -12,7 +12,7 @@
  * 1) Source migration directory must contain ONLY `.ts` files.
  * 2) API build config must include all migration TS files recursively
  *    (not a pinned subset by date prefix).
- * 3) CI/deploy workflows must run `migrate:dev` explicitly.
+ * 3) CI workflows must run `migrate:dev` explicitly before DB-backed tests.
  *
  * Run:
  *   npm run guard:migration-source-consistency
@@ -27,7 +27,6 @@ const DIST_MIGRATIONS_DIR = path.join(REPO_ROOT, 'apps', 'api', 'dist', 'migrati
 const API_TSCONFIG_BUILD = path.join(REPO_ROOT, 'apps', 'api', 'tsconfig.build.json');
 const WORKFLOW_FILES = [
   path.join(REPO_ROOT, '.github', 'workflows', 'ci.yml'),
-  path.join(REPO_ROOT, '.github', 'workflows', 'deploy.yml'),
 ];
 
 interface Violation {

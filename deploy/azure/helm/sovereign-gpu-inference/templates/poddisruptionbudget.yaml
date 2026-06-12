@@ -1,0 +1,12 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "signacare-sovereign-gpu-inference.fullname" . }}
+  labels:
+    {{- include "signacare-sovereign-gpu-inference.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "signacare-sovereign-gpu-inference.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}

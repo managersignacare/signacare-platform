@@ -25,6 +25,7 @@ export const OutcomeMeasuresResponseScaffoldSchema = z.object({
   assignedBy: z.string().uuid().nullable().optional(),
   completedAt: z.string().datetime().nullable().optional(),
   lockVersion: z.number().int(),
+  deletedAt: z.string().datetime().nullable().optional(),
 });
 
 export type OutcomeMeasuresResponseScaffold = z.infer<typeof OutcomeMeasuresResponseScaffoldSchema>;

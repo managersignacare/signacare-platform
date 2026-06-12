@@ -1,21 +1,30 @@
 /**
  * NOCC Outcome Measures Routes
- * HoNOS (Adult/65+/CA), K10+, LSP-16, BASIS-32
+ * HoNOS (Adult/65+/CA), K10/K10+, LSP-16
  */
 import { Router, Request, Response, NextFunction } from 'express';
+import { z } from 'zod';
 import { authMiddleware } from '../../middleware/authMiddleware';
 import { requireModuleRead } from '../../middleware/moduleAccessMiddleware';
 import { MODULE_KEYS } from '../../shared/moduleKeys';
 import { requireRoles } from '../../middleware/rbacMiddleware';
 import { db } from '../../db/db';
 import { createAutoContactRecord } from '../contacts/autoContactRecord';
-import { CreateOutcomeMeasureSchema } from '@signacare/shared';
+import {
+  CreateOutcomeMeasureSchema,
+  getScaleBySlug,
+  listOutcomeMeasures,
+  resolveScaleByTemplateName,
+} from '@signacare/shared';
 import type { OutcomeMeasuresRow } from '../../db/types/outcome_measures';
 import { AppError } from '../../shared/errors';
 import { detectSuicideRiskSignal } from '../../shared/assessmentRisk';
 import { createTaskInternal } from '../tasks/taskService';
 import { emitClinicalSignal } from '../events/clinicalSignalEmitter';
 import { logger } from '../../utils/logger';
+import { buildAuthContext } from '../../shared/buildAuthContext';
+import { requirePatientRelationship } from '../../shared/authGuards';
+import { writeAuditLog } from '../../utils/audit';
 
 const router = Router();
 router.use(authMiddleware);
@@ -24,14 +33,14 @@ router.use(requireModuleRead(MODULE_KEYS.OUTCOMES));
 const CLINICIAN_ROLES = ['clinician', 'admin', 'superadmin'];
 
 // Explicit column list for .returning() (Phase R3 / CLAUDE.md §1.7).
-// Verified: outcome_measures has these 18 columns. NO deleted_at — status
-// (assigned/completed/expired) handles lifecycle.
+// Soft-delete is explicit via deleted_at so duplicate / entered-in-error
+// outcome measures can be retracted without hard-deleting the clinical row.
 const OUTCOME_MEASURE_COLUMNS = [
   'id', 'patient_id', 'clinic_id', 'episode_id', 'staff_id',
   'measure_type', 'collection_occasion', 'total_score', 'items',
   'notes', 'status', 'assigned_for_patient', 'template_id',
   'template_name', 'assigned_by', 'completed_at',
-  'created_at', 'updated_at',
+  'created_at', 'updated_at', 'deleted_at',
 ] as const;
 
 type OutcomeMeasureListResponse = {
@@ -57,6 +66,39 @@ type OutcomeMeasureListResponse = {
   created_at: string;
   createdAt: string;
 };
+
+const OutcomeMeasureGraphPointResponseSchema = z.object({
+  id: z.string(),
+  created_at: z.string(),
+  total_score: z.number(),
+  collection_occasion: z.string().nullable(),
+});
+
+const OutcomeMeasureGraphResponseSchema = z.object({
+  measureType: z.string(),
+  dataPoints: z.array(OutcomeMeasureGraphPointResponseSchema),
+});
+const OutcomeMeasureDefinitionItemSchema = z.object({
+  id: z.number().int().positive(),
+  label: z.string(),
+  subscale: z.string().optional(),
+  domain: z.string().optional(),
+});
+const OutcomeMeasureDefinitionsResponseSchema = z.object({
+  honos: z.array(OutcomeMeasureDefinitionItemSchema),
+  honos65: z.array(OutcomeMeasureDefinitionItemSchema),
+  honosca: z.array(OutcomeMeasureDefinitionItemSchema),
+  k10: z.array(OutcomeMeasureDefinitionItemSchema),
+  k10plus: z.array(OutcomeMeasureDefinitionItemSchema),
+  lsp16: z.array(OutcomeMeasureDefinitionItemSchema),
+});
+
+function isSupportedOutcomeMeasureType(value: string | null | undefined): boolean {
+  if (!value) return false;
+  const bySlug = getScaleBySlug(value);
+  if (bySlug?.family === 'outcome_measure') return true;
+  return resolveScaleByTemplateName(value)?.family === 'outcome_measure';
+}
 
 function mapOutcomeMeasureRowToResponse(row: OutcomeMeasuresRow): OutcomeMeasureListResponse {
   return {
@@ -198,20 +240,48 @@ const LSP16_ITEMS = [
   { id: 16, label: 'Does this person make and/or keep up friendships?', domain: 'social_contact' },
 ];
 
+const OUTCOME_MEASURE_DEFINITIONS = Object.fromEntries(
+  listOutcomeMeasures().map((entry) => {
+    switch (entry.slug) {
+      case 'honos':
+        return [entry.slug, HONOS_ITEMS];
+      case 'honos65':
+        return [entry.slug, HONOS_ITEMS];
+      case 'honosca':
+        return [entry.slug, HONOS_ITEMS];
+      case 'k10':
+        return [entry.slug, K10_ITEMS];
+      case 'k10plus':
+        return [entry.slug, K10_ITEMS];
+      case 'lsp16':
+        return [entry.slug, LSP16_ITEMS];
+      default:
+        return [entry.slug, []];
+    }
+  }),
+) as Record<string, unknown[]>;
+
 // GET /api/v1/outcomes/definitions — get measure item definitions
 router.get('/definitions', requireRoles(CLINICIAN_ROLES), (_req: Request, res: Response) => {
-  res.json({ honos: HONOS_ITEMS, k10: K10_ITEMS, lsp16: LSP16_ITEMS });
+  res.json(OutcomeMeasureDefinitionsResponseSchema.parse(OUTCOME_MEASURE_DEFINITIONS));
 });
 
 // GET /api/v1/outcomes/patient/:patientId — list outcome measures for a patient
 router.get('/patient/:patientId', requireRoles(CLINICIAN_ROLES), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    // outcome_measures has NO deleted_at column (§1.4) — do NOT filter on it
+    const auth = buildAuthContext(req);
+    await requirePatientRelationship(auth, req.params.patientId);
+
     const q = db<OutcomeMeasuresRow>('outcome_measures')
       .where({ patient_id: req.params.patientId, clinic_id: req.clinicId })
+      .whereNull('deleted_at')
+      .where((builder) => {
+        builder.where({ assigned_for_patient: false }).orWhereNull('assigned_for_patient');
+      })
+      .whereNotNull('total_score')
       .orderBy('created_at', 'desc');
     if (req.query.episodeId) q.where({ episode_id: req.query.episodeId as string });
-    const rows = await q;
+    const rows = (await q).filter((row) => isSupportedOutcomeMeasureType(row.measure_type));
     res.json(rows.map(mapOutcomeMeasureRowToResponse));
   } catch (err) { next(err); }
 });
@@ -219,13 +289,38 @@ router.get('/patient/:patientId', requireRoles(CLINICIAN_ROLES), async (req: Req
 // GET /api/v1/outcomes/patient/:patientId/graph — get graphing data (scores over time)
 router.get('/patient/:patientId/graph', requireRoles(CLINICIAN_ROLES), async (req: Request, res: Response, next: NextFunction) => {
   try {
+    const auth = buildAuthContext(req);
+    await requirePatientRelationship(auth, req.params.patientId);
+
     const measureType = req.query.type as string || 'honos';
-    // outcome_measures has NO deleted_at column (§1.4) — do NOT filter on it
-    const rows = await db('outcome_measures')
+    if (!isSupportedOutcomeMeasureType(measureType)) {
+      return next(
+        new AppError(
+          'Unsupported outcome measure type',
+          422,
+          'UNSUPPORTED_OUTCOME_MEASURE',
+          { measureType },
+        ),
+      );
+    }
+    const rows = await db<OutcomeMeasuresRow>('outcome_measures')
       .where({ patient_id: req.params.patientId, clinic_id: req.clinicId, measure_type: measureType })
+      .whereNull('deleted_at')
+      .where((builder) => {
+        builder.where({ assigned_for_patient: false }).orWhereNull('assigned_for_patient');
+      })
+      .whereNotNull('total_score')
       .orderBy('created_at', 'asc')
-      .select('id', 'created_at', 'total_score', 'collection_occasion');
-    res.json({ measureType, dataPoints: rows });
+      .select('id', 'created_at', 'total_score', 'collection_occasion', 'measure_type');
+    const dataPoints = rows
+      .filter((row) => isSupportedOutcomeMeasureType(row.measure_type))
+      .map((row) => ({
+        id: row.id,
+        created_at: String(row.created_at),
+        total_score: row.total_score != null ? Number(row.total_score) : 0,
+        collection_occasion: row.collection_occasion ?? null,
+      }));
+    res.json(OutcomeMeasureGraphResponseSchema.parse({ measureType, dataPoints }));
   } catch (err) { next(err); }
 });
 
@@ -245,6 +340,8 @@ router.post('/', requireRoles(CLINICIAN_ROLES), async (req: Request, res: Respon
     }
     const dto = parsed.data;
     const { patientId, episodeId, measureType, collectionOccasion, items, notes } = dto;
+    const auth = buildAuthContext(req, patientId);
+    await requirePatientRelationship(auth, patientId);
 
     // Auto-assign active episode if not provided
     let resolvedEpisodeId = episodeId || null;
@@ -294,10 +391,13 @@ router.post('/', requireRoles(CLINICIAN_ROLES), async (req: Request, res: Respon
     // Map to frontend-expected shape
     res.status(201).json({
       ...row,
+      total_score: row.total_score != null ? Number(row.total_score) : 0,
+      totalScore: row.total_score != null ? Number(row.total_score) : 0,
       items: typeof row.items === 'string' ? JSON.parse(row.items) : row.items,
       measure_date: row.created_at,
       measureDate: row.created_at,
       is_signed: false,
+      isSigned: false,
     });
   } catch (err) { next(err); }
 });
@@ -307,6 +407,7 @@ router.post('/:id/sign', requireRoles(CLINICIAN_ROLES), async (req: Request, res
   try {
     const [row] = await db('outcome_measures')
       .where({ id: req.params.id, clinic_id: req.clinicId })
+      .whereNull('deleted_at')
       .update({
         status: 'signed',
         lock_version: db.raw('lock_version + 1'),
@@ -315,6 +416,63 @@ router.post('/:id/sign', requireRoles(CLINICIAN_ROLES), async (req: Request, res
       .returning(OUTCOME_MEASURE_COLUMNS);
     res.json(row);
   } catch (err) { next(err); }
+});
+
+// DELETE /api/v1/outcomes/:id — soft delete duplicate / entered-in-error
+// outcome measures while preserving the audit trail.
+router.delete('/:id', requireRoles(CLINICIAN_ROLES), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const row = await db<OutcomeMeasuresRow>('outcome_measures')
+      .where({ id: req.params.id, clinic_id: req.clinicId })
+      .whereNull('deleted_at')
+      .first();
+
+    if (!row) {
+      return next(new AppError('Outcome measure not found', 404, 'NOT_FOUND'));
+    }
+
+    const auth = buildAuthContext(req, row.patient_id);
+    await requirePatientRelationship(auth, row.patient_id);
+
+    const isPrivileged = req.user?.role === 'admin' || req.user?.role === 'superadmin';
+    const isAuthor = row.staff_id != null && row.staff_id === req.user?.id;
+    if (!isPrivileged && !isAuthor) {
+      return next(new AppError(
+        'Only the recording clinician or an admin may retract this outcome measure',
+        403,
+        'FORBIDDEN',
+      ));
+    }
+
+    await db('outcome_measures')
+      .where({ id: row.id, clinic_id: req.clinicId })
+      .whereNull('deleted_at')
+      .update({
+        deleted_at: new Date(),
+        updated_at: new Date(),
+        lock_version: db.raw('lock_version + 1'),
+      });
+
+    await writeAuditLog({
+      clinicId: req.clinicId!,
+      actorId: req.user!.id,
+      action: 'SOFT_DELETE',
+      tableName: 'outcome_measures',
+      recordId: row.id,
+      oldData: {
+        patientId: row.patient_id,
+        episodeId: row.episode_id ?? null,
+        measureType: row.measure_type,
+        totalScore: row.total_score != null ? Number(row.total_score) : null,
+        assignedForPatient: row.assigned_for_patient ?? false,
+        status: row.status ?? null,
+      },
+    });
+
+    res.status(204).end();
+  } catch (err) {
+    next(err);
+  }
 });
 
 // ── Score Calculation ──

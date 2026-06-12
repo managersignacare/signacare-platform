@@ -47,7 +47,8 @@ module.exports = {
         'Route files must not import other route files for shared ' +
         'logic — extract a service or util instead. The legitimate ' +
         'exception is sub-router composition (`router.use(otherRouter)`), ' +
-        'where the imported file is itself a router default-export. ' +
+        'or route-registration composition inside the same feature, ' +
+        'where the imported file is explicitly mounted by the parent. ' +
         'Known sub-router mounts are allowlisted in pathNot below.',
       from: { path: 'apps/api/src/features/.+/.*[Rr]outes\\.ts$' },
       to: {
@@ -73,6 +74,11 @@ module.exports = {
           'apps/api/src/features/llm/scribeSessionRoutes\\.ts$',
           'apps/api/src/features/llm/scribeConsentRoutes\\.ts$',
           'apps/api/src/features/llm/scribeCatalogRoutes\\.ts$',
+          'apps/api/src/features/llm/scribeParityRoutes\\.ts$',
+          // Pathways parent router composing sanctioned behavioral sub-router.
+          'apps/api/src/features/treatment-pathways/behavioralPathwayRoutes\\.ts$',
+          // Patients parent router registering sanctioned ancillary patient routes.
+          'apps/api/src/features/patients/patientAncillaryRoutes\\.ts$',
         ],
       },
     },

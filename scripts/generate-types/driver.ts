@@ -15,13 +15,29 @@
 import { readFileSync, writeFileSync, readdirSync, mkdirSync, existsSync } from 'fs';
 import { join } from 'path';
 import { REPO_ROOT } from '../guards/lib/repoRoot';
-import { findTableEvents, type ParseEvent, type ParseFailure } from './parser';
+import { findTableEvents, type ColumnDef, type ParseEvent, type ParseFailure } from './parser';
 import { replayMigrations, type TableState } from './replayer';
 import { emitRowInterface, emitDtoScaffold, emitResponseScaffold } from './emitter';
 
 const MIGRATIONS_DIR = join(REPO_ROOT, 'apps/api/migrations');
 const ROW_TYPES_DIR = join(REPO_ROOT, 'apps/api/src/db/types');
 const SCAFFOLDS_DIR = join(REPO_ROOT, 'packages/shared/src/_scaffolds');
+const SNAPSHOT_PATH = join(REPO_ROOT, 'apps/api/src/db/schema-snapshot.json');
+
+interface SchemaSnapshot {
+  readonly tables?: Record<string, string[]>;
+  readonly columnMetadata?: Record<string, Record<string, SnapshotColumnMetadata>>;
+}
+
+interface SnapshotColumnMetadata {
+  readonly dataType: string;
+  readonly udtName: string;
+  readonly isNullable: boolean;
+  readonly hasDefault: boolean;
+  readonly characterMaximumLength: number | null;
+  readonly numericPrecision: number | null;
+  readonly numericScale: number | null;
+}
 
 export function loadMigrations(
   filterTable?: string,
@@ -55,7 +71,7 @@ function ensureDir(dir: string): void {
  * the check here. Per L5 cycle-2 advisory + gold-standard-enforcer cycle-2.
  */
 export function findPhantomTables(emittedNames: Iterable<string>): string[] {
-  const snapshotPath = join(REPO_ROOT, 'apps/api/src/db/schema-snapshot.json');
+  const snapshotPath = SNAPSHOT_PATH;
   if (!existsSync(snapshotPath)) return [];
   const snapshot = JSON.parse(readFileSync(snapshotPath, 'utf8'));
   const liveTables: Set<string> = new Set(Object.keys(snapshot.tables ?? {}));
@@ -64,6 +80,80 @@ export function findPhantomTables(emittedNames: Iterable<string>): string[] {
     if (!liveTables.has(name)) phantoms.push(name);
   }
   return phantoms;
+}
+
+function snapshotKnexType(meta: SnapshotColumnMetadata): ColumnDef['knexType'] {
+  const dataType = meta.dataType.toLowerCase();
+  const udtName = meta.udtName.toLowerCase();
+  if (dataType === 'uuid' || udtName === 'uuid') return 'uuid';
+  if (dataType === 'character varying' || dataType === 'character' || udtName === 'varchar' || udtName === 'bpchar') return 'string';
+  if (dataType === 'text' || udtName === 'text') return 'text';
+  if (dataType === 'integer' || dataType === 'smallint' || udtName === 'int4' || udtName === 'int2') return 'integer';
+  if (dataType === 'bigint' || udtName === 'int8') return 'bigInteger';
+  if (dataType === 'boolean' || udtName === 'bool') return 'boolean';
+  if (dataType === 'date' || udtName === 'date') return 'date';
+  if (dataType.startsWith('timestamp') || udtName === 'timestamp' || udtName === 'timestamptz') return 'timestamp';
+  if (dataType.startsWith('time') || udtName === 'time' || udtName === 'timetz') return 'time';
+  if (dataType === 'jsonb' || udtName === 'jsonb') return 'jsonb';
+  if (dataType === 'json' || udtName === 'json') return 'json';
+  if (dataType === 'numeric' || dataType === 'decimal' || udtName === 'numeric') return 'decimal';
+  return 'specificType';
+}
+
+function snapshotColumn(tableName: string, name: string, meta?: SnapshotColumnMetadata): ColumnDef {
+  if (!meta) {
+    throw new Error(
+      `schema-snapshot column metadata missing for ${tableName}.${name}; run npm run db:snapshot --workspace=apps/api before generating types`,
+    );
+  }
+  const knexType = snapshotKnexType(meta);
+  return {
+    name,
+    knexType,
+    nullable: meta.isNullable,
+    hasDefault: meta.hasDefault,
+    isPrimary: false,
+    stringMaxLength: meta.characterMaximumLength ?? undefined,
+    decimalPrecision: meta.numericPrecision ?? undefined,
+    decimalScale: meta.numericScale ?? undefined,
+    specificTypeRaw: knexType === 'specificType' ? (meta.udtName || meta.dataType) : undefined,
+  };
+}
+
+function loadSnapshotTableStates(
+  replayedTables: Map<string, TableState>,
+  filterTable?: string,
+): Map<string, TableState> {
+  if (!existsSync(SNAPSHOT_PATH)) return replayedTables;
+
+  const snapshot = JSON.parse(readFileSync(SNAPSHOT_PATH, 'utf8')) as SchemaSnapshot;
+  const snapshotTables = snapshot.tables ?? {};
+  const snapshotMetadata = snapshot.columnMetadata ?? {};
+  const output = new Map<string, TableState>();
+
+  for (const [name, columns] of Object.entries(snapshotTables)) {
+    if (filterTable && name !== filterTable) continue;
+
+    const replayed = replayedTables.get(name);
+    const hasExistingGeneratedContract = existsSync(join(ROW_TYPES_DIR, `${name}.ts`));
+    if (!replayed && !hasExistingGeneratedContract) continue;
+
+    const reconciledColumns = new Map<string, ColumnDef>();
+    for (const columnName of columns) {
+      reconciledColumns.set(
+        columnName,
+        replayed?.columns.get(columnName) ?? snapshotColumn(name, columnName, snapshotMetadata[name]?.[columnName]),
+      );
+    }
+
+    output.set(name, {
+      name,
+      columns: reconciledColumns,
+      droppedFromMigrations: replayed?.droppedFromMigrations ?? [],
+    });
+  }
+
+  return output;
 }
 
 export interface RunOptions {
@@ -83,13 +173,20 @@ export interface RunResult {
 export function run(opts: RunOptions): RunResult {
   const parseFailures: ParseFailure[] = [];
   const events = loadMigrations(opts.filterTable, (f) => parseFailures.push(f));
-  const tables = replayMigrations(events);
+  const replayedTables = replayMigrations(events);
+  const tables = opts.skipSnapshotCrossCheck
+    ? replayedTables
+    : loadSnapshotTableStates(replayedTables, opts.filterTable);
 
   if (opts.verbose) {
     // eslint-disable-next-line no-console
     console.log(`  migrations with events: ${events.size}`);
     // eslint-disable-next-line no-console
     console.log(`  tables found: ${tables.size}`);
+    if (!opts.skipSnapshotCrossCheck && existsSync(SNAPSHOT_PATH)) {
+      // eslint-disable-next-line no-console
+      console.log(`  source: schema-snapshot reconciled with migration metadata`);
+    }
     if (opts.filterTable) {
       // eslint-disable-next-line no-console
       console.log(`  filter: --table ${opts.filterTable}`);

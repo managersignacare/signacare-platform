@@ -1,6 +1,6 @@
 // apps/web/src/features/auth/services/authApi.ts
-import type { LoginDTO, MFAVerifyDTO, AuthUser } from '@signacare/shared';
-import { AuthUserSchema } from '@signacare/shared';
+import type { ChangePasswordDTO, ChangePasswordResponse, LoginDTO, MFAVerifyDTO, AuthUser } from '@signacare/shared';
+import { AuthUserSchema, ChangePasswordResponseSchema } from '@signacare/shared';
 import { apiClient } from '../../../shared/services/apiClient';
 
 export type LoginResult =
@@ -16,6 +16,11 @@ export const authApi = {
   async verifyMfa(dto: MFAVerifyDTO): Promise<AuthUser> {
     const user = await apiClient.post<AuthUser>('auth/mfa/verify', dto);
     return AuthUserSchema.parse(user);
+  },
+
+  async changePassword(dto: ChangePasswordDTO): Promise<ChangePasswordResponse> {
+    const result = await apiClient.post<ChangePasswordResponse>('auth/change-password', dto);
+    return ChangePasswordResponseSchema.parse(result);
   },
 
   async logout(): Promise<void> {

@@ -13,6 +13,7 @@ import { useEffect, useState } from 'react';
 import { ListExportBar } from '../../../../shared/components/ui/ListExportBar';
 import { PrintExportButtons } from '../../../../shared/components/ui/PrintExportButtons';
 import { apiClient } from '../../../../shared/services/apiClient';
+import { llmAiJobsApi } from '../../../../shared/services/llmAiJobsApi';
 import { canSignAiDraftNote, requiresAiDraftSignAttestation } from '../../../../shared/utils/aiDraftSignAttestation';
 import { openInNewWindow, openEditableInNewWindow, NOTE_SAVED_CHANNEL } from '../../../../shared/utils/openInNewWindow';
 import { patientsKeys, correspondenceKeys } from '../../queryKeys';
@@ -307,13 +308,13 @@ ${customInstructions ? `- Additional instructions: ${customInstructions}` : ''}
 - Include medication list if mentioned in the note
 - Include follow-up recommendations`;
 
-      const resp = await apiClient.post<{ result: string }>('llm/clinical-ai', {
+      const result = await llmAiJobsApi.runClinicalAiJob({
         action: 'letter',
         data: prompt,
         patientId,
         enhance: true,
       });
-      setGeneratedLetter(resp.result);
+      setGeneratedLetter(result);
     } catch (err: unknown) {
       setError(getNotesErrorMessage(err, 'Failed to generate letter. Ensure the AI service is running.'));
     } finally {

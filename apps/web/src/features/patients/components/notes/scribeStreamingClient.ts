@@ -6,7 +6,7 @@
  * Wraps the existing /scribe/stream-chunk and /scribe/stream-final
  * endpoints in a small helper class that the recorder can call as
  * MediaRecorder fires `ondataavailable`. Buffers the per-second
- * MediaRecorder output into ~5-second batches before each network
+ * MediaRecorder output into short rolling batches before each network
  * call so Whisper has enough audio to produce a useful partial.
  *
  * The class is deliberately decoupled from React. Callers wire the
@@ -32,6 +32,7 @@ interface StreamFinalResponse {
   transcript: string;
   sessionId: string;
   complete: boolean;
+  degradedMode?: boolean;
 }
 
 export class ScribeStreamingClient {
@@ -47,7 +48,7 @@ export class ScribeStreamingClient {
   private accumulatedTranscript = '';
 
   constructor(opts: StreamingClientOptions) {
-    this.batchMs = opts.batchMs ?? 5000;
+    this.batchMs = opts.batchMs ?? 3000;
     this.onPartial = opts.onPartial;
     this.onError = opts.onError;
     // sessionId only needs to be unique per recording session, not
@@ -115,16 +116,40 @@ export class ScribeStreamingClient {
 
   /**
    * Flush any remaining buffered chunks and return the accumulated
-   * transcript. The /stream-final endpoint also exists but isn't
-   * needed when we've flushed all chunks via /stream-chunk.
+   * transcript. Always finalises through /stream-final so the tail of
+   * a long interview is not silently dropped.
    */
   async finish(): Promise<string> {
-    await this.flushBuffer();
-    // Wait briefly for any in-flight requests to settle.
-    const start = Date.now();
-    while (this.inFlight > 0 && Date.now() - start < 5_000) {
-      await new Promise((r) => setTimeout(r, 100));
+    let finalBlob: Blob | null = null;
+    if (this.buffer.length > 0) {
+      finalBlob = new Blob(this.buffer, { type: this.mimeType });
+      this.buffer = [];
+      this.bufferStartedAt = 0;
     }
+
+    await this.waitForInflight();
+
+    const fd = new FormData();
+    fd.append('sessionId', this.sessionId);
+    fd.append('existingTranscript', this.accumulatedTranscript);
+    if (finalBlob && finalBlob.size > 0) {
+      fd.append('audio', finalBlob, 'final_chunk.webm');
+    }
+
+    try {
+      const resp = await apiClient.instance.post<StreamFinalResponse>(
+        'scribe/stream-final',
+        fd,
+        { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 60_000 },
+      );
+      const text = resp.data?.transcript?.trim();
+      if (text) {
+        this.accumulatedTranscript = text;
+      }
+    } catch (err) {
+      if (this.onError) this.onError(err instanceof Error ? err : new Error(String(err)));
+    }
+
     return this.accumulatedTranscript;
   }
 
@@ -138,6 +163,13 @@ export class ScribeStreamingClient {
 
   get currentTranscript(): string {
     return this.accumulatedTranscript;
+  }
+
+  private async waitForInflight(): Promise<void> {
+    const start = Date.now();
+    while (this.inFlight > 0 && Date.now() - start < 5_000) {
+      await new Promise((r) => setTimeout(r, 100));
+    }
   }
 
   // Expose for tests / diagnostics

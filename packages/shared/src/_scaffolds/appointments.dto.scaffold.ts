@@ -47,6 +47,11 @@ export const AppointmentsDtoScaffoldSchema = z.object({
   checkInAt: z.string().datetime().nullable().optional(),
   checkedInById: z.string().uuid().nullable().optional(),
   lockVersion: z.number().int(),
+  outlookChangeKey: z.string().max(255).nullable().optional(),
+  outlookLastSyncedAt: z.string().datetime().nullable().optional(),
+  outlookLastModifiedAt: z.string().datetime().nullable().optional(),
+  outlookSyncStatus: z.string().max(30),
+  outlookSyncError: z.string().nullable().optional(),
 });
 
 export type AppointmentsDtoScaffold = z.infer<typeof AppointmentsDtoScaffoldSchema>;

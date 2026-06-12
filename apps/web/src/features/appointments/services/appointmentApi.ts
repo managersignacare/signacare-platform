@@ -9,7 +9,7 @@ import type {
 
 export const appointmentApi = {
   list: async (filters?: AppointmentFilters): Promise<Appointment[]> => {
-    return apiClient.get<Appointment[]>('appointments', { params: filters });
+    return apiClient.get<Appointment[]>('appointments', filters);
   },
 
   create: async (dto: CreateAppointment): Promise<Appointment> => {
@@ -27,6 +27,8 @@ export const appointmentApi = {
     dto: Partial<Pick<CreateAppointment, 'startTime' | 'endTime' | 'type' | 'notes'> & {
       clinicianId?: string;
       episodeId?: string | null;
+      mode?: CreateAppointment['mode'];
+      attendeeStaffIds?: string[];
       telehealthDetails?: { telehealthLink: string; telehealthProvider?: string; telehealthPasscode?: string };
     }>,
   ): Promise<Appointment> => {

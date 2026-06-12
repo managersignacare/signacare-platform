@@ -2,6 +2,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import WhatshotIcon from '@mui/icons-material/Whatshot';
 import {
+  Alert,
   Box,
   Button,
   Checkbox,
@@ -25,6 +26,12 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import React, { useState } from 'react';
 import { apiClient } from '../../../../../shared/services/apiClient';
+import { llmAiJobsApi } from '../../../../../shared/services/llmAiJobsApi';
+import {
+  formatClinicalAiJobQueueSubmitErrorMessage,
+  formatClinicalAiQueueUnavailableMessage,
+  isClinicalAiQueueUnavailableError,
+} from '../../../../../shared/services/llmAiJobsSupport';
 import { episodesKeys, patientsKeys } from '../../../queryKeys';
 
 interface Episode {
@@ -363,6 +370,9 @@ export function DischargeSummaryDialog({
   const qc = useQueryClient();
   const [content, setContent] = useState('');
   const [loading, setLoading] = useState(false);
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const [generationStatus, setGenerationStatus] = useState<string | null>(null);
+  const [generationError, setGenerationError] = useState<string | null>(null);
   const [consultantId, setConsultantId] = useState('');
   const [step, setStep] = useState<'generate' | 'edit' | 'submit'>('generate');
   const { data: staffList } = useQuery({
@@ -391,20 +401,66 @@ export function DischargeSummaryDialog({
               disabled={loading}
               onClick={async () => {
                 setLoading(true);
+                setActiveJobId(null);
+                setGenerationStatus('Queuing discharge summary job...');
+                setGenerationError(null);
+                let queuedJobId: string | null = null;
                 try {
-                  const r = await apiClient.post<{ content: string }>(`episodes/${episodeId}/discharge-summary/generate`, {});
-                  setContent(r.content ?? '');
+                  const queued = await llmAiJobsApi.queueClinicalAiJob({
+                    action: 'discharge',
+                    data: {
+                      requestedOutput: 'consultant-review discharge summary draft',
+                      instructions: 'Generate a discharge summary for this exact episode. Do not use unrelated episodes.',
+                    },
+                    patientId,
+                    episodeId,
+                    enhance: true,
+                  });
+                  queuedJobId = queued.jobId;
+                  setActiveJobId(queued.jobId);
+                  const completed = await llmAiJobsApi.waitForClinicalAiJob(queued.jobId, {
+                    onProgress: (status) => {
+                      setGenerationStatus(status.statusMessage ?? status.stage ?? `Job ${status.status}`);
+                    },
+                  });
+                  setContent(completed.result);
+                  setGenerationStatus('Discharge summary draft generated. Review and edit before submission.');
                   setStep('edit');
-                } catch {
-                  setContent('[AI unavailable — write manually]');
-                  setStep('edit');
+                } catch (err) {
+                  console.warn('EpisodesTab: discharge summary AI job failed', err);
+                  setGenerationError(
+                    queuedJobId
+                      ? `AI job ${queuedJobId} did not return a usable draft. Check the async AI jobs dashboard or write manually.`
+                      : (
+                          isClinicalAiQueueUnavailableError(err)
+                            ? formatClinicalAiQueueUnavailableMessage('AI discharge summary generation')
+                            : formatClinicalAiJobQueueSubmitErrorMessage('AI discharge summary generation')
+                        ),
+                  );
+                } finally {
+                  setLoading(false);
                 }
-                setLoading(false);
               }}
               sx={{ bgcolor: '#327C8D' }}
             >
               {loading ? 'Generating...' : 'Generate with AI'}
             </Button>
+            {activeJobId && (
+              <Alert severity={generationError ? 'warning' : 'info'} sx={{ mt: 2, textAlign: 'left' }}>
+                Job ID: {activeJobId}
+                {generationStatus ? ` — ${generationStatus}` : ''}
+              </Alert>
+            )}
+            {generationError && (
+              <Alert severity="error" sx={{ mt: 2, textAlign: 'left' }}>
+                {generationError}
+                <Box sx={{ mt: 1 }}>
+                  <Button size="small" variant="outlined" onClick={() => { setContent(''); setStep('edit'); }}>
+                    Write manually
+                  </Button>
+                </Box>
+              </Alert>
+            )}
           </Box>
         )}
         {step === 'edit' && <TextField fullWidth multiline rows={18} value={content} onChange={(e) => setContent(e.target.value)} sx={{ mt: 1, '& .MuiInputBase-input': { fontFamily: 'monospace', fontSize: 12 } }} />}

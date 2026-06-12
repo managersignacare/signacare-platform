@@ -54,6 +54,10 @@ export type AuditAction =
   // and audio storage proceeded. `record_id` binds to the scribe_consents
   // row used for forensic traceability.
   | 'AMBIENT_NOTE_RECORDING_STARTED'
+  // Async AI/Scribe Runtime v2 — long-recording ambient jobs write this row
+  // after consent/relationship gates pass and audio is durably stored, before
+  // BullMQ queue admission. `record_id` binds to the scribe_consents row.
+  | 'AMBIENT_NOTE_RECORDING_QUEUED'
   // BUG-274 — patient (or clinician on patient's behalf) revoked a
   // scribe consent mid-session. `record_id` binds to the scribe_consents
   // row being revoked. new_data carries {sessionId?, blobDeleted:boolean,
@@ -164,6 +168,10 @@ export type AuditAction =
   // (patient identity change — legal / coronial review MUST be able
   // to reconstruct the merge chain). Now a first-class union member.
   | 'PATIENT_MERGED'
+  // Duty-scoped patient access granted to an on-shift clinician or
+  // prescriber without an existing care-team relationship. Bounded by
+  // expires_at and used for forensic review of ad hoc on-duty access.
+  | 'DUTY_RELATIONSHIP_GRANTED'
   // BUG-430-PATIENT-APP — patient-app session attempted to access
   // another patient's data via path-param mismatch on
   // /api/v1/patient-app/*/:patientId. record_id = the legitimate

@@ -70,6 +70,7 @@ const SENSITIVE_KEYS: ReadonlyArray<string> = [
   // O365
   'O365_CLIENT_SECRET',
   // S3 / blob storage
+  'BLOB_AZURE_ACCOUNT_KEY',
   'BLOB_S3_ACCESS_KEY_ID',
   'BLOB_S3_SECRET_ACCESS_KEY',
   // Webhook keys (the receiver also stores these in DB; this allow-
@@ -107,6 +108,7 @@ const SENSITIVE_KEYS: ReadonlyArray<string> = [
   'PHI_ENCRYPTION_KEYRING_JSON',
   'PHI_ENCRYPTION_ACTIVE_KEY_VERSION',
   'BLIND_INDEX_KEY',
+  'PATIENT_APP_DEDUPE_PEPPER',
   'SESSION_SECRET',
   'CALENDAR_ICAL_SECRET',
   'SIGNACARE_LICENSE_SECRET',
@@ -126,6 +128,7 @@ const REQUIRED_IN_PRODUCTION: ReadonlyArray<string> = [
   'JWT_REFRESH_SECRET',
   'DB_APP_PASSWORD',
   'BLIND_INDEX_KEY',
+  'PATIENT_APP_DEDUPE_PEPPER',
 ];
 
 export type SecretsBackendName = 'env' | 'json' | 'file' | 'azure_keyvault';

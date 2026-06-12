@@ -8,6 +8,7 @@ import { writeFile, unlink, mkdir } from 'fs/promises';
 import { join } from 'path';
 import { randomUUID } from 'crypto';
 import { tmpdir } from 'os';
+import type { AuthContext, ClinicalContextEnvelope, RoutedModelExecution } from '@signacare/shared';
 import { logger } from '../utils/logger';
 import { recordLlmInteraction } from '../shared/recordLlmInteraction';
 import {
@@ -17,7 +18,6 @@ import {
 import { assessAllergiesForAmbientPipeline } from './scribeAllergyAssessor';
 import { PIPELINE_STAGES, type PipelineStage } from '../shared/pipelineTracker';
 import {
-  SCRIBE_PASS1_SYSTEM,
   SCRIBE_PASS3_SYSTEM,
   getFormatPrompt,
   verifyMedications,
@@ -47,39 +47,64 @@ import {
   type QUESTScore,
 } from './scribeEnhancements';
 import { getSpecialtyExtractionPrompt, getSpecialtyFormattingPrompt } from './scribeSpecialties';
+import {
+  buildAmbientGovernedClinicalContext,
+  buildAmbientGovernedContextAuditMetadata,
+  shouldFailClosedForAmbientContext,
+} from '../features/llm/context/ambientClinicalContext';
+import { AppError } from '../shared/errors';
+import {
+  AMBIENT_LONG_RECORDING_TARGET_MINUTES,
+  ambientAudioMaxBytes,
+  ambientOllamaNumPredict,
+  ambientOllamaTimeoutMs,
+  ambientTranscriptChunkChars,
+  ambientWhisperTimeoutMs,
+} from '../shared/ambientScribeConfig';
+import {
+  buildExtractionFallbackFacts,
+  extractWhisperFailure,
+  formatLlmFailure,
+  isWhisperAudioDecodeFailure,
+  mergeExtractedFacts,
+  runPass1Extraction,
+  splitTranscriptForLlm,
+  type AmbientExtractedFacts,
+} from './ambientProcessorLongform';
+import {
+  ambientModelProvider,
+  buildAmbientFallbackExecution,
+  generateAmbientPass3Text,
+  lockAmbientRuntime,
+  summarizeAmbientExecutions,
+  type AmbientRuntimeLock,
+} from './ambientModelRouting';
+import {
+  buildMSEFromExtraction,
+  extractDiagnosis,
+  extractRiskFlags,
+  parseSOAP,
+  type AmbientMentalStateExam,
+  type AmbientStructuredSections,
+} from './ambientProcessorParsing';
 
 const WHISPER_API_URL = process.env.WHISPER_API_URL ?? 'http://localhost:8080';
-const OLLAMA_URL = process.env.OLLAMA_URL ?? 'http://localhost:11434';
 
 export interface AmbientResult {
   transcript: string;
   diarizedTranscript: string;
   extractedFacts: ExtractedFacts;
-  structured: {
-    subjective: string;
-    objective: string;
-    assessment: string;
-    plan: string;
-  };
-  mentalStateExam?: {
-    appearance: string;
-    behaviour: string;
-    speech: string;
-    mood: string;
-    affect: string;
-    thoughtForm: string;
-    thoughtContent: string;
-    perception: string;
-    cognition: string;
-    insight: string;
-    judgement: string;
-  };
+  structured: AmbientStructuredSections;
+  mentalStateExam?: AmbientMentalStateExam;
   riskFlags: string[];
   suggestedDiagnosis: string[];
   medications: MedicationMention[];
   summary: string;
   durationSeconds: number;
   model: string;
+  requestedModel: string;
+  modelUsed: string;
+  requiresClinicianReview?: boolean;
   format: string;
   pipeline: 'medical-grade';
   pass1DurationMs: number;
@@ -106,18 +131,13 @@ export interface AmbientResult {
   interpreterUsed: boolean;
   interpreterLanguage?: string;
   bilingualTranscript?: string;
+  llmFallbacks?: {
+    pass1?: string;
+    pass3?: string;
+  };
 }
 
-interface ExtractedFacts {
-  subjective: string[];
-  objective: string[];
-  assessment: string[];
-  plan: string[];
-  risk: string[];
-  medications: string[];
-  quotes: string[];
-  mse: Record<string, string>;  // MSE domain findings
-}
+type ExtractedFacts = AmbientExtractedFacts;
 
 interface MedicationMention {
   name: string;
@@ -126,28 +146,31 @@ interface MedicationMention {
   change?: 'started' | 'increased' | 'decreased' | 'ceased' | 'continued' | 'mentioned';
 }
 
+export type AmbientOutputFormat =
+  | 'soap'
+  | 'mse'
+  | 'progress'
+  | 'intake'
+  | 'ward_round'
+  | 'review'
+  | 'collateral'
+  | 'phone'
+  | 'home_visit'
+  | 'case_conference'
+  | 'group'
+  | 'incident'
+  | 'physical_health'
+  | 'lai'
+  | 'clozapine'
+  | 'all';
+
 interface ProcessOptions {
   clinicId: string;
   staffId: string;
   patientId?: string;
+  auth?: AuthContext;
   model?: string;
-  outputFormat?:
-    | 'soap'
-    | 'mse'
-    | 'progress'
-    | 'intake'
-    | 'ward_round'
-    | 'review'
-    | 'collateral'
-    | 'phone'
-    | 'home_visit'
-    | 'case_conference'
-    | 'group'
-    | 'incident'
-    | 'physical_health'
-    | 'lai'
-    | 'clozapine'
-    | 'all';
+  outputFormat?: AmbientOutputFormat;
   interpreterUsed?: boolean;
   interpreterLanguage?: string;  // e.g. 'vi', 'zh', 'ar', 'el', 'it'
   // BUG-342: consent id is propagated for audit/training-export filtering.
@@ -161,7 +184,14 @@ export async function processAmbientAudio(
 ): Promise<AmbientResult> {
   const startTime = Date.now();
   const format = opts.outputFormat ?? 'soap';
-  const model = opts.model ?? (process.env.OLLAMA_MODEL || 'qwen2.5:14b');
+  const runtimeLock = await lockAmbientRuntime(opts.clinicId, opts.model);
+  const requestedModel =
+    opts.model?.trim()
+    || (
+      runtimeLock.runtimeSelection.backend === 'azure_openai'
+        ? 'azure_openai:auto'
+        : (process.env.OLLAMA_MODEL || 'qwen2.5:14b')
+    );
 
   // ═══════════════════════════════════════════════════════════════════════════
   // STAGE 1: TRANSCRIPTION (Whisper + clinical vocab + diarization)
@@ -197,14 +227,26 @@ export async function processAmbientAudio(
       whisperModelVersion,
     }, 'Audio transcribed with clinical vocab + diarization');
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    const code = (err as { code?: string })?.code;
+    const { message: msg, code } = extractWhisperFailure(err);
     logger.error({ err: msg, code }, '[Ambient] Whisper transcription failed');
 
     if (msg.includes('ECONNREFUSED') || code === 'ECONNREFUSED') {
       throw new Error('Whisper server is not running. Start it with: cd deploy/whisper-server && python server.py');
     } else if (msg.includes('timeout') || msg.includes('ETIMEDOUT') || code === 'ECONNABORTED') {
-      throw new Error('Whisper transcription timed out. The recording may be too long — try under 5 minutes.');
+      throw new Error(
+        `Whisper transcription timed out. The synchronous path is capped below Azure App Service request limits; ${AMBIENT_LONG_RECORDING_TARGET_MINUTES}-minute psychiatric interviews require the async scribe job workflow.`,
+      );
+    } else if (isWhisperAudioDecodeFailure(msg)) {
+      throw new AppError(
+        'Recording audio could not be decoded. Please retry the recording; if this repeats, disable live transcript and use a shorter test clip.',
+        422,
+        'AUDIO_DECODE_FAILED',
+        {
+          audioBytes: audioBuffer.length,
+          mimeType,
+          upstream: 'whisper',
+        },
+      );
     } else {
       throw new Error(`Transcription failed: ${msg}`);
     }
@@ -231,21 +273,40 @@ export async function processAmbientAudio(
 
   const prefs = await getScribePreferences(opts.staffId).catch((err) => { logger.warn({ err }, 'ambientProcessor: op failed — returning null'); return null; });
   const specialty = prefs?.specialty ?? 'psychiatry';
-  // S5.5: pre-consult RAG context. buildPatientContext supersedes the
-  // narrower getPriorNoteContext by also pulling active medications,
-  // active diagnoses, active alerts and recent observations. The
-  // legacy getPriorNoteContext is kept as a fallback for any caller
-  // that doesn't have a clinic_id; it's also still exported for
-  // back-compat with anything outside the scribe pipeline. The full
-  // context is hard-capped to ~8000 chars (~2000 tokens) by
-  // buildPatientContext so we can't blow past the LLM's input window.
-  const priorContext = opts.patientId
-    ? await buildPatientContext(opts.patientId, opts.clinicId).catch(async () => {
-        // Fall back to the simpler legacy context if the richer
-        // builder errors out — better than no context at all.
-        return getPriorNoteContext(opts.patientId!).catch(() => '');
-      })
-    : '';
+  let priorContext = '';
+  let governedContextEnvelope: ClinicalContextEnvelope | null = null;
+  let contextMode: 'governed' | 'legacy_fallback' | 'none' = 'none';
+  let contextFallbackReason: string | null = null;
+
+  if (opts.patientId) {
+    try {
+      const governedContext = await buildAmbientGovernedClinicalContext({
+        clinicId: opts.clinicId,
+        staffId: opts.staffId,
+        patientId: opts.patientId,
+        auth: opts.auth,
+      });
+      priorContext = governedContext?.renderedPrompt ?? '';
+      governedContextEnvelope = governedContext?.envelope ?? null;
+      contextMode = priorContext ? 'governed' : 'none';
+    } catch (err) {
+      if (shouldFailClosedForAmbientContext(err)) throw err;
+
+      contextFallbackReason = err instanceof Error ? err.message : String(err);
+      logger.warn(
+        {
+          err: contextFallbackReason,
+          clinicId: opts.clinicId,
+          patientId: opts.patientId,
+        },
+        '[Ambient] governed clinical context failed — falling back to legacy prior-context builder',
+      );
+      priorContext = await buildPatientContext(opts.patientId, opts.clinicId).catch(async () => (
+        getPriorNoteContext(opts.patientId!).catch(() => '')
+      ));
+      contextMode = priorContext ? 'legacy_fallback' : 'none';
+    }
+  }
 
   // ═══════════════════════════════════════════════════════════════════════════
   // STAGE 1.5 — PROMPT INJECTION GUARD
@@ -305,7 +366,35 @@ export async function processAmbientAudio(
 
   const pass1Start = Date.now();
   const specialtyExtraction = getSpecialtyExtractionPrompt(specialty);
-  const extractedFacts = await runPass1Extraction(diarizedTranscript, model, specialtyExtraction);
+  let pass1FallbackReason: string | undefined;
+  let pass3FallbackReason: string | undefined;
+  let pass1ModelUsed = requestedModel;
+  let pass1ModelFallbackFrom: string | undefined;
+  let pass3ModelUsed: string | undefined;
+  let pass3ModelFallbackFrom: string | undefined;
+  let pass1Executions: RoutedModelExecution[] = [];
+  let pass1PromptTokens: number | null = null;
+  let pass1CompletionTokens: number | null = null;
+  let pass3Execution: RoutedModelExecution | null = null;
+  let pass3PromptTokens: number | null = null;
+  let pass3CompletionTokens: number | null = null;
+  let extractedFacts: ExtractedFacts;
+  try {
+    const pass1 = await runPass1Extraction(diarizedTranscript, runtimeLock, specialtyExtraction);
+    extractedFacts = pass1.facts;
+    pass1ModelUsed = pass1.modelUsed;
+    pass1ModelFallbackFrom = pass1.fallbackFrom;
+    pass1Executions = pass1.executions;
+    pass1PromptTokens = pass1.promptTokens;
+    pass1CompletionTokens = pass1.completionTokens;
+  } catch (err) {
+    pass1FallbackReason = formatLlmFailure(err);
+    extractedFacts = buildExtractionFallbackFacts(diarizedTranscript || transcript, pass1FallbackReason);
+    logger.warn(
+      { err: pass1FallbackReason, requestedModel, transcriptLength: diarizedTranscript.length },
+      '[Ambient] Pass 1 LLM extraction failed — using transcript-grounded fallback facts',
+    );
+  }
   const pass1DurationMs = Date.now() - pass1Start;
 
   logger.info({
@@ -391,14 +480,40 @@ export async function processAmbientAudio(
   const kShotBlock = await buildKShotExamples(opts.staffId, format).catch(() => '');
   const styleInstructions = baseStyleInstructions + kShotBlock;
   const specialtyFormatting = getSpecialtyFormattingPrompt(specialty);
-  let formattedNote = await runPass3Formatting(
-    extractedFacts, verifiedMedications, riskAssessment, safetyAlerts,
-    format, model, priorContext, styleInstructions, specialtyFormatting,
-  );
+  let formattedNote = '';
+  if (pass1FallbackReason) {
+    pass3FallbackReason = 'Skipped LLM formatting because Pass 1 extraction used deterministic fallback facts.';
+    pass1ModelUsed = 'deterministic-fallback';
+    pass3ModelUsed = 'deterministic-fallback';
+    formattedNote = buildFallbackNote(extractedFacts, verifiedMedications, riskAssessment);
+  } else {
+    try {
+      const pass3 = await runPass3Formatting(
+        extractedFacts, verifiedMedications, riskAssessment, safetyAlerts,
+        format, runtimeLock, priorContext, styleInstructions, specialtyFormatting,
+      );
+      formattedNote = pass3.text;
+      pass3ModelUsed = pass3.execution.modelName;
+      pass3ModelFallbackFrom = pass3.fallbackFromModelName ?? undefined;
+      pass3Execution = pass3.execution;
+      pass3PromptTokens = pass3.promptTokens;
+      pass3CompletionTokens = pass3.completionTokens;
+    } catch (err) {
+      pass3FallbackReason = formatLlmFailure(err);
+      pass3ModelUsed = 'deterministic-fallback';
+      formattedNote = buildFallbackNote(extractedFacts, verifiedMedications, riskAssessment);
+      logger.warn(
+        { err: pass3FallbackReason, requestedModel, format },
+        '[Ambient] Pass 3 LLM formatting failed — using deterministic clinical-note fallback',
+      );
+    }
+  }
   const pass3DurationMs = Date.now() - pass3Start;
 
   // Fallback: if LLM returned empty note but we have a transcript, build a plain note
   if (!formattedNote.trim() && transcript.trim()) {
+    pass3FallbackReason = 'Pass 3 returned empty output; deterministic fallback note was generated.';
+    pass3ModelUsed = 'deterministic-fallback';
     const hasAnyFacts = Object.values(extractedFacts).some(arr =>
       Array.isArray(arr) ? arr.length > 0 : Object.keys(arr).length > 0
     );
@@ -543,7 +658,7 @@ export async function processAmbientAudio(
       stage: PIPELINE_STAGES.PASS1_EXTRACT,
       startedAt: new Date(pass1Start).toISOString(),
       durationMs: pass1DurationMs,
-      success: true,
+      success: !pass1FallbackReason,
       meta: {
         subjective: extractedFacts.subjective.length,
         objective: extractedFacts.objective.length,
@@ -551,6 +666,7 @@ export async function processAmbientAudio(
         plan: extractedFacts.plan.length,
         risk: extractedFacts.risk.length,
         medications: extractedFacts.medications.length,
+        ...(pass1FallbackReason ? { fallbackReason: pass1FallbackReason } : {}),
       },
     },
     {
@@ -568,31 +684,75 @@ export async function processAmbientAudio(
       stage: PIPELINE_STAGES.PASS3_FORMAT,
       startedAt: new Date(pass3Start).toISOString(),
       durationMs: pass3DurationMs,
-      success: true,
-      meta: { format, outputLength: formattedNote.length },
+      success: !pass3FallbackReason,
+      meta: {
+        format,
+        outputLength: formattedNote.length,
+        ...(pass3FallbackReason ? { fallbackReason: pass3FallbackReason } : {}),
+      },
     },
   ];
+
+  const llmExecutions = [
+    ...pass1Executions,
+    ...(pass3Execution ? [pass3Execution] : []),
+  ];
+  const executionIdentity = summarizeAmbientExecutions(llmExecutions);
+  const modelUsed = executionIdentity.modelName || [pass1ModelUsed, pass3ModelUsed]
+    .filter((value, index, values) => value && values.indexOf(value) === index)
+    .join('+') || requestedModel;
+  const pass1ReviewReason = pass1FallbackReason
+    ?? (pass1ModelFallbackFrom ? `Model fallback used for Pass 1: requested ${pass1ModelFallbackFrom}, used ${pass1ModelUsed}` : undefined);
+  const pass3ReviewReason = pass3FallbackReason
+    ?? (pass3ModelFallbackFrom ? `Model fallback used for Pass 3: requested ${pass3ModelFallbackFrom}, used ${pass3ModelUsed}` : undefined);
+  const requiresClinicianReview = Boolean(pass1ReviewReason || pass3ReviewReason);
+  const ambientModelVersion = executionIdentity.modelVersion;
+  const auditExecution =
+    pass3Execution
+    ?? buildAmbientFallbackExecution(runtimeLock, 'best_clinical');
+  const contextAuditMetadata = buildAmbientGovernedContextAuditMetadata({
+    execution: auditExecution,
+    contextEnvelope: governedContextEnvelope,
+  });
+  const promptTokens =
+    (pass1PromptTokens ?? 0)
+    + (pass3PromptTokens ?? 0)
+    || null;
+  const completionTokens =
+    (pass1CompletionTokens ?? 0)
+    + (pass3CompletionTokens ?? 0)
+    || null;
+  const totalTokens =
+    (pass1PromptTokens ?? 0)
+    + (pass1CompletionTokens ?? 0)
+    + (pass3PromptTokens ?? 0)
+    + (pass3CompletionTokens ?? 0)
+    || null;
 
   await recordLlmInteraction({
     clinicId: opts.clinicId,
     userId: opts.staffId,
     patientId: opts.patientId ?? null,
     feature: 'ambient',
-    modelName: model,
-    modelVersion: model, // tag-fallback; BUG-282 tracks digest integration
-    modelProvider: 'ollama',
+    modelName: modelUsed,
+    modelVersion: ambientModelVersion,
+    modelProvider: ambientModelProvider(runtimeLock.runtimeSelection.backend),
     // Pass 1 and Pass 3 run at distinct temperatures; record the
     // dominant extraction temperature (Pass 1) since it's the
     // fact-extraction call and most forensically consequential.
     temperature: 0.0,
     pipeline: pipelineStages,
-    promptTokens: Math.ceil((transcript.length + diarizedTranscript.length) / 4),
-    completionTokens: Math.ceil(formattedNote.length / 4),
+    promptTokens: promptTokens ?? Math.ceil((transcript.length + diarizedTranscript.length) / 4),
+    completionTokens: completionTokens ?? Math.ceil(formattedNote.length / 4),
     totalTokens:
-      Math.ceil((transcript.length + diarizedTranscript.length) / 4) +
-      Math.ceil(formattedNote.length / 4),
+      totalTokens
+      ?? (
+        Math.ceil((transcript.length + diarizedTranscript.length) / 4) +
+        Math.ceil(formattedNote.length / 4)
+      ),
     latencyMs: Date.now() - startTime,
-    success: true,
+    success: !requiresClinicianReview,
+    errorCode: requiresClinicianReview ? 'AMBIENT_REVIEW_REQUIRED_FALLBACK' : undefined,
     // BUG-342 — raw PHI text moves from metadata JSONB into the new
     // encrypted llm_prompts_outputs table (BUG-282). Prompt = the
     // diarized transcript fed into Ollama; output = the formatted
@@ -604,11 +764,47 @@ export async function processAmbientAudio(
     outputText: formattedNote,
     consentId: opts.consentId ?? null,
     metadata: {
-      versionSource: 'tag',
+      ...contextAuditMetadata,
+      versionSource:
+        requiresClinicianReview
+          ? 'degraded-or-fallback'
+          : (runtimeLock.runtimeSelection.backend === 'azure_openai' ? 'provider' : 'tag'),
       format,
       specialty,
       overallConfidence,
       redactionCount: redacted.entries.length,
+      runtimeBackendLocked: runtimeLock.runtimeSelection.backend,
+      runtimeLocalStyleAdapterModelName: runtimeLock.runtimeSelection.localStyleAdapterModelName,
+      requestedLocalModelApplied: runtimeLock.requestedLocalModel ?? null,
+      contextMode,
+      contextFallbackReason,
+      contextAppliedStages: ['pass3_format'],
+      requestedModel,
+      modelUsed,
+      modelVersion: ambientModelVersion,
+      llmExecutionCount: llmExecutions.length,
+      pass1Executions: pass1Executions.map((execution) => ({
+        alias: execution.alias,
+        backend: execution.backend,
+        modelName: execution.modelName,
+        modelVersion: execution.modelVersion,
+        deployment: execution.deployment,
+        localStyleAdapterModelName: execution.localStyleAdapterModelName ?? null,
+      })),
+      pass3Execution: pass3Execution ? {
+        alias: pass3Execution.alias,
+        backend: pass3Execution.backend,
+        modelName: pass3Execution.modelName,
+        modelVersion: pass3Execution.modelVersion,
+        deployment: pass3Execution.deployment,
+        localStyleAdapterModelName: pass3Execution.localStyleAdapterModelName ?? null,
+      } : null,
+      pass1ModelUsed,
+      pass1ModelFallbackFrom: pass1ModelFallbackFrom ?? null,
+      pass3ModelUsed,
+      pass3ModelFallbackFrom: pass3ModelFallbackFrom ?? null,
+      pass1Fallback: pass1FallbackReason ?? null,
+      pass3Fallback: pass3FallbackReason ?? null,
     },
   });
 
@@ -646,7 +842,10 @@ export async function processAmbientAudio(
     medications,
     summary: formattedNote,
     durationSeconds,
-    model,
+    model: modelUsed,
+    requestedModel,
+    modelUsed,
+    requiresClinicianReview,
     format,
     pipeline: 'medical-grade',
     pass1DurationMs,
@@ -667,6 +866,12 @@ export async function processAmbientAudio(
     interpreterUsed,
     interpreterLanguage,
     bilingualTranscript,
+    llmFallbacks: pass1ReviewReason || pass3ReviewReason
+      ? {
+          pass1: pass1ReviewReason,
+          pass3: pass3ReviewReason,
+        }
+      : undefined,
   };
 }
 
@@ -760,8 +965,9 @@ async function _transcribeWithWhisper(
 
     const resp = await axios.post(`${WHISPER_API_URL}/inference`, form, {
       headers: form.getHeaders(),
-      timeout: 300000,
-      maxContentLength: 100 * 1024 * 1024,
+      timeout: ambientWhisperTimeoutMs(),
+      maxBodyLength: ambientAudioMaxBytes(),
+      maxContentLength: ambientAudioMaxBytes(),
     });
 
     const data = resp.data;
@@ -820,8 +1026,9 @@ async function _transcribeWithWhisper(
       try {
         const transResp = await axios.post(`${WHISPER_API_URL}/inference`, translateForm, {
           headers: translateForm.getHeaders(),
-          timeout: 300000,
-          maxContentLength: 100 * 1024 * 1024,
+          timeout: ambientWhisperTimeoutMs(),
+          maxBodyLength: ambientAudioMaxBytes(),
+          maxContentLength: ambientAudioMaxBytes(),
         });
 
         const transData = transResp.data;
@@ -907,84 +1114,6 @@ async function _transcribeWithWhisper(
 // Uses SCRIBE_PASS1_SYSTEM — zero fabrication, MSE domain tags
 // ═══════════════════════════════════════════════════════════════════════════════
 
-async function runPass1Extraction(transcript: string, model: string, specialtyAddendum: string = ''): Promise<ExtractedFacts> {
-  const userPrompt = `Extract all clinical facts from this transcript, one per line, tagged appropriately.
-For MSE findings, use [MSE:domain] tags. For medications, include EXACT dose and frequency.
-${specialtyAddendum}
-
-TRANSCRIPT:
----
-${transcript}
----
-
-EXTRACTED FACTS:`;
-
-  const response = await callOllama(model, SCRIBE_PASS1_SYSTEM, userPrompt, 0.0);
-  return parseExtractedFacts(response);
-}
-
-function parseExtractedFacts(text: string): ExtractedFacts {
-  const facts: ExtractedFacts = {
-    subjective: [],
-    objective: [],
-    assessment: [],
-    plan: [],
-    risk: [],
-    medications: [],
-    quotes: [],
-    mse: {},
-  };
-
-  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
-
-  for (const line of lines) {
-    const cleaned = line.replace(/^[-•*]\s*/, '').trim();
-
-    // MSE domain tags: [MSE:mood], [MSE:affect], etc.
-    const mseMatch = cleaned.match(/^\[MSE:(\w+)\]\s*(.*)/i);
-    if (mseMatch) {
-      const domain = mseMatch[1].toLowerCase();
-      const finding = mseMatch[2].trim();
-      // Map to standard domain keys
-      const domainMap: Record<string, string> = {
-        appearance: 'appearance', behaviour: 'behaviour', behavior: 'behaviour',
-        speech: 'speech', mood: 'mood', affect: 'affect',
-        thought_form: 'thoughtForm', thoughtform: 'thoughtForm', 'thought form': 'thoughtForm',
-        thought_content: 'thoughtContent', thoughtcontent: 'thoughtContent', 'thought content': 'thoughtContent',
-        perception: 'perception', cognition: 'cognition',
-        insight: 'insight', judgement: 'judgement', judgment: 'judgement',
-      };
-      const key = domainMap[domain] || domain;
-      facts.mse[key] = facts.mse[key] ? `${facts.mse[key]}; ${finding}` : finding;
-      // Also add to objective
-      facts.objective.push(`[MSE ${domain}] ${finding}`);
-      continue;
-    }
-
-    if (cleaned.startsWith('[S]')) facts.subjective.push(cleaned.replace(/^\[S\]\s*/, ''));
-    else if (cleaned.startsWith('[O]')) facts.objective.push(cleaned.replace(/^\[O\]\s*/, ''));
-    else if (cleaned.startsWith('[A]')) facts.assessment.push(cleaned.replace(/^\[A\]\s*/, ''));
-    else if (cleaned.startsWith('[P]')) facts.plan.push(cleaned.replace(/^\[P\]\s*/, ''));
-    else if (cleaned.startsWith('[R]')) facts.risk.push(cleaned.replace(/^\[R\]\s*/, ''));
-    else if (cleaned.startsWith('[M]')) facts.medications.push(cleaned.replace(/^\[M\]\s*/, ''));
-    else if (cleaned.startsWith('[Q]')) facts.quotes.push(cleaned.replace(/^\[Q\]\s*/, ''));
-    else if (cleaned.startsWith('[?]')) {
-      // Uncertain — add to subjective with marker
-      facts.subjective.push(`[uncertain] ${cleaned.replace(/^\[\?]\s*/, '')}`);
-    }
-    else {
-      // Untagged — classify by content
-      const lower = cleaned.toLowerCase();
-      if (/suicid|self.?harm|violen|aggress|abscon|risk|homicid/i.test(lower)) facts.risk.push(cleaned);
-      else if (/\d+\s*mg|\d+\s*mcg|tablet|capsule|injection|depot|patch/i.test(lower)) facts.medications.push(cleaned);
-      else if (lower.includes('"') || lower.includes("'")) facts.quotes.push(cleaned);
-      else facts.subjective.push(cleaned);
-    }
-  }
-
-  return facts;
-}
-
 // ═══════════════════════════════════════════════════════════════════════════════
 // PASS 3: CLINICAL FORMATTING (Medical-Grade)
 // Uses SCRIBE_PASS3_SYSTEM — RANZCP standards, confidence scores
@@ -996,11 +1125,11 @@ async function runPass3Formatting(
   riskResult: RiskAssessmentResult,
   alerts: SafetyAlert[],
   format: string,
-  model: string,
+  runtimeLock: AmbientRuntimeLock,
   priorContext: string = '',
   styleInstructions: string = '',
   specialtyFormatting: string = '',
-): Promise<string> {
+) {
   const factsText = formatFactsForPrompt(facts);
   const formatPrompt = getFormatPrompt(format);
 
@@ -1048,9 +1177,19 @@ ${alertsSummary}
 ${priorContext ? `\n${priorContext}` : ''}
 ---
 
-Write the clinical note now using ONLY the facts above. Include confidence indicators. Use plain text headings (no markdown).`;
+Write the clinical note now using ONLY the facts above. Include confidence indicators. Use plain text headings (no markdown).
 
-  return await callOllama(model, SCRIBE_PASS3_SYSTEM, userPrompt, 0.1);
+MEDICATION GROUNDING RULES:
+- If you mention a medication, copy the VERIFIED MEDICATIONS entry exactly for drug name, dose, and frequency.
+- Never upgrade, round, infer, or substitute a medication dose from historical context.
+- Historical context may explain continuity, but it must NOT override today's extracted facts.
+- If today's extracted facts do not contain a medication dose, do not invent one.`;
+
+  return generateAmbientPass3Text({
+    lock: runtimeLock,
+    system: SCRIBE_PASS3_SYSTEM,
+    prompt: userPrompt,
+  });
 }
 
 function formatFactsForPrompt(facts: ExtractedFacts): string {
@@ -1125,169 +1264,14 @@ function buildFallbackNote(facts: ExtractedFacts, meds: VerifiedMedication[], ri
   return parts.filter(l => l !== undefined).join('\n').trim();
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// OLLAMA CALL HELPER
-// ═══════════════════════════════════════════════════════════════════════════════
-
-async function callOllama(model: string, system: string, prompt: string, temperature: number): Promise<string> {
-  try {
-    const resp = await axios.post(`${OLLAMA_URL}/api/generate`, {
-      model,
-      system,
-      prompt,
-      stream: false,
-      options: { temperature, num_predict: 4096 },
-    }, { timeout: 120000 });
-    return resp.data?.response ?? '';
-  } catch {
-    // Fallback to llama3.2
-    try {
-      const resp = await axios.post(`${OLLAMA_URL}/api/generate`, {
-        model: 'llama3.2',
-        system,
-        prompt,
-        stream: false,
-        options: { temperature, num_predict: 4096 },
-      }, { timeout: 120000 });
-      return resp.data?.response ?? '';
-    } catch (e2: unknown) {
-      throw new Error(`LLM generation failed: ${e2 instanceof Error ? e2.message : String(e2)}. Ensure Ollama is running with ${model}.`);
-    }
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// POST-PROCESSING
-// ═══════════════════════════════════════════════════════════════════════════════
-
-function parseSOAP(text: string): AmbientResult['structured'] {
-  const sections = { subjective: '', objective: '', assessment: '', plan: '' };
-  const patterns: [keyof typeof sections, RegExp][] = [
-    ['subjective', /(?:SUBJECTIVE|Subjective)[:\s]*\n?([\s\S]*?)(?=(?:OBJECTIVE|Objective|ASSESSMENT|Assessment|PLAN|Plan|PRESENTATION|MENTAL STATE|$))/i],
-    ['objective', /(?:OBJECTIVE|Objective)[:\s]*\n?([\s\S]*?)(?=(?:ASSESSMENT|Assessment|PLAN|Plan|RISK ASSESSMENT|$))/i],
-    ['assessment', /(?:ASSESSMENT|Assessment|CLINICAL IMPRESSION)[:\s]*\n?([\s\S]*?)(?=(?:PLAN|Plan|MANAGEMENT|RISK ASSESSMENT|$))/i],
-    ['plan', /(?:PLAN|Plan|MANAGEMENT PLAN)[:\s]*\n?([\s\S]*?)(?=(?:MEDICATIONS|SAFETY|$))/i],
-  ];
-
-  for (const [key, re] of patterns) {
-    const match = text.match(re);
-    if (match?.[1]) sections[key] = stripMarkdown(match[1].trim());
-  }
-
-  if (!sections.subjective && !sections.objective) {
-    sections.subjective = stripMarkdown(text.trim());
-  }
-
-  return sections;
-}
-
-function buildMSEFromExtraction(formattedNote: string, mseFacts: Record<string, string>): AmbientResult['mentalStateExam'] | undefined {
-  // First try parsing from the formatted note
-  const parsedMSE = parseMSE(formattedNote);
-
-  // Merge with extracted MSE facts (extraction takes precedence for evidence)
-  const mse: NonNullable<AmbientResult['mentalStateExam']> = {
-    appearance: '',
-    behaviour: '',
-    speech: '',
-    mood: '',
-    affect: '',
-    thoughtForm: '',
-    thoughtContent: '',
-    perception: '',
-    cognition: '',
-    insight: '',
-    judgement: '',
-  };
-
-  // Start with parsed MSE from formatted note
-  if (parsedMSE) {
-    Object.assign(mse, parsedMSE);
-  }
-
-  // Overlay extracted MSE domain findings
-  for (const [key, value] of Object.entries(mseFacts)) {
-    if (value && key in mse) {
-      (mse as Record<string, string>)[key] = value;
-    }
-  }
-
-  // Check if we have any actual findings
-  const hasFindings = Object.values(mse).some(v => v && v !== 'Not assessed' && v.length > 0);
-  return hasFindings ? mse : undefined;
-}
-
-function parseMSE(text: string): AmbientResult['mentalStateExam'] | undefined {
-  const mseMatch = text.match(/(?:MENTAL STATE|MSE|Mental State Examination)[:\s]*\n?([\s\S]*?)(?=(?:RISK|Risk|DIAGNOSIS|Diagnosis|PLAN|Plan|MANAGEMENT|PROVISIONAL|CLINICAL IMPRESSION|SAFETY|$))/i);
-  if (!mseMatch) return undefined;
-
-  const mseText = mseMatch[1];
-  const extract = (label: string) => {
-    const re = new RegExp(`(?:${label})[:\\s]*([^\\n]+)`, 'i');
-    return stripMarkdown(mseText.match(re)?.[1]?.trim() ?? '');
-  };
-
-  return {
-    appearance: extract('Appearance'),
-    behaviour: extract('Behaviour'),
-    speech: extract('Speech'),
-    mood: extract('Mood'),
-    affect: extract('Affect'),
-    thoughtForm: extract('Thought Form|Thought Process'),
-    thoughtContent: extract('Thought Content'),
-    perception: extract('Perception'),
-    cognition: extract('Cognition'),
-    insight: extract('Insight'),
-    judgement: extract('Judgement|Judgment'),
-  };
-}
-
-function extractRiskFlags(llmOutput: string, transcript: string, passOneRisks: string[]): string[] {
-  const flags: string[] = [];
-
-  for (const risk of passOneRisks) {
-    if (risk.trim()) flags.push(risk.trim());
-  }
-
-  const combined = (llmOutput + ' ' + transcript).toLowerCase();
-  const riskTerms: [string, string][] = [
-    ['suicid', 'Suicide risk mentioned'],
-    ['self.?harm', 'Self-harm risk mentioned'],
-    ['overdose', 'Overdose risk mentioned'],
-    ['homicid', 'Homicidal ideation mentioned'],
-    ['violence|violent|aggress', 'Violence/aggression risk'],
-    ['abscon', 'Absconding risk mentioned'],
-    ['non.?compli|not taking|stopped.?taking|missed.*medica', 'Medication non-compliance'],
-    ['substance|alcohol|cannabis|methamphetamine|heroin|drug use', 'Substance use concerns'],
-    ['child.?protect|child.?safe|children.*risk', 'Child protection concerns'],
-    ['command.?hallucination', 'Command hallucinations reported'],
-    ['firearm|weapon|knife', 'Weapon access mentioned'],
-  ];
-
-  for (const [pattern, flag] of riskTerms) {
-    if (new RegExp(pattern, 'i').test(combined) && !flags.includes(flag)) {
-      flags.push(flag);
-    }
-  }
-
-  return [...new Set(flags)];
-}
-
-function extractDiagnosis(text: string): string[] {
-  const diagnoses: string[] = [];
-  const icdMatches = text.match(/[FG]\d{2}(?:\.\d{1,2})?/g);
-  if (icdMatches) {
-    diagnoses.push(...new Set(icdMatches));
-  }
-  return diagnoses;
-}
-
-function stripMarkdown(text: string): string {
-  return text
-    .replace(/\*\*(.*?)\*\*/g, '$1')
-    .replace(/\*(.*?)\*/g, '$1')
-    .replace(/#{1,6}\s*/g, '')
-    .replace(/`{1,3}(.*?)`{1,3}/g, '$1')
-    .replace(/^\s*[-*+]\s+/gm, '- ')
-    .trim();
-}
+export const __ambientProcessorTestInternals = {
+  ambientOllamaNumPredict,
+  ambientOllamaTimeoutMs,
+  ambientTranscriptChunkChars,
+  ambientWhisperTimeoutMs,
+  buildExtractionFallbackFacts,
+  extractWhisperFailure,
+  isWhisperAudioDecodeFailure,
+  mergeExtractedFacts,
+  splitTranscriptForLlm,
+};

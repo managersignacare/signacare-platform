@@ -67,6 +67,11 @@ function fakeQuery(): FakeQuery {
 vi.mock('../src/db/db', () => ({
   db: vi.fn(() => fakeQuery()),
   dbAdmin: vi.fn(() => fakeQuery()),
+  rlsStore: { getStore: vi.fn(() => null) },
+}));
+
+vi.mock('../src/shared/tenantContext', () => ({
+  withTenantContext: vi.fn((_clinicId: string, fn: () => unknown) => fn()),
 }));
 
 vi.mock('../src/utils/logger', () => ({
@@ -77,6 +82,7 @@ vi.mock('../src/utils/logger', () => ({
 import {
   isFeatureEnabled,
   isValidFlagName,
+  listFeatureFlags,
   _resetFeatureFlagCache,
 } from '../src/shared/featureFlags';
 
@@ -176,5 +182,25 @@ describe('isFeatureEnabled', () => {
       enabled: true, rollout_percentage: 0, created_at: new Date(), updated_at: new Date(),
     });
     expect(await isFeatureEnabled('zero-rollout', 'clinic-A', { staffId: 'staff-1' })).toBe(false);
+  });
+});
+
+describe('listFeatureFlags', () => {
+  it('includes global rows so frontend bootstrap sees globally enabled flags', async () => {
+    tableData.rows.push({
+      id: '1', clinic_id: null, name: 'ai-chat', description: 'global AI chat',
+      enabled: true, rollout_percentage: 100, created_at: new Date(), updated_at: new Date(),
+    });
+    tableData.rows.push({
+      id: '2', clinic_id: 'clinic-A', name: 'ai-scribe', description: 'clinic scribe',
+      enabled: true, rollout_percentage: 100, created_at: new Date(), updated_at: new Date(),
+    });
+
+    await expect(listFeatureFlags('clinic-A')).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'ai-chat', enabled: true, scope: 'global' }),
+        expect.objectContaining({ name: 'ai-scribe', enabled: true, scope: 'clinic' }),
+      ]),
+    );
   });
 });

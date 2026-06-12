@@ -1,0 +1,151 @@
+{
+  "schemaVersion": "1.0.0",
+  "runId": "2026-06-06T00:00:00.000Z-whisper_cpu-substrate-baseline",
+  "startedAt": "2026-06-06T00:00:00.000Z",
+  "completedAt": "2026-06-06T00:00:00.000Z",
+  "backend": "whisper/cpu",
+  "endpointUrl": "http://localhost:8080",
+  "modelName": "large-v3-turbo",
+  "modelVersion": "large-v3-turbo@unknown",
+  "fellBackToDefault": false,
+  "fallbackReason": null,
+  "corpus": {
+    "manifestPath": "scripts/asr-benchmark/corpus-manifest.json",
+    "manifestSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "corpusRoot": "scripts/asr-benchmark/fixtures",
+    "clipCount": 6
+  },
+  "perClip": [
+    {
+      "clipId": "seed-5m-01",
+      "durationBucket": "5m",
+      "outcome": "missing-fixture",
+      "latencyMs": null,
+      "wer": null,
+      "tokenOverlap": null,
+      "substitutions": null,
+      "deletions": null,
+      "insertions": null,
+      "referenceWordCount": null,
+      "hypothesisWordCount": null,
+      "memoryRssMb": null,
+      "errorCode": "AUDIO_FIXTURE_MISSING"
+    },
+    {
+      "clipId": "seed-5m-02",
+      "durationBucket": "5m",
+      "outcome": "missing-fixture",
+      "latencyMs": null,
+      "wer": null,
+      "tokenOverlap": null,
+      "substitutions": null,
+      "deletions": null,
+      "insertions": null,
+      "referenceWordCount": null,
+      "hypothesisWordCount": null,
+      "memoryRssMb": null,
+      "errorCode": "AUDIO_FIXTURE_MISSING"
+    },
+    {
+      "clipId": "seed-15m-01",
+      "durationBucket": "15m",
+      "outcome": "missing-fixture",
+      "latencyMs": null,
+      "wer": null,
+      "tokenOverlap": null,
+      "substitutions": null,
+      "deletions": null,
+      "insertions": null,
+      "referenceWordCount": null,
+      "hypothesisWordCount": null,
+      "memoryRssMb": null,
+      "errorCode": "AUDIO_FIXTURE_MISSING"
+    },
+    {
+      "clipId": "seed-15m-02",
+      "durationBucket": "15m",
+      "outcome": "missing-fixture",
+      "latencyMs": null,
+      "wer": null,
+      "tokenOverlap": null,
+      "substitutions": null,
+      "deletions": null,
+      "insertions": null,
+      "referenceWordCount": null,
+      "hypothesisWordCount": null,
+      "memoryRssMb": null,
+      "errorCode": "AUDIO_FIXTURE_MISSING"
+    },
+    {
+      "clipId": "seed-60m-01",
+      "durationBucket": "60m",
+      "outcome": "missing-fixture",
+      "latencyMs": null,
+      "wer": null,
+      "tokenOverlap": null,
+      "substitutions": null,
+      "deletions": null,
+      "insertions": null,
+      "referenceWordCount": null,
+      "hypothesisWordCount": null,
+      "memoryRssMb": null,
+      "errorCode": "AUDIO_FIXTURE_MISSING"
+    },
+    {
+      "clipId": "seed-60m-02",
+      "durationBucket": "60m",
+      "outcome": "missing-fixture",
+      "latencyMs": null,
+      "wer": null,
+      "tokenOverlap": null,
+      "substitutions": null,
+      "deletions": null,
+      "insertions": null,
+      "referenceWordCount": null,
+      "hypothesisWordCount": null,
+      "memoryRssMb": null,
+      "errorCode": "AUDIO_FIXTURE_MISSING"
+    }
+  ],
+  "perDurationBucket": {
+    "5m": {
+      "clipCount": 2,
+      "medianLatencyMs": null,
+      "p95LatencyMs": null,
+      "medianWer": null,
+      "medianTokenOverlap": null,
+      "timeoutCount": 0,
+      "abortCount": 0,
+      "memoryRssMbP95": null
+    },
+    "15m": {
+      "clipCount": 2,
+      "medianLatencyMs": null,
+      "p95LatencyMs": null,
+      "medianWer": null,
+      "medianTokenOverlap": null,
+      "timeoutCount": 0,
+      "abortCount": 0,
+      "memoryRssMbP95": null
+    },
+    "60m": {
+      "clipCount": 2,
+      "medianLatencyMs": null,
+      "p95LatencyMs": null,
+      "medianWer": null,
+      "medianTokenOverlap": null,
+      "timeoutCount": 0,
+      "abortCount": 0,
+      "memoryRssMbP95": null
+    }
+  },
+  "summary": {
+    "clipCount": 6,
+    "okCount": 0,
+    "timeoutCount": 0,
+    "abortCount": 0,
+    "decodeFailedCount": 0,
+    "transportErrorCount": 0,
+    "missingFixtureCount": 6
+  }
+}

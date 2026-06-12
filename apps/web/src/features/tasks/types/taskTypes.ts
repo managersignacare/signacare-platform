@@ -14,10 +14,12 @@
 import { z } from 'zod';
 import {
   TaskCreateSchema as SharedTaskCreateSchema,
+  TaskPrioritySchema as SharedTaskPrioritySchema,
   TaskUpdateSchema as SharedTaskUpdateSchema,
   TaskResponseSchema as SharedTaskResponseSchema,
   TaskStatusSchema as SharedTaskStatusSchema,
   type TaskCreateDTO as SharedTaskCreateDTO,
+  type TaskPriority as SharedTaskPriority,
   type TaskStatus as SharedTaskStatus,
   type TaskUpdateDTO as SharedTaskUpdateDTO,
   type TaskResponse as SharedTaskResponse,
@@ -26,8 +28,8 @@ import {
 // Priority + status enums — the shared schema declares them inline inside
 // the Task*Schema z.object() definitions, so re-declare them here as
 // named exports for the frontend call sites that reference them.
-export const TaskPrioritySchema = z.enum(['low', 'medium', 'high', 'urgent']);
-export type TaskPriority = z.infer<typeof TaskPrioritySchema>;
+export const TaskPrioritySchema = SharedTaskPrioritySchema;
+export type TaskPriority = SharedTaskPriority;
 
 export const TaskStatusSchema = SharedTaskStatusSchema;
 export type TaskStatus = SharedTaskStatus;

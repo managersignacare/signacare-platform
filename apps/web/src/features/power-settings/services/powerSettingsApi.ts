@@ -22,6 +22,28 @@ export interface LevelLabel {
   label: string
 }
 
+export interface ClinicAiRuntimeSettings {
+  clinicId: string
+  llmBackend: 'local_ollama' | 'azure_openai'
+  scribeRuntimeMode: 'standard' | 'agentic'
+  localStyleAdapterModelName: string | null
+}
+
+export interface RuntimeHealthStatusEntry {
+  status: 'OK' | 'UNCONFIGURED' | 'UNREACHABLE' | 'ERROR'
+  error?: string
+  endpoint?: string | null
+  authMode?: 'managed_identity' | 'api_key'
+  missingEnvVars?: string[]
+  backend?: 'azure_openai'
+}
+
+export interface AiRuntimeHealthSnapshot {
+  ollama: RuntimeHealthStatusEntry
+  whisper: RuntimeHealthStatusEntry
+  azureOpenAi: RuntimeHealthStatusEntry
+}
+
 export const powerSettingsApi = {
   getMyBranding(): Promise<SubscriberBranding | null> {
     return apiClient
@@ -54,6 +76,27 @@ export const powerSettingsApi = {
     return apiClient
       .get<{ labels: LevelLabel[] }>(`power-settings/level-labels/${clinicId}`)
       .then((r) => r.labels)
+  },
+
+  getClinicAiRuntimeSettings(clinicId: string): Promise<ClinicAiRuntimeSettings> {
+    return apiClient.get<ClinicAiRuntimeSettings>(`power-settings/clinics/${clinicId}/ai-runtime`)
+  },
+
+  getAiRuntimeHealth(): Promise<AiRuntimeHealthSnapshot> {
+    return apiClient
+      .get<{ integrations: AiRuntimeHealthSnapshot }>('health/integrations')
+      .then((response) => response.integrations)
+  },
+
+  setClinicAiRuntimeSettings(
+    clinicId: string,
+    data: {
+      llmBackend?: 'local_ollama' | 'azure_openai'
+      scribeRuntimeMode?: 'standard' | 'agentic'
+      localStyleAdapterModelName?: string | null
+    },
+  ): Promise<ClinicAiRuntimeSettings> {
+    return apiClient.put<ClinicAiRuntimeSettings>(`power-settings/clinics/${clinicId}/ai-runtime`, data)
   },
 
   setClinicLevelLabels(

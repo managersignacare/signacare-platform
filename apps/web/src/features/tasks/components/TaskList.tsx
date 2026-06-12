@@ -18,7 +18,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import { useTasks, useCompleteTask, useDeleteTask } from '../hooks/useTasks';
-import type { TaskResponseView as TaskResponse, TaskPriority } from '../types/taskTypes';
+import type { TaskResponseView as TaskResponse, TaskPriority, TaskStatus } from '../types/taskTypes';
 import { unstyledButtonSx } from '../../../shared/styles/unstyledButton';
 
 const OVERDUE_COLOR = '#F0852C';
@@ -50,7 +50,7 @@ export const TaskList: React.FC<Props> = ({
   onNewTask,
   onEditTask,
 }) => {
-  const [statusFilter, setStatusFilter] = useState('open');
+  const [statusFilter, setStatusFilter] = useState<TaskStatus | ''>('open');
   const { data: tasks, isLoading, isError } = useTasks({
     patientId,
     assignedToId,
@@ -91,7 +91,7 @@ export const TaskList: React.FC<Props> = ({
             size="small"
             label="Status"
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
+            onChange={(e) => setStatusFilter(e.target.value as TaskStatus | '')}
             sx={{ minWidth: 130 }}
           >
             <MenuItem value="">All</MenuItem>

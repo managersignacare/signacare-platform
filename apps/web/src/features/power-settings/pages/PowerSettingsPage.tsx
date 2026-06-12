@@ -57,12 +57,16 @@ import { IntegrationStatusPanel } from '../../settings/components/IntegrationSta
 import { CmiPanel } from '../../settings/components/CmiPanel'
 import { EmailPrintPanel, AiTrainingContextPanel } from '../../settings/pages/SettingsPage'
 import AiTrainingModulePanel from '../../settings/components/AiTrainingModule'
+import WorkflowBuilderSettingsPanel from '../../settings/components/WorkflowBuilderPanel'
 import { FeeSchedulePanel as FeeSchedulePanelLazy } from '../../billing/components/FeeSchedulePanel'
 import { ClinicianFeePanel as ClinicianFeePanelLazy } from '../../billing/components/ClinicianFeePanel'
 import { OnboardingWizard } from '../components/OnboardingWizard'
 import { PowerLevelLabelsPanel } from '../components/PowerLevelLabelsPanel'
 import { AccessAdminsPanel } from '../components/PowerAccessAdminsPanel'
+import { PowerAiRuntimePanel } from '../components/PowerAiRuntimePanel'
 import { ALL_MODULES } from './powerSettingsPageSupport'
+import { ModuleAccessMatrix as AccessControlPanel } from '../../staff-settings/components/ModuleAccessMatrix'
+import AuditPage from '../../audit/pages/AuditPage'
 import type {
   LookupUpdatePayload,
   AlertTypeRow,
@@ -72,6 +76,7 @@ import type {
   EpisodeTypeRow,
   ClinicOption,
 } from './powerSettingsPageSupport'
+import { BackupPanel, ClinicalPoliciesPanel } from '../../settings/pages/SettingsPage'
 
 const DEFAULT_DISABLED_MODULE_KEYS = new Set<string>([
   'agentic-ai-scribe',
@@ -80,7 +85,7 @@ const DEFAULT_DISABLED_MODULE_KEYS = new Set<string>([
 const BrandingFormSchema = SubscriberBrandingUpdateSchema
 
 type BrandingForm = z.infer<typeof BrandingFormSchema>
-type TabId = 'onboarding' | 'branding' | 'level-labels' | 'disciplines' | 'roles' | 'role-types' | 'system-roles' | 'referral-sources' | 'investigation-types' | 'alert-types' | 'legal-order-types' | 'appointment-modes' | 'template-categories' | 'episode-types' | 'integrations' | 'email-print' | 'cmi' | 'ai-context' | 'ai-training' | 'subscriptions' | 'specialties' | 'fee-schedules' | 'clinician-fees' | 'access-admins' | 'retention' | 'session-idle'
+type TabId = 'onboarding' | 'branding' | 'level-labels' | 'disciplines' | 'roles' | 'role-types' | 'system-roles' | 'referral-sources' | 'investigation-types' | 'alert-types' | 'legal-order-types' | 'appointment-modes' | 'template-categories' | 'episode-types' | 'clinical-policies' | 'workflow-builder' | 'access-control' | 'audit-log' | 'backup-settings' | 'integrations' | 'email-print' | 'cmi' | 'ai-context' | 'ai-training' | 'ai-runtime' | 'subscriptions' | 'specialties' | 'fee-schedules' | 'clinician-fees' | 'access-admins' | 'retention' | 'session-idle'
 
 export const PowerSettingsPage: React.FC = () => {
   const user = useAuthStore((s) => s.user)
@@ -102,7 +107,7 @@ export const PowerSettingsPage: React.FC = () => {
         Power Settings
       </Typography>
       <Typography variant="body2" color="text.secondary" mb={2}>
-        Platform-level configuration. Manage branding, disciplines, clinical roles, and referral sources.
+        Platform-level configuration. Manage branding, role catalogues, clinical policies, workflow builder, access control, audit log, and backup settings.
       </Typography>
       <Tabs aria-label="Navigation tabs" value={tab} onChange={(_, v: TabId) => setTab(v)} sx={{ mb: 2 }} variant="scrollable" scrollButtons="auto">
         <Tab label="Onboard Clinic" value="onboarding" />
@@ -119,11 +124,17 @@ export const PowerSettingsPage: React.FC = () => {
         <Tab label="Appointment Modes" value="appointment-modes" />
         <Tab label="Template Categories" value="template-categories" />
         <Tab label="Episode Types" value="episode-types" />
+        <Tab label="Clinical Policies" value="clinical-policies" />
+        <Tab label="Workflow Builder" value="workflow-builder" />
+        <Tab label="Access Control" value="access-control" />
+        <Tab label="Audit Log" value="audit-log" />
+        <Tab label="Backup Settings" value="backup-settings" />
         <Tab label="Integrations" value="integrations" />
         <Tab label="Email & Print" value="email-print" />
         <Tab label="CMI Reporting" value="cmi" />
         <Tab label="AI Training Context" value="ai-context" />
         <Tab label="AI Training Module" value="ai-training" />
+        <Tab label="AI Runtime" value="ai-runtime" />
         <Tab label="Fee Schedules" value="fee-schedules" />
         <Tab label="Clinician Fees" value="clinician-fees" />
         <Tab label="Subscriptions" value="subscriptions" />
@@ -147,11 +158,17 @@ export const PowerSettingsPage: React.FC = () => {
       {tab === 'appointment-modes' && <AppointmentModesPanel />}
       {tab === 'template-categories' && <TemplateCategoriesPanel />}
       {tab === 'episode-types' && <EpisodeTypesPanel />}
+      {tab === 'clinical-policies' && <ClinicalPoliciesPanel />}
+      {tab === 'workflow-builder' && <WorkflowBuilderSettingsPanel />}
+      {tab === 'access-control' && <AccessControlPanel variant="tab" />}
+      {tab === 'audit-log' && <AuditPage />}
+      {tab === 'backup-settings' && <BackupPanel />}
       {tab === 'integrations' && <IntegrationStatusPanel />}
       {tab === 'email-print' && <EmailPrintPanel />}
       {tab === 'cmi' && <CmiPanel />}
       {tab === 'ai-context' && <AiTrainingContextPanel />}
       {tab === 'ai-training' && <AiTrainingModulePanel />}
+      {tab === 'ai-runtime' && <PowerAiRuntimePanel />}
       {tab === 'fee-schedules' && <FeeSchedulePanelLazy />}
       {tab === 'clinician-fees' && <ClinicianFeePanelLazy />}
       {tab === 'subscriptions' && <SubscriptionModulePanel />}
@@ -529,7 +546,11 @@ function SystemRolesPanel() {
           { role: 'superadmin', desc: 'Full platform access. Can manage all clinics, staff, settings, and billing. Intended for platform administrators.' },
           { role: 'admin', desc: 'Clinic-level admin. Can manage staff, settings, reports, and all clinical data within their clinic.' },
           { role: 'manager', desc: 'Team manager. Dashboard access with KPIs, caseload reports, DNA rates, staff leave, and workload alerts.' },
-          { role: 'clinician', desc: 'Clinical staff. Full access to patients, notes, prescribing, assessments, and clinical workflows.' },
+          { role: 'clinician', desc: 'Clinical staff. Full access to patients, notes, assessments, and clinical workflows, but no prescribing privileges.' },
+          { role: 'prescriber_consultant', desc: 'Senior prescriber role. Includes clinician and manager privileges, prescribing privileges, and consultant approval authority for ECT/TMS workflows.' },
+          { role: 'prescriber_registrar', desc: 'Psychiatry registrar prescriber role. Includes clinician and prescribing privileges. Can complete ECT/TMS forms, pending prescriber consultant approval.' },
+          { role: 'prescriber_hmo', desc: 'Hospital Medical Officer prescriber role. Includes clinician and prescribing privileges. Can complete ECT/TMS forms, pending prescriber consultant approval.' },
+          { role: 'prescriber_nurse_practitioner', desc: 'Nurse practitioner prescriber role. Includes clinician and prescribing privileges with PBS/HPI-I credential requirements.' },
           { role: 'receptionist', desc: 'Front desk. Patient check-in, appointments, phone triage, waitlist, and SMS reminders.' },
           { role: 'referral_coordinator', desc: 'Referral operations staff. Intake triage, referral assignment, and inter-service coordination workflows.' },
           { role: 'readonly', desc: 'Read-only access. Can view patient records but cannot create or modify data.' },

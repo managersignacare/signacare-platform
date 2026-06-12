@@ -42,6 +42,7 @@ export interface AppointmentDb {
   appointment_end: Date | null;
   type: string;
   appointment_type: string | null;
+  mode: string | null;
   patient_response: 'attending' | 'not_attending' | null;
   status: AppointmentStatus;
   notes: string | null;
@@ -63,6 +64,11 @@ export interface AppointmentDb {
   reminder_sent: boolean;
   reminder_sent_at: Date | null;
   outlook_event_id: string | null;
+  outlook_change_key: string | null;
+  outlook_last_synced_at: Date | null;
+  outlook_last_modified_at: Date | null;
+  outlook_sync_status: string | null;
+  outlook_sync_error: string | null;
   created_at: Date;
   updated_at: Date;
   deleted_at: Date | null;
@@ -104,6 +110,7 @@ const APPOINTMENT_COLUMNS = [
   'appointment_end',
   'type',
   'appointment_type',
+  'mode',
   'patient_response',
   'status',
   'notes',
@@ -119,6 +126,11 @@ const APPOINTMENT_COLUMNS = [
   'reminder_sent',
   'reminder_sent_at',
   'outlook_event_id',
+  'outlook_change_key',
+  'outlook_last_synced_at',
+  'outlook_last_modified_at',
+  'outlook_sync_status',
+  'outlook_sync_error',
   'created_at',
   'updated_at',
   'deleted_at',
@@ -146,6 +158,11 @@ export const appointmentRepository = {
       | 'reminder_sent'
       | 'reminder_sent_at'
       | 'outlook_event_id'
+      | 'outlook_change_key'
+      | 'outlook_last_synced_at'
+      | 'outlook_last_modified_at'
+      | 'outlook_sync_status'
+      | 'outlook_sync_error'
     >,
   ): Promise<AppointmentDb> {
     const rows = await (trx as Knex)<AppointmentDb>('appointments')

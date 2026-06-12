@@ -44,6 +44,7 @@ process.on('unhandledRejection', (reason) => {
 // dist/src/server.js instead of dist/src/index.js. We don't auto-
 // correct because the right fix is at the deploy layer, not here.
 import { loadSecrets, getSecretsBackendName } from './config/secrets';
+import { shouldAllowLocalhostCspConnectSource } from './shared/cspPolicy';
 if (getSecretsBackendName() === 'azure_keyvault') {
   if (!process.env.JWT_ACCESS_SECRET) {
     throw new Error(
@@ -81,6 +82,7 @@ import https from 'https';
 import fs from 'fs';
 import path from 'path';
 import { randomUUID } from 'crypto';
+import { resolveUploadBaseDir, resolveUploadPath } from './shared/uploadPaths';
 // BUG-469 L5 absorb-1 — `rateLimit` + `RedisStore` now imported by
 // `middleware/rateLimiters.ts` which is the limiter SSoT.
 import { redis } from './config/redis';
@@ -184,6 +186,11 @@ if (process.env.SENTRY_DSN) {
 // non-upload routes. See that module for the full SSoT.
 let redisAvailable = false;
 const isDev = process.env.NODE_ENV === 'development';
+const allowLocalhostCspConnect = shouldAllowLocalhostCspConnectSource({
+  nodeEnv: process.env.NODE_ENV,
+  websiteSiteName: process.env.WEBSITE_SITE_NAME,
+  cspAllowLocalhostConnect: process.env.CSP_ALLOW_LOCALHOST_CONNECT,
+});
 // BUG-469 L5 absorb-1 — limiter SSoT lives in middleware/rateLimiters.ts.
 import {
   apiLimiter,
@@ -287,7 +294,7 @@ app.use(
         styleSrc: ["'self'", "'unsafe-inline'", ...cdnHosts],
         imgSrc: ["'self'", 'data:', ...cdnHosts],
         fontSrc: ["'self'", 'data:', ...cdnHosts],
-        connectSrc: ["'self'", ...cdnHosts, ...(isDev ? ['http://localhost:*'] : [])],
+        connectSrc: ["'self'", ...cdnHosts, ...(allowLocalhostCspConnect ? ['http://localhost:*'] : [])],
         frameAncestors: ["'self'"],  // Prevent clickjacking
         // BUG-468 — pin defence-in-depth directives EXPLICITLY so a
         // future commit cannot silently drop them by adding
@@ -331,7 +338,7 @@ app.use(
     origin: (process.env.CORS_ORIGIN ?? 'http://localhost:5173').split(',').map(o => o.trim()).filter(Boolean),
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'X-Request-Id', 'X-CSRF-Token', 'X-Client', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'X-Request-Id', 'X-CSRF-Token', 'X-Client', 'Authorization', 'Idempotency-Key'],
     exposedHeaders: ['X-Request-Id'],
   }),
 );
@@ -380,22 +387,26 @@ app.use(csrfMiddleware);
 import { forbiddenAccessAudit } from './middleware/forbiddenAccessAudit';
 app.use(forbiddenAccessAudit());
 
+import { isLongRunningAiHttpPath, resolveLlmHttpTimeoutMs } from './shared/llmHttpTimeout';
+const llmHttpTimeoutMs = resolveLlmHttpTimeoutMs();
+
 // Request timeout — prevent slow requests from holding connections
 app.use((req, _res, next) => {
-  const isLlm = req.path.includes('/llm/') || req.path.includes('/documents/');
-  req.setTimeout(isLlm ? 180_000 : 30_000);
+  req.setTimeout(isLongRunningAiHttpPath(req.path) ? llmHttpTimeoutMs : 30_000);
   next();
 });
 
+const uploadBaseDir = resolveUploadBaseDir();
+
 // Serve public uploads (logos/branding) — no auth needed for login page
-app.use('/uploads/logos', express.static(path.resolve(process.cwd(), 'uploads', 'logos')));
+app.use('/uploads/logos', express.static(resolveUploadPath('logos')));
 
 // Serve protected uploads (attachments, audio) — S1.1-DEFERRED-D
 // hardens this from "any authenticated user" to "authenticated user from
 // the same clinic that owns the file". The uploadsTenantGuard does the
-// DB lookup and the path-traversal checks; if BLOB_STORAGE_BACKEND=s3
-// and there's no matching row, it returns 410 Gone (because S3 owns the
-// files now and the local serve is dead-letter).
+// DB lookup and the path-traversal checks; if BLOB_STORAGE_BACKEND is a
+// cloud backend and there's no matching row, it returns 410 Gone because
+// object storage owns the files and local static serving is a dead-letter.
 import { requireAuth } from './middleware/authMiddleware';
 import { tenantMiddleware } from './middleware/tenantMiddleware';
 import { uploadsTenantGuard } from './middleware/uploadsTenantGuard';
@@ -408,7 +419,7 @@ app.use(
   },
   tenantMiddleware,
   uploadsTenantGuard(),
-  express.static(path.resolve(process.cwd(), 'uploads')),
+  express.static(uploadBaseDir),
 );
 
 app.use((req, _res, next) => {
@@ -659,6 +670,7 @@ app.use(`${API}/integrations/outlook`, outlookRoutes);
 
 // ── New Enhancement Modules ──
 import outcomeRoutes from './features/outcomes/outcomeRoutes';
+import assessmentRoutes from './features/assessments/assessmentRoutes';
 import safetyPlanRoutes from './features/safety-plan/safetyPlanRoutes';
 import advanceDirectiveRoutes from './features/advance-directives/advanceDirectiveRoutes';
 import groupTherapyRoutes from './features/group-therapy/groupTherapyRoutes';
@@ -669,6 +681,7 @@ import ereferralRoutes from './features/ereferral/ereferralRoutes';
 import clinicalDecisionRoutes from './features/clinical-decision/clinicalDecisionRoutes';
 
 app.use(`${API}/outcomes`, outcomeRoutes);
+app.use(`${API}/assessments`, assessmentRoutes);
 app.use(`${API}/safety-plans`, safetyPlanRoutes);
 app.use(`${API}/advance-directives`, advanceDirectiveRoutes);
 app.use(`${API}/group-therapy`, groupTherapyRoutes);
@@ -791,7 +804,7 @@ if (process.env.SENTRY_DSN) {
 // Multer file-size / file-type errors → 400 instead of 500
 app.use((err: Error & { code?: string; detail?: string }, req: express.Request, res: express.Response, next: express.NextFunction) => {
   if (err.code === 'LIMIT_FILE_SIZE') {
-    res.status(413).json({ error: 'File too large. Maximum 20MB.', code: 'FILE_TOO_LARGE' });
+    res.status(413).json({ error: 'File too large for this endpoint.', code: 'FILE_TOO_LARGE' });
     return;
   }
   if (err.message?.includes('File type') && err.message?.includes('not allowed')) {

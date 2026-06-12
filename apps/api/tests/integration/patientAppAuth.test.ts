@@ -25,6 +25,7 @@
  */
 
 import { describe, it, expect, beforeAll } from 'vitest';
+import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import app from '../../src/server';
 import { isIntegrationReady } from './_helpers';
@@ -129,6 +130,256 @@ describe.skipIf(!READY)('Patient-app auth surface (live API)', () => {
           'Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhdHRhY2tlciJ9.WRONG_SIGNATURE',
         );
       expect(res.status).toBe(401);
+    });
+  });
+
+  // ────────────────────────────────────────────────────────────────
+  // POST /patient-app/register
+  // ────────────────────────────────────────────────────────────────
+  describe('POST /patient-app/register', () => {
+    it('stores a pending registration request and dedupes repeat submits', async () => {
+      const { dbAdmin } = await import('../../src/db/db');
+      const { decryptPhi } = await import('../../src/shared/phiEncryption');
+      const originalDedupePepper = process.env.PATIENT_APP_DEDUPE_PEPPER;
+      let requestId: string | null = null;
+
+      try {
+        process.env.PATIENT_APP_DEDUPE_PEPPER = 'a'.repeat(64);
+
+        const clinic = await dbAdmin('clinics')
+          .where({ is_active: true })
+          .whereNull('deleted_at')
+          .first<{ id: string; name: string | null }>('id', 'name');
+        if (!clinic) throw new Error('No active clinic fixture is available');
+
+        const suffix = Date.now().toString();
+        const payload = {
+          clientRequestId: randomUUID(),
+          clinicId: clinic.id,
+          givenName: 'Viva',
+          familyName: `Register${suffix.slice(-6)}`,
+          dateOfBirth: '1990-01-31',
+          phoneMobile: `+614${suffix.slice(-8).padStart(8, '0')}`,
+          email: `viva-register-${suffix}@test.local`,
+          address: { suburb: 'Melbourne', state: 'VIC' },
+          nextOfKin: { name: 'Safety Contact', relationship: 'Friend', phone: '+61411111111' },
+          gp: { name: 'Dr Demo GP', practice: 'Demo Practice', phone: '+61390000000' },
+          supportPerson: { name: 'Support Person', relationship: 'Carer', phone: '+61422222222' },
+          consentToContact: true,
+        };
+
+        const res = await request(app)
+          .post('/api/v1/patient-app/register')
+          .set('X-CSRF-Token', 'test')
+          .set('X-Client', 'patient-app')
+          .send(payload);
+
+        expect(res.status).toBe(202);
+        expect(res.body?.ok).toBe(true);
+        expect(typeof res.body?.message).toBe('string');
+        expect(res.body).not.toHaveProperty('status');
+        expect(res.body).not.toHaveProperty('duplicate');
+        expect(res.body).not.toHaveProperty('requestId');
+
+        const saved = await dbAdmin('patient_app_registration_requests')
+          .where({ client_request_id: payload.clientRequestId })
+          .first<{
+            id: string;
+            clinic_id: string;
+            status: string;
+            dedupe_key: string;
+            phone_mobile: string;
+          }>();
+        expect(saved?.id).toEqual(expect.any(String));
+        requestId = saved?.id ?? null;
+        expect(saved?.clinic_id).toBe(clinic.id);
+        expect(saved?.status).toBe('pending');
+        expect(saved?.phone_mobile).not.toBe(payload.phoneMobile);
+        expect(decryptPhi(saved?.phone_mobile)).toBe(payload.phoneMobile);
+
+        const duplicate = await request(app)
+          .post('/api/v1/patient-app/register')
+          .set('X-CSRF-Token', 'test')
+          .set('X-Client', 'patient-app')
+          .send(payload);
+
+        expect(duplicate.status).toBe(202);
+        expect(duplicate.body).toEqual(res.body);
+        expect(duplicate.body).not.toHaveProperty('requestId');
+        expect(duplicate.body).not.toHaveProperty('duplicate');
+        expect(duplicate.body).not.toHaveProperty('status');
+
+        const countRows = await dbAdmin('patient_app_registration_requests')
+          .where({ clinic_id: clinic.id, dedupe_key: saved!.dedupe_key, status: 'pending' })
+          .whereNull('deleted_at')
+          .count<{ count: string }[]>('* as count');
+        expect(Number(countRows[0]?.count ?? 0)).toBe(1);
+      } finally {
+        if (requestId) {
+          await dbAdmin('patient_app_registration_requests').where({ id: requestId }).delete();
+        }
+        if (originalDedupePepper === undefined) {
+          delete process.env.PATIENT_APP_DEDUPE_PEPPER;
+        } else {
+          process.env.PATIENT_APP_DEDUPE_PEPPER = originalDedupePepper;
+        }
+      }
+    });
+
+    it('rejects malformed registration payloads with a canonical validation envelope', async () => {
+      const res = await request(app)
+        .post('/api/v1/patient-app/register')
+        .set('X-CSRF-Token', 'test')
+        .set('X-Client', 'patient-app')
+        .send({
+          clinicId: 'not-a-uuid',
+          givenName: '',
+          familyName: 'Example',
+          dateOfBirth: 'not-a-date',
+          phoneMobile: '1',
+          consentToContact: true,
+        });
+
+      expect(res.status).toBe(422);
+      expect(res.body?.code).toBe('VALIDATION_ERROR');
+      expect(Array.isArray(res.body?.details)).toBe(true);
+
+      const impossibleDob = await request(app)
+        .post('/api/v1/patient-app/register')
+        .set('X-CSRF-Token', 'test')
+        .set('X-Client', 'patient-app')
+        .send({
+          clinicId: '11111111-1111-1111-1111-111111111111',
+          givenName: 'Calendar',
+          familyName: 'Invalid',
+          dateOfBirth: '2024-99-99',
+          phoneMobile: '+61455555555',
+          consentToContact: true,
+        });
+
+      expect(impossibleDob.status).toBe(422);
+      expect(impossibleDob.body?.code).toBe('VALIDATION_ERROR');
+    });
+
+    it('accepts unknown clinics generically without storing a registration request', async () => {
+      const { dbAdmin } = await import('../../src/db/db');
+      const clientRequestId = randomUUID();
+      const unknownClinicId = randomUUID();
+
+      const res = await request(app)
+        .post('/api/v1/patient-app/register')
+        .set('X-CSRF-Token', 'test')
+        .set('X-Client', 'patient-app')
+        .send({
+          clientRequestId,
+          clinicId: unknownClinicId,
+          givenName: 'Clinic',
+          familyName: 'Probe',
+          dateOfBirth: '1990-01-31',
+          phoneMobile: '+61455555555',
+          consentToContact: true,
+        });
+
+      expect(res.status).toBe(202);
+      expect(res.body?.ok).toBe(true);
+      expect(res.body).not.toHaveProperty('requestId');
+      expect(res.body).not.toHaveProperty('status');
+      expect(res.body).not.toHaveProperty('duplicate');
+
+      const saved = await dbAdmin('patient_app_registration_requests')
+        .where({ client_request_id: clientRequestId })
+        .first('id');
+      expect(saved).toBeUndefined();
+    });
+
+    it('accepts unavailable clinics generically without storing a registration request', async () => {
+      const { dbAdmin } = await import('../../src/db/db');
+      const unavailableClinics = [
+        { id: randomUUID(), is_active: false, deleted_at: null, hpio: `800362${String(Date.now()).slice(-10)}` },
+        { id: randomUUID(), is_active: true, deleted_at: new Date().toISOString(), hpio: `800362${String(Date.now() + 1).slice(-10)}` },
+      ];
+      const clientRequestIds = unavailableClinics.map(() => randomUUID());
+
+      try {
+        for (const clinic of unavailableClinics) {
+          await dbAdmin('clinics').insert({
+            id: clinic.id,
+            name: `Unavailable registration fixture ${clinic.id.slice(0, 8)}`,
+            is_active: clinic.is_active,
+            deleted_at: clinic.deleted_at,
+            hpio: clinic.hpio,
+          });
+        }
+
+        for (const [index, clinic] of unavailableClinics.entries()) {
+          const res = await request(app)
+            .post('/api/v1/patient-app/register')
+            .set('X-CSRF-Token', 'test')
+            .set('X-Client', 'patient-app')
+            .send({
+              clientRequestId: clientRequestIds[index],
+              clinicId: clinic.id,
+              givenName: 'Unavailable',
+              familyName: `Clinic${index}`,
+              dateOfBirth: '1990-01-31',
+              phoneMobile: `+61455555${String(index).padStart(3, '0')}`,
+              consentToContact: true,
+            });
+
+          expect(res.status).toBe(202);
+          expect(res.body?.ok).toBe(true);
+          expect(res.body).not.toHaveProperty('requestId');
+          expect(res.body).not.toHaveProperty('status');
+          expect(res.body).not.toHaveProperty('duplicate');
+        }
+
+        const saved = await dbAdmin('patient_app_registration_requests')
+          .whereIn('client_request_id', clientRequestIds)
+          .select('id');
+        expect(saved).toHaveLength(0);
+      } finally {
+        await dbAdmin('patient_app_registration_requests')
+          .whereIn('client_request_id', clientRequestIds)
+          .delete();
+        await dbAdmin('clinics')
+          .whereIn('id', unavailableClinics.map((clinic) => clinic.id))
+          .delete();
+      }
+    });
+
+    it('rejects registration when contact consent is omitted or false', async () => {
+      const { dbAdmin } = await import('../../src/db/db');
+      const clinic = await dbAdmin('clinics')
+        .where({ is_active: true })
+        .whereNull('deleted_at')
+        .first<{ id: string }>('id');
+      if (!clinic) throw new Error('No active clinic fixture is available');
+
+      const payload = {
+        clinicId: clinic.id,
+        givenName: 'No',
+        familyName: 'Consent',
+        dateOfBirth: '1990-01-31',
+        phoneMobile: '+61455555555',
+      };
+
+      const omitted = await request(app)
+        .post('/api/v1/patient-app/register')
+        .set('X-CSRF-Token', 'test')
+        .set('X-Client', 'patient-app')
+        .send(payload);
+
+      expect(omitted.status).toBe(422);
+      expect(omitted.body?.code).toBe('VALIDATION_ERROR');
+
+      const explicitFalse = await request(app)
+        .post('/api/v1/patient-app/register')
+        .set('X-CSRF-Token', 'test')
+        .set('X-Client', 'patient-app')
+        .send({ ...payload, consentToContact: false });
+
+      expect(explicitFalse.status).toBe(422);
+      expect(explicitFalse.body?.code).toBe('VALIDATION_ERROR');
     });
   });
 

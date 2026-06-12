@@ -1,5 +1,8 @@
 import type {
   ClinicianDashboard,
+  DashboardPreferences,
+  DashboardPreferencesResponse,
+  DashboardPreferencesUpdate,
   ManagerDashboard,
   TeamDashboard,
   TeamDashboardScopes,
@@ -38,4 +41,14 @@ export const dashboardApi = {
     const resp = await apiClient.get<{ data: TeamDashboardScopes }>('dashboard/team/scopes');
     return resp.data;
   },
+  async getDashboardPreferences(): Promise<DashboardPreferencesResponse> {
+    return apiClient.get<DashboardPreferencesResponse>('dashboard/preferences');
+  },
+  async updateDashboardPreferences(
+    preferences: DashboardPreferencesUpdate,
+  ): Promise<DashboardPreferencesResponse> {
+    return apiClient.put<DashboardPreferencesResponse>('dashboard/preferences', preferences);
+  },
 } as const;
+
+export type { DashboardPreferences, DashboardPreferencesResponse };

@@ -32,6 +32,7 @@ export type KnownPatientTabId =
   | 'summary'
   | 'overview'
   | 'episodes'
+  | 'documentation'
   | 'alerts-plans'
   | 'medications'
   | 'medication-history'
@@ -43,6 +44,7 @@ export type KnownPatientTabId =
   | 'correspondence'
   | 'appointments'
   | 'assessments'
+  | 'outcome-measures'
   | 'tracking'
   | '91day-review'
   | 'pathways'
@@ -76,6 +78,7 @@ export const PATIENT_TABS: PatientTab[] = [
   { id: 'summary',           label: 'Summary' },
   { id: 'overview',          label: 'Overview' },
   { id: 'episodes',          label: 'Episodes' },
+  { id: 'documentation',     label: 'Documentation' },
   { id: 'alerts-plans',      label: 'Alerts & Plans' },
   { id: 'problems',          label: 'Problem List' },
   { id: 'chronic-diseases',  label: 'Internal Medicine' },
@@ -102,8 +105,13 @@ export const PATIENT_TABS: PatientTab[] = [
   { id: 'referrals',       label: 'Referrals' },
   { id: 'documents',       label: 'Documents' },
   { id: 'correspondence',  label: 'Correspondence' },
-  { id: 'mh-exchange',     label: 'Information Exchange' },
-  { id: 'assessments',     label: 'Assessments' },
+  { id: 'mh-exchange',     label: 'MH Information Exchange' },
+  { id: 'assessments',     label: 'Rating Scales' },
+  // Phase 8 separation refactor: outcome measures are now a dedicated
+  // tab. The 'assessments' tab is the clinician-rated rating-scales
+  // surface (heading inside the tab declares this explicitly); the
+  // tab id is preserved so existing ?tab= deeplinks resolve.
+  { id: 'outcome-measures', label: 'Outcome Measures' },
   { id: '91day-review',    label: '91-Day Review' },
   { id: 'pathways',          label: 'Psychology Pathways' },
   { id: 'lived-experience',  label: 'Lived Experience' },
@@ -146,7 +154,7 @@ export const PATIENT_TAB_GROUPS: PatientTabGroup[] = [
   // Mental Health owns its psychiatric workflow tabs plus its own
   // nested Information Exchange wrapper (mh-exchange) which itself
   // contains Referrals / Correspondence / Documents as inner sub-tabs.
-  { label: 'Mental Health',       tabs: ['episodes', 'assessments', '91day-review', 'pathways', 'lived-experience', 'inpatient-care', 'ect', 'tms', 'mh-exchange'] },
+  { label: 'Mental Health',       tabs: ['episodes', 'documentation', 'assessments', 'outcome-measures', '91day-review', 'pathways', 'lived-experience', 'inpatient-care', 'ect', 'tms', 'mh-exchange'] },
   // Viva is the patient-facing app — available to every specialty,
   // not psychiatry-specific.
   { label: 'Patient App',          tabs: ['viva'] },

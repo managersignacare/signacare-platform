@@ -66,27 +66,12 @@ const DEFAULT_RATING_SCALE_TEMPLATES: Array<{ name: string; category: string; ty
     { label: 'Becoming easily annoyed or irritable', fieldType: 'likert', options: ['Not at all','Several days','More than half the days','Nearly every day'], scores: [0,1,2,3] },
     { label: 'Feeling afraid something awful might happen', fieldType: 'likert', options: ['Not at all','Several days','More than half the days','Nearly every day'], scores: [0,1,2,3] },
   ] },
-  { name: 'K10 (Kessler Psychological Distress Scale)', category: 'Rating Scales', type: 'assessment', content: [
-    { label: 'Did you feel tired out for no good reason?', fieldType: 'likert', options: ['None','A little','Some','Most','All of the time'], scores: [1,2,3,4,5] },
-    { label: 'Did you feel nervous?', fieldType: 'likert', options: ['None','A little','Some','Most','All of the time'], scores: [1,2,3,4,5] },
-    { label: 'Did you feel so nervous nothing could calm you?', fieldType: 'likert', options: ['None','A little','Some','Most','All of the time'], scores: [1,2,3,4,5] },
-    { label: 'Did you feel hopeless?', fieldType: 'likert', options: ['None','A little','Some','Most','All of the time'], scores: [1,2,3,4,5] },
-    { label: 'Did you feel restless or fidgety?', fieldType: 'likert', options: ['None','A little','Some','Most','All of the time'], scores: [1,2,3,4,5] },
-  ] },
-  { name: 'HoNOS (Health of the Nation Outcome Scales)', category: 'Rating Scales', type: 'assessment', content: [
-    { label: 'Overactive/aggressive behaviour', fieldType: 'likert', options: ['No problem','Minor','Mild','Moderately severe','Severe to very severe'], scores: [0,1,2,3,4] },
-    { label: 'Non-accidental self-injury', fieldType: 'likert', options: ['No problem','Minor','Mild','Moderately severe','Severe to very severe'], scores: [0,1,2,3,4] },
-    { label: 'Problem drinking or drug-taking', fieldType: 'likert', options: ['No problem','Minor','Mild','Moderately severe','Severe to very severe'], scores: [0,1,2,3,4] },
-  ] },
-  { name: 'LSP-16 (Life Skills Profile)', category: 'Rating Scales', type: 'assessment', content: [
-    { label: 'General self-care', fieldType: 'likert', options: ['No difficulty','Slight','Moderate','Extreme'], scores: [0,1,2,3] },
-  ] },
-  { name: 'BPRS (Brief Psychiatric Rating Scale)', category: 'Rating Scales', type: 'assessment', content: [
-    { label: 'Somatic concern', fieldType: 'likert', options: ['Not reported','Very mild','Mild','Moderate','Moderately severe','Severe','Extremely severe'], scores: [1,2,3,4,5,6,7] },
-  ] },
-  { name: 'AIMS (Abnormal Involuntary Movement Scale)', category: 'Rating Scales', type: 'assessment', content: [
-    { label: 'Muscles of facial expression', fieldType: 'likert', options: ['None','Minimal','Mild','Moderate','Severe'], scores: [0,1,2,3,4] },
-  ] },
+  // Outcome measures (HoNOS, K10/K10+, LSP-16) are not provisioned
+  // as templates here. They live on the dedicated Outcome Measures surface and
+  // are protected by guard:assessment-registry-completeness.
+  // BPRS/AIMS and other clinician-rated instruments are seeded by
+  // seed-rating-scales.ts with complete item sets. Do not provision
+  // one-item placeholder versions; those produce non-comparable scores.
 ];
 
 const DEFAULT_PLAN_TEMPLATES: Array<{ name: string; category: string; type: string; content: unknown[] }> = [
