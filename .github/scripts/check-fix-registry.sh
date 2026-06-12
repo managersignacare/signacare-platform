@@ -32,6 +32,7 @@ set -uo pipefail
 REGISTRY_FILE="${REGISTRY_FILE:-docs/quality/fix-registry.md}"
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 cd "$REPO_ROOT"
+OWNED_FILES_FILE="${OWNED_FILES_FILE:-owned-files.txt}"
 
 if [ ! -f "$REGISTRY_FILE" ]; then
   echo "::error::Fix registry file not found at $REGISTRY_FILE"
@@ -52,6 +53,15 @@ strip_backticks() {
   s="${s#\`}"
   s="${s%\`}"
   printf '%s' "$s"
+}
+
+repo_owns_file() {
+  local file="$1"
+  if [ ! -f "$OWNED_FILES_FILE" ]; then
+    return 0
+  fi
+
+  grep -F -x -q -- "$file" "$OWNED_FILES_FILE"
 }
 
 declare -i checked=0
@@ -118,6 +128,15 @@ while IFS= read -r line; do
       failures+=("INVALID TYPE [$id]: type=$type (expected present|absent|retired)")
       failed+=1
       checked+=1
+      continue
+    fi
+
+    # Split repos materialize only a subset of the authoritative monorepo.
+    # When an owned-files manifest exists, treat rows outside that ownership
+    # boundary as out of scope for this checkout rather than failing on
+    # monorepo-only paths such as mobile app files.
+    if ! repo_owns_file "$file"; then
+      skipped+=1
       continue
     fi
 
