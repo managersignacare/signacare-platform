@@ -38,6 +38,22 @@ export interface TemplateRow {
   sections:      TemplateSectionRow[];
 }
 
+/**
+ * @schema-drift-exempt select-aliased
+ * This is the SELECT-result shape after aliasing snake_case template_categories
+ * columns (`clinic_id as clinicId`, `is_active as isActive`, etc.), not the raw
+ * DB row contract.
+ */
+export interface TemplateCategoryRow {
+  id: string;
+  clinicId: string;
+  name: string;
+  isActive: boolean;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string | null;
+}
+
 async function hydrateSections(
   templates: Omit<TemplateRow, 'sections'>[],
   q: Knex = db,
@@ -84,10 +100,118 @@ const BASE_COLS = [
   'updated_at      as updatedAt',
 ];
 
+// @column-list-projection-exempt: aliased SELECT projection for template category
+// list/read surfaces; not a raw all-columns table mirror.
+const CATEGORY_COLS = [
+  'id',
+  'clinic_id  as clinicId',
+  'name',
+  'is_active  as isActive',
+  'sort_order as sortOrder',
+  'created_at as createdAt',
+  'updated_at as updatedAt',
+];
+
 export const templateRepository = {
+  async listCategories(clinicId: string): Promise<TemplateCategoryRow[]> {
+    return db('template_categories')
+      .where({ clinic_id: clinicId })
+      .orderBy('sort_order', 'asc')
+      .orderBy('name', 'asc')
+      .select(CATEGORY_COLS) as Promise<TemplateCategoryRow[]>;
+  },
+
+  async createCategory(
+    clinicId: string,
+    name: string,
+  ): Promise<TemplateCategoryRow> {
+    const [row] = await db('template_categories')
+      .insert({
+        id: db.raw('gen_random_uuid()'),
+        clinic_id: clinicId,
+        name,
+        is_active: true,
+        sort_order: 0,
+        created_at: db.fn.now(),
+        updated_at: db.fn.now(),
+      })
+      .returning(CATEGORY_COLS);
+    return row as TemplateCategoryRow;
+  },
+
+  async findCategoryByName(
+    clinicId: string,
+    name: string,
+    excludeId?: string,
+  ): Promise<TemplateCategoryRow | undefined> {
+    const query = db('template_categories')
+      .where({ clinic_id: clinicId })
+      .whereRaw('LOWER(name) = LOWER(?)', [name.trim()]);
+
+    if (excludeId) {
+      query.andWhereNot({ id: excludeId });
+    }
+
+    const row = await query.first(CATEGORY_COLS);
+    return row as TemplateCategoryRow | undefined;
+  },
+
+  async updateCategory(
+    clinicId: string,
+    id: string,
+    patch: { name?: string; isActive?: boolean; sortOrder?: number },
+  ): Promise<TemplateCategoryRow | undefined> {
+    return db.transaction(async (trx) => {
+      const existing = await trx('template_categories')
+        .where({ id, clinic_id: clinicId })
+        .first(['id', 'name']);
+      if (!existing) return undefined;
+
+      const update: Record<string, unknown> = { updated_at: trx.fn.now() };
+      if (patch.name !== undefined) update.name = patch.name;
+      if (patch.isActive !== undefined) update.is_active = patch.isActive;
+      if (patch.sortOrder !== undefined) update.sort_order = patch.sortOrder;
+      const [row] = await trx('template_categories')
+        .where({ id, clinic_id: clinicId })
+        .update(update)
+        .returning(CATEGORY_COLS);
+
+      if (patch.name !== undefined && patch.name !== existing.name) {
+        await trx('templates')
+          .where({ clinic_id: clinicId, category: existing.name })
+          .whereNull('deleted_at')
+          .update({ category: patch.name, updated_at: trx.fn.now() });
+      }
+
+      return row as TemplateCategoryRow | undefined;
+    });
+  },
+
+  async countTemplatesUsingCategory(clinicId: string, categoryName: string): Promise<number> {
+    const row = await db('templates')
+      .where({ clinic_id: clinicId, category: categoryName })
+      .whereNull('deleted_at')
+      .count<{ count: string }>('id as count')
+      .first();
+    return Number(row?.count ?? 0);
+  },
+
+  async findCategoryById(clinicId: string, id: string): Promise<TemplateCategoryRow | undefined> {
+    const row = await db('template_categories')
+      .where({ id, clinic_id: clinicId })
+      .first(CATEGORY_COLS);
+    return row as TemplateCategoryRow | undefined;
+  },
+
+  async deleteCategory(clinicId: string, id: string): Promise<void> {
+    await db('template_categories')
+      .where({ id, clinic_id: clinicId })
+      .delete();
+  },
+
   async list(
     clinicId: string,
-    filters: { status?: string; q?: string },
+    filters: { status?: string; category?: string; q?: string },
   ): Promise<TemplateRow[]> {
     const q = db('templates')
       .where({ clinic_id: clinicId })
@@ -95,6 +219,7 @@ export const templateRepository = {
       .select(BASE_COLS)
       .orderBy('name', 'asc');
     if (filters.status) q.where('status', filters.status);
+    if (filters.category) q.where('category', filters.category);
     if (filters.q) q.whereILike('name', `%${filters.q}%`);
     const rows = await q;
     return hydrateSections(rows as Omit<TemplateRow, 'sections'>[]);

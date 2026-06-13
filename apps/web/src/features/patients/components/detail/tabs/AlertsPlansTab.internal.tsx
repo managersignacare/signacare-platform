@@ -12,19 +12,20 @@ import {
     InputLabel, MenuItem, Paper, Select, Switch, Tab, Tabs, TextField, Tooltip, Typography
 } from '@mui/material';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMemo } from 'react';
+import { useTemplates } from '../../../../templates/hooks/useTemplates';
 import { useRef, useState } from 'react';
 import { apiClient } from '../../../../../shared/services/apiClient';
-import { patientNotesKeys, patientsKeys, riskAllergiesKeys, patientTemplatesKeys } from '../../../queryKeys';
+import { patientNotesKeys, patientsKeys, riskAllergiesKeys } from '../../../queryKeys';
 import { AllergyPanel } from '../../../../risk-allergies/components/AllergyPanel';
 import { IncidentsTab } from './IncidentsTab';
 import { RecoveryStarPanel } from './RecoveryStarPanel.internal';
+import { templateSectionsToDraftText } from '../../notes/AddNoteDialogSupport';
 import {
   type CreatedAlertResponse,
   type PatientNote,
   type PatientNotesResponse,
-  type PlanTemplateField,
   type SafetyPlanApiRow,
-  type StaffTemplatesResponse,
   asPatientNotes,
   parseMaybeRecord,
 } from './alertsPlansTabSupport';
@@ -377,36 +378,31 @@ function PlansPanel({ patientId }: PlansPanelProps) {
     setCollaborationNote('');
   };
 
-  const { data: templates } = useQuery({
-    queryKey: patientTemplatesKeys.allPlans(),
-    queryFn: async () => {
-      try {
-        const r = await apiClient.get<StaffTemplatesResponse>('staff-settings/templates');
-        const all = Array.isArray(r.templates) ? r.templates : [];
-        return all.filter((t) => t.categoryName === 'Management Plans' || t.categoryName === 'Safety Plans' || t.type === 'management_plan' || t.type === 'safety_plan' || t.type === 'relapse_prevention' || t.name?.toLowerCase().includes('management') || t.name?.toLowerCase().includes('relapse') || t.name?.toLowerCase().includes('safety') || t.name?.toLowerCase().includes('recovery') || t.name?.toLowerCase().includes('crisis') || t.name?.toLowerCase().includes('wrap'));
-      } catch { return []; }
-    },
+  const { data: planTemplates = [] } = useTemplates({
+    status: 'published',
   });
+  const templates = useMemo(() => planTemplates.filter((template) => {
+    const category = template.category.toLowerCase();
+    const name = template.name.toLowerCase();
+    return category === 'management plans'
+      || category === 'safety plans'
+      || category === 'recovery plans'
+      || category === 'crisis plans'
+      || category === 'relapse prevention plans'
+      || name.includes('management')
+      || name.includes('relapse')
+      || name.includes('safety')
+      || name.includes('recovery')
+      || name.includes('crisis')
+      || name.includes('wrap');
+  }), [planTemplates]);
 
   const handleTemplateSelect = (id: string) => {
     setSelectedTemplate(id);
     const tmpl = (templates ?? []).find((t) => t.id === id);
     if (tmpl) {
       setPlanTitle(tmpl.name);
-      let fields: PlanTemplateField[] = [];
-      try {
-        const parsed = typeof tmpl.content === 'string' ? JSON.parse(tmpl.content) : tmpl.content;
-        fields = Array.isArray(parsed) ? parsed as PlanTemplateField[] : [];
-      } catch {
-        fields = [];
-      }
-      const text = (fields ?? []).map((f) => {
-        if (f.type === 'heading') return `\n=== ${f.text || f.label} ===\n`;
-        if (f.type === 'instruction') return `[${f.text}]\n`;
-        if (f.type === 'short_answer') return `${f.label}:\n\n`;
-        return '';
-      }).join('');
-      setPlanContent(text);
+      setPlanContent(templateSectionsToDraftText(tmpl.sections));
     }
   };
 

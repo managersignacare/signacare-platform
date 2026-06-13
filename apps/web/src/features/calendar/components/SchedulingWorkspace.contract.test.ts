@@ -19,9 +19,17 @@ describe('SchedulingWorkspace source contract', () => {
   });
 
   it('keeps appointments and time blocking on the same page', () => {
-    expect(source).toContain('<AvailabilityGridEditor');
+    expect(source).toContain('<TimeBlockingRulesDialog');
     expect(source).toContain('<TodayContactsView');
     expect(source).toContain('<ICalSubscribeCard');
+    expect(source).toContain('Time blocking is integrated into the calendar above as green, yellow, and red overlays');
+    expect(source).toContain('Manage Time Blocking');
+  });
+
+  it('degrades gracefully when auxiliary calendar panels fail', () => {
+    expect(source).toContain('Failed to load appointments. Try refreshing.');
+    expect(source).toContain('Appointments are loaded, but time blocking is temporarily unavailable.');
+    expect(source).toContain("Today&apos;s contacts and workload summary are temporarily unavailable.");
   });
 
   it('supports mine, team, and clinic scheduling scopes', () => {
@@ -41,5 +49,17 @@ describe('SchedulingWorkspace source contract', () => {
     expect(source).toContain('label="Search"');
     expect(source).toContain('handleDropAppointment');
     expect(source).toContain('draggable');
+  });
+
+  it('surfaces explicit refresh and sync setup controls in My Calendar', () => {
+    expect(source).toContain('Refresh Calendar');
+    expect(source).toContain('Sync Setup');
+    expect(source).toContain('<ICalSubscribeCard onRefreshCalendar={refreshCalendarWorkspace} />');
+  });
+
+  it('loads the calendar page appointments through the calendar module surface', () => {
+    expect(source).toContain('calendarApi');
+    expect(source).toContain('listAppointments');
+    expect(source).not.toContain('appointmentApi.list({');
   });
 });

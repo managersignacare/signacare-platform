@@ -5,10 +5,16 @@ import type {
   CreateTemplateDTO, UpdateTemplateDTO, TemplateStatus,
 } from '../types/templateTypes';
 
-export const useTemplates = (params?: { status?: TemplateStatus; category?: string }) =>
+export const useTemplates = (params?: { status?: TemplateStatus; category?: string; q?: string }) =>
   useQuery({
     queryKey: templateKeys.list(params),
     queryFn:  () => templateApi.list(params),
+  });
+
+export const useTemplateCategories = () =>
+  useQuery({
+    queryKey: templateKeys.categories(),
+    queryFn: () => templateApi.listCategories(),
   });
 
 export const useTemplate = (id: string) =>
@@ -42,7 +48,10 @@ export const usePublishTemplate = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => templateApi.publish(id),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: templateKeys.all }),
+    onSuccess: (tpl) => {
+      void qc.invalidateQueries({ queryKey: templateKeys.all });
+      void qc.invalidateQueries({ queryKey: templateKeys.detail(tpl.id) });
+    },
   });
 };
 
@@ -50,6 +59,20 @@ export const useRetireTemplate = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => templateApi.retire(id),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: templateKeys.all }),
+    onSuccess: (tpl) => {
+      void qc.invalidateQueries({ queryKey: templateKeys.all });
+      void qc.invalidateQueries({ queryKey: templateKeys.detail(tpl.id) });
+    },
+  });
+};
+
+export const useDeleteTemplate = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => templateApi.softDelete(id),
+    onSuccess: (_, id) => {
+      void qc.invalidateQueries({ queryKey: templateKeys.all });
+      qc.removeQueries({ queryKey: templateKeys.detail(id) });
+    },
   });
 };

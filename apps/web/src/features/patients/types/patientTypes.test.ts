@@ -68,10 +68,25 @@ describe('PATIENT_TABS canonical registry', () => {
     expect(mentalHealthGroup!.tabs).not.toContain('episodes');
   });
 
+  it('keeps ECT and TMS in the mental health group even though they are hidden by default', () => {
+    const mentalHealthGroup = PATIENT_TAB_GROUPS.find((group) => group.label === 'Mental Health');
+    expect(mentalHealthGroup).toBeDefined();
+    expect(mentalHealthGroup?.tabs).toEqual(expect.arrayContaining(['ect', 'tms']));
+  });
+
+  it('keeps problem list in the snapshot group even though it is hidden by default', () => {
+    const snapshotGroup = PATIENT_TAB_GROUPS.find((group) => group.label === 'Snapshot');
+    expect(snapshotGroup).toBeDefined();
+    expect(snapshotGroup?.tabs).toContain('problems');
+  });
+
   it('moves episodes into the admin group directly under overview', () => {
     const adminGroup = PATIENT_TAB_GROUPS.find((group) => group.label === 'Admin');
     expect(adminGroup).toBeDefined();
     expect(adminGroup?.tabs.slice(0, 2)).toEqual(['overview', 'episodes']);
+    expect(adminGroup?.tabs).not.toContain('problems');
+    expect(adminGroup?.tabs).not.toContain('ect');
+    expect(adminGroup?.tabs).not.toContain('tms');
   });
 
   it('tracks the default hidden workbench tabs in a single source of truth', () => {

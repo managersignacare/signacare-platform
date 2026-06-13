@@ -109,6 +109,20 @@ export * from './assessmentVisualization.schemas';
 // references; consumed by both the backend aggregation endpoint and the
 // frontend chart components.
 export * from './assessmentScoring';
+
+// Drawing payload — SSoT for the stored shape of cognitive-scale drawing
+// items (MMSE pentagons, MoCA cube/clock). Consumed by the web canvas
+// renderer, the API template-form save path, the chronology playback,
+// and the .NET split-platform parity.
+export * from './drawingPayload';
+
+// Drawing analytics — pure-logic metrics (stroke count, cumulative
+// stroke-duration, pressure summary, bounding box, canvas coverage)
+// derived from a stored DrawingPayload. Consumed by the
+// AssessmentsTab read-back metrics strip and by any future analytics
+// surface that needs to characterise a captured drawing without
+// re-rendering the strokes.
+export * from './drawingAnalytics';
 export * from './systemRoles';
 export * from './patientDutyRelationship';
 

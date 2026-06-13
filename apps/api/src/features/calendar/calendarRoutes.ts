@@ -39,6 +39,11 @@ calendarRoutes.use(authMiddleware, tenantMiddleware);
 
 // ── Preferences ──────────────────────────────────────────────────
 calendarRoutes.get(
+  '/appointments',
+  requireModuleRead(MODULE_KEYS.CALENDAR),
+  calendarController.listAppointments,
+);
+calendarRoutes.get(
   '/preferences',
   requireModuleRead(MODULE_KEYS.CALENDAR),
   calendarController.getPreferences,

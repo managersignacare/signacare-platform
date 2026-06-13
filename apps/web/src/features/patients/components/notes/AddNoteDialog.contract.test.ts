@@ -18,4 +18,10 @@ describe('AddNoteDialog documentation contract', () => {
     expect(source).toContain("handleSaveAndGenerateLetter('support_person')");
     expect(source).toContain('<LetterGeneratorDialog');
   });
+
+  it('uses the canonical templates surface rather than the legacy staff-settings feed', () => {
+    expect(source).toContain('useTemplates({');
+    expect(source).toContain("status: 'published'");
+    expect(source).not.toContain("staff-settings/templates");
+  });
 });

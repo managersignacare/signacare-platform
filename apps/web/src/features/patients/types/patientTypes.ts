@@ -145,7 +145,7 @@ export const PATIENT_TAB_GROUPS: PatientTabGroup[] = [
   // Tracking sit here so the safety-critical reads (vitals, labs,
   // active meds, longitudinal observations) are one click away on
   // every chart, regardless of specialty enrolment.
-  { label: 'Snapshot',            tabs: ['summary', 'alerts-plans', 'medications', 'medication-history', 'pathology', 'physical-health'] },
+  { label: 'Snapshot',            tabs: ['summary', 'alerts-plans', 'problems', 'medications', 'medication-history', 'pathology', 'physical-health'] },
   { label: 'Internal Medicine',   tabs: ['chronic-diseases', 'gim-exchange'] },
   // Endocrinology keeps only the flowsheet — the insulin regimen now
   // lives as a sub-tab inside the Medications tab so all medication
@@ -163,12 +163,12 @@ export const PATIENT_TAB_GROUPS: PatientTabGroup[] = [
   // Mental Health owns its psychiatric workflow tabs plus its own
   // nested Information Exchange wrapper (mh-exchange) which itself
   // contains Referrals / Correspondence / Documents as inner sub-tabs.
-  { label: 'Mental Health',       tabs: ['documentation', 'assessments', 'outcome-measures', '91day-review', 'pathways', 'lived-experience', 'mh-exchange'] },
+  { label: 'Mental Health',       tabs: ['documentation', 'assessments', 'outcome-measures', '91day-review', 'pathways', 'lived-experience', 'ect', 'tms', 'mh-exchange'] },
   // Viva is the patient-facing app — available to every specialty,
   // not psychiatry-specific.
   { label: 'Patient App',          tabs: ['viva'] },
   { label: 'Governance',          tabs: ['legal'] },
-  { label: 'Admin',               tabs: ['overview', 'episodes', 'appointments', 'billing', 'problems', 'tracking', 'inpatient-care', 'ect', 'tms'] },
+  { label: 'Admin',               tabs: ['overview', 'episodes', 'appointments', 'billing', 'tracking', 'inpatient-care'] },
 ];
 
 export function calculateAge(dob: string): number {

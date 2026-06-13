@@ -33,8 +33,89 @@ interface CareProvisionPanelProps {
   patientId: string;
 }
 
+interface EpisodeAllocationResponse {
+  orgUnitId: string | null;
+  primaryClinicianId: string | null;
+  keyWorkerId: string | null;
+  mdt: Array<{ staffId: string; roleName: string; staffName: string }>;
+}
+
+interface StaffLookupRow {
+  id: string;
+  givenName: string;
+  familyName: string;
+}
+
+interface CareProvisionReviewCard {
+  label: string;
+  date: Date | null;
+  daysSince: number | null;
+  subtitle: string;
+}
+
+function normalizeText(value: string | null | undefined): string {
+  return (value ?? '').trim().toLocaleLowerCase();
+}
+
+function noteDate(note: SummaryNoteRow | null | undefined): Date | null {
+  return parseDate(note?.createdAt ?? note?.noteDateTime ?? null);
+}
+
+function daysSince(date: Date | null): number | null {
+  if (!date) return null;
+  return Math.floor((Date.now() - date.getTime()) / 86400000);
+}
+
+function matchesAnyNeedle(text: string, needles: readonly string[]): boolean {
+  return needles.some((needle) => text.includes(needle));
+}
+
+function findLatestNote(
+  notes: readonly SummaryNoteRow[],
+  predicate: (note: SummaryNoteRow, normalizedText: string) => boolean,
+): SummaryNoteRow | null {
+  const sorted = [...notes].sort((left, right) => {
+    const leftDate = noteDate(left)?.getTime() ?? 0;
+    const rightDate = noteDate(right)?.getTime() ?? 0;
+    return rightDate - leftDate;
+  });
+
+  for (const note of sorted) {
+    const normalizedText = [
+      note.noteType,
+      note.title,
+      note.content,
+      note.bodyHtml,
+      note.planHtml,
+      note.assessmentHtml,
+      note.authorName,
+    ].map(normalizeText).join(' ');
+    if (predicate(note, normalizedText)) {
+      return note;
+    }
+  }
+
+  return null;
+}
+
+function formatRecencyValue(date: Date | null): string {
+  return date ? date.toLocaleDateString('en-AU') : 'No record';
+}
+
+function formatDaysSinceValue(days: number | null): string {
+  if (days === null) return 'Not documented';
+  if (days === 0) return 'Today';
+  if (days === 1) return '1 day ago';
+  return `${days} days ago`;
+}
+
 export function CareProvisionPanel({ patientId }: CareProvisionPanelProps) {
   const { data: patient } = usePatient(patientId);
+  const { data: staffList } = useQuery({
+    queryKey: patientsKeys.staffLookup(),
+    queryFn: () => apiClient.get<StaffLookupRow[]>('staff/lookup'),
+    staleTime: 5 * 60_000,
+  });
   const { data: episodes, isLoading: epLoading } = useQuery({
     queryKey: episodesKeys.byPatient(patientId),
     queryFn: () => apiClient.get<{ data: SummaryEpisodeRow[] }>(`episodes/patient/${patientId}`).then((r) => r.data),
@@ -50,6 +131,15 @@ export function CareProvisionPanel({ patientId }: CareProvisionPanelProps) {
     queryFn: () => apiClient.get<unknown>('appointments', { patientId }).then((response) => readStringArrayField<SummaryAppointmentRow>(response, 'data')),
     enabled: !!patientId,
     staleTime: 60_000,
+  });
+  const activeEpisode = useMemo(
+    () => (episodes ?? []).find((episode) => episode.status === 'open' && episode.episodeType !== 'triage'),
+    [episodes],
+  );
+  const { data: allocation } = useQuery({
+    queryKey: activeEpisode?.id ? episodesKeys.allocation(activeEpisode.id) : ['episode-allocation', 'none'],
+    queryFn: () => apiClient.get<EpisodeAllocationResponse>(`episodes/${activeEpisode!.id}/allocation`),
+    enabled: Boolean(activeEpisode?.id),
   });
 
   const isLoading = epLoading || notesLoading;
@@ -84,6 +174,75 @@ export function CareProvisionPanel({ patientId }: CareProvisionPanelProps) {
     if (!stats || !patient || !episodes) return '';
     return buildNarrative(notes ?? [], episodes, patient);
   }, [stats, patient, episodes, notes]);
+
+  const reviewRecencyCards = useMemo((): CareProvisionReviewCard[] => {
+    const noteList = notes ?? [];
+    const staffNameById = new Map((staffList ?? []).map((staff) => [staff.id, `${staff.givenName} ${staff.familyName}`]));
+    const keyClinicianName =
+      staffNameById.get(allocation?.keyWorkerId ?? '')
+      ?? staffNameById.get(allocation?.primaryClinicianId ?? '')
+      ?? null;
+    const consultantNames = (allocation?.mdt ?? [])
+      .filter((row) => normalizeText(row.roleName).includes('consultant psychiatrist'))
+      .map((row) => row.staffName);
+
+    const medicalReviewNote = findLatestNote(noteList, (_note, text) =>
+      matchesAnyNeedle(text, ['ward_round', 'medical review', 'consultant review', 'psychiatrist review', 'medication review']),
+    );
+    const keyClinicianReviewNote = findLatestNote(noteList, (note, text) => {
+      const author = normalizeText(note.authorName);
+      return Boolean(
+        (keyClinicianName && author === normalizeText(keyClinicianName))
+        || matchesAnyNeedle(text, ['key clinician review', 'key worker review', 'primary clinician review']),
+      );
+    });
+    const consultantPsychiatristReviewNote = findLatestNote(noteList, (note, text) => {
+      const author = normalizeText(note.authorName);
+      return Boolean(
+        consultantNames.some((name) => author === normalizeText(name))
+        || matchesAnyNeedle(text, ['consultant psychiatrist review', 'consultant review', 'psychiatrist review']),
+      );
+    });
+    const gpContactNote = findLatestNote(noteList, (_note, text) =>
+      matchesAnyNeedle(text, [' gp ', 'general practitioner', 'family doctor', 'primary care', 'dr ']),
+    );
+    const familyContactNote = findLatestNote(noteList, (_note, text) =>
+      matchesAnyNeedle(text, ['family contact', 'carer contact', 'next of kin', 'family', 'carer', 'parent', 'spouse', 'partner']),
+    );
+
+    return [
+      {
+        label: 'Last Key Clinician Review',
+        date: noteDate(keyClinicianReviewNote),
+        daysSince: daysSince(noteDate(keyClinicianReviewNote)),
+        subtitle: keyClinicianName ?? 'No key clinician allocated',
+      },
+      {
+        label: 'Medical Review',
+        date: noteDate(medicalReviewNote),
+        daysSince: daysSince(noteDate(medicalReviewNote)),
+        subtitle: medicalReviewNote?.title ?? 'No medical review note found',
+      },
+      {
+        label: 'Consultant Psychiatrist Review',
+        date: noteDate(consultantPsychiatristReviewNote),
+        daysSince: daysSince(noteDate(consultantPsychiatristReviewNote)),
+        subtitle: consultantNames[0] ?? 'No consultant psychiatrist allocated',
+      },
+      {
+        label: 'Last GP Contact',
+        date: noteDate(gpContactNote),
+        daysSince: daysSince(noteDate(gpContactNote)),
+        subtitle: gpContactNote?.title ?? 'No GP contact recorded',
+      },
+      {
+        label: 'Last Family Contact',
+        date: noteDate(familyContactNote),
+        daysSince: daysSince(noteDate(familyContactNote)),
+        subtitle: familyContactNote?.title ?? 'No family contact recorded',
+      },
+    ];
+  }, [allocation, notes, staffList]);
 
   if (isLoading) {
     return (
@@ -149,6 +308,29 @@ export function CareProvisionPanel({ patientId }: CareProvisionPanelProps) {
           />
         </Grid>
       </Grid>
+
+      <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+        {reviewRecencyCards.map((card) => (
+          <Paper
+            key={card.label}
+            variant="outlined"
+            sx={{ flex: '1 1 200px', minWidth: 180, maxWidth: 240, borderColor: '#327C8D33', bgcolor: '#F8FCFD', p: 1.5 }}
+          >
+            <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>
+              {card.label}
+            </Typography>
+            <Typography variant="body1" fontWeight={700} sx={{ color: '#1E4F59', mt: 0.4 }}>
+              {formatRecencyValue(card.date)}
+            </Typography>
+            <Typography variant="caption" sx={{ display: 'block', color: '#327C8D', fontWeight: 600, mt: 0.25 }}>
+              {formatDaysSinceValue(card.daysSince)}
+            </Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75 }}>
+              {card.subtitle}
+            </Typography>
+          </Paper>
+        ))}
+      </Box>
 
       <Paper variant="outlined" sx={{ p: 2.5, borderLeft: '4px solid #b8621a' }}>
         <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1.2, mb: 1.5 }}>

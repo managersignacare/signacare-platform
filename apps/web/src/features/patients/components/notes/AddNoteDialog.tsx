@@ -26,8 +26,8 @@ import {
   episodesKeys,
   outcomeMeasuresKeys,
   patientReferralsKeys,
-  patientTemplatesKeys,
 } from '../../queryKeys';
+import { useTemplates } from '../../../templates/hooks/useTemplates';
 import { getErrorMessage } from './AddNoteDialogSupport';
 import {
   RECENT_RISK_ASSESSMENT_WINDOW_HOURS,
@@ -37,8 +37,8 @@ import { useRecentRiskAssessmentSignGate } from './useRecentRiskAssessmentSignGa
 import type {
   EpisodeOption,
   Template,
-  TemplateField,
 } from './AddNoteDialogSupport';
+import { templateSectionsToDraftText } from './AddNoteDialogSupport';
 import { LetterGeneratorDialog } from './LetterGeneratorDialog';
 
 type LetterRecipientType = 'provider' | 'patient' | 'support_person';
@@ -81,23 +81,22 @@ export function AddNoteDialog({ open, onClose, patientId, defaultEpisodeId, note
   };
   const targetCategory = categoryMap[noteType] ?? 'Clinical Notes';
 
-  const { data: allTemplatesRaw } = useQuery({
-    queryKey: patientTemplatesKeys.byType('all'),
-    queryFn: () => apiClient.get<{ templates: Template[] }>('staff-settings/templates').then(r => r.templates),
+  const { data: allTemplatesRaw = [] } = useTemplates({
+    status: 'published',
+    category: targetCategory,
   });
 
   // Show ALL templates from the Clinical Notes category (not filtered by sub-type)
-  const allTemplates = (allTemplatesRaw ?? []).filter(t => {
-    if (!t.categoryName) return false;
+  const allTemplates = allTemplatesRaw.filter((t: Template) => {
     // Always show Clinical Notes templates for any clinical note type
     if (targetCategory === 'Clinical Notes') {
-      if (t.categoryName !== 'Clinical Notes') return false;
+      if (t.category !== 'Clinical Notes') return false;
       // Exclude SOAP templates from the dropdown
       const nameLower = (t.name ?? '').toLowerCase();
       if (nameLower.includes('soap')) return false;
       return true;
     }
-    return t.categoryName === targetCategory;
+    return t.category === targetCategory;
   });
 
   // Find the default "Progress Notes" template
@@ -272,16 +271,7 @@ export function AddNoteDialog({ open, onClose, patientId, defaultEpisodeId, note
     const tmpl = allTemplates.find(t => t.id === id);
     if (tmpl) {
       setTitle(tmpl.name);
-      const text = tmpl.content?.map((f: TemplateField) => {
-        if (f.type === 'heading') return `\n=== ${f.text || f.label} ===\n`;
-        if (f.type === 'instruction') return `[${f.text}]\n`;
-        if (f.type === 'text_block') return f.text + '\n';
-        if (f.type === 'short_answer') return `${f.label}:\n\n`;
-        if (f.type === 'yes_no') return `${f.label}: [ ] Yes  [ ] No\n`;
-        if (f.type === 'multiple_choice') return `${f.label}: ${(f.options ?? []).map((o: string) => `[ ] ${o}`).join('  ')}\n`;
-        if (f.type === 'likert') return `${f.label}: [${f.min ?? 0}-${f.max ?? 10}]\n`;
-        return '';
-      }).join('') ?? '';
+      const text = templateSectionsToDraftText(tmpl.sections);
       setContent(text);
     }
   };
@@ -291,16 +281,7 @@ export function AddNoteDialog({ open, onClose, patientId, defaultEpisodeId, note
     if (open && defaultTemplate && !templateId && !defaultContent) {
       setTemplateId(defaultTemplate.id);
       setTitle(defaultTemplate.name);
-      const text = defaultTemplate.content?.map((f: TemplateField) => {
-        if (f.type === 'heading') return `\n=== ${f.text || f.label} ===\n`;
-        if (f.type === 'instruction') return `[${f.text}]\n`;
-        if (f.type === 'text_block') return f.text + '\n';
-        if (f.type === 'short_answer') return `${f.label}:\n\n`;
-        if (f.type === 'yes_no') return `${f.label}: [ ] Yes  [ ] No\n`;
-        if (f.type === 'multiple_choice') return `${f.label}: ${(f.options ?? []).map((o: string) => `[ ] ${o}`).join('  ')}\n`;
-        if (f.type === 'likert') return `${f.label}: [${f.min ?? 0}-${f.max ?? 10}]\n`;
-        return '';
-      }).join('') ?? '';
+      const text = templateSectionsToDraftText(defaultTemplate.sections);
       if (text) setContent(text);
     }
   }, [open, defaultTemplate, templateId, defaultContent]);

@@ -1,18 +1,35 @@
-export type TemplateField = {
-  type?: string;
-  text?: string;
-  label?: string;
-  options?: string[];
-  min?: number;
-  max?: number;
-};
+import type {
+  TemplateResponse,
+  TemplateSectionResponse,
+} from '../../../templates/types/templateTypes';
 
-export interface Template {
-  id: string;
-  name: string;
-  type: string;
-  categoryName?: string;
-  content: TemplateField[];
+export type Template = TemplateResponse;
+
+export function templateSectionsToDraftText(sections: TemplateSectionResponse[]): string {
+  return sections.map((section) => {
+    switch (section.fieldType) {
+      case 'heading':
+        return `\n=== ${section.label} ===\n`;
+      case 'text':
+        return section.soapField
+          ? `${section.label}:\n\n`
+          : `${section.label}${section.placeholder ? ` — ${section.placeholder}` : ''}\n\n`;
+      case 'yes_no':
+        return `${section.label}: [ ] Yes  [ ] No\n`;
+      case 'single_select':
+        return `${section.label}: ${(section.options ?? []).map((option) => `[ ] ${option.label}`).join('  ')}\n`;
+      case 'multi_select':
+        return `${section.label}: ${(section.options ?? []).map((option) => `[ ] ${option.label}`).join('  ')}\n`;
+      case 'likert':
+        return `${section.label}: [${section.minValue ?? 0}-${section.maxValue ?? 5}]\n`;
+      case 'numeric':
+        return `${section.label}: ____\n`;
+      case 'date':
+        return `${section.label}: ____ / ____ / ________\n`;
+      default:
+        return '';
+    }
+  }).join('');
 }
 
 export type EpisodeOption = {

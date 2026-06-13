@@ -1,4 +1,4 @@
-import type { AppointmentResponse } from '@signacare/shared';
+import type { AppointmentResponse, AvailabilityBlock, AvailabilityColour } from '@signacare/shared';
 
 export interface SchedulingSearchableAppointment {
   clinicianName: string;
@@ -8,6 +8,12 @@ export interface SchedulingSearchableAppointment {
   teamName: string;
   title: string;
   attendeeStaffNames?: string[];
+}
+
+export interface SchedulingAvailabilitySummary {
+  blockCount: number;
+  dominantColour: AvailabilityColour | null;
+  labels: string[];
 }
 
 export function buildRescheduledTimes(
@@ -49,4 +55,74 @@ export function matchesSchedulingSearch(
     .toLocaleLowerCase();
 
   return haystack.includes(normalized);
+}
+
+function toMinutes(clock: string): number {
+  const [hh, mm] = clock.split(':');
+  return (Number(hh) * 60) + Number(mm);
+}
+
+function dayOfWeekForIsoDate(isoDate: string): number {
+  return new Date(`${isoDate}T00:00:00`).getDay();
+}
+
+function isBlockActiveOnDate(block: AvailabilityBlock, isoDate: string): boolean {
+  if (block.effectiveFrom > isoDate) {
+    return false;
+  }
+  if (block.effectiveUntil && block.effectiveUntil < isoDate) {
+    return false;
+  }
+  if (block.recurrence === 'none') {
+    return block.specificDate === isoDate;
+  }
+  return block.dayOfWeek === dayOfWeekForIsoDate(isoDate);
+}
+
+export function listAvailabilityBlocksForDate(
+  blocks: readonly AvailabilityBlock[],
+  isoDate: string,
+): AvailabilityBlock[] {
+  return blocks.filter((block) => isBlockActiveOnDate(block, isoDate));
+}
+
+export function getAvailabilitySummaryForDate(
+  blocks: readonly AvailabilityBlock[],
+  isoDate: string,
+): SchedulingAvailabilitySummary {
+  const active = listAvailabilityBlocksForDate(blocks, isoDate);
+  if (active.length === 0) {
+    return { blockCount: 0, dominantColour: null, labels: [] };
+  }
+
+  const priority: AvailabilityColour[] = ['red', 'yellow', 'green'];
+  const dominantColour =
+    priority.find((colour) => active.some((block) => block.colour === colour)) ?? null;
+
+  return {
+    blockCount: active.length,
+    dominantColour,
+    labels: active
+      .map((block) => block.label?.trim())
+      .filter((label): label is string => Boolean(label)),
+  };
+}
+
+export function getAvailabilityColourForSlot(
+  blocks: readonly AvailabilityBlock[],
+  isoDate: string,
+  slotStartMinutes: number,
+  slotDurationMinutes: number,
+): AvailabilityColour | null {
+  const slotEndMinutes = slotStartMinutes + slotDurationMinutes;
+  const active = listAvailabilityBlocksForDate(blocks, isoDate).filter((block) => {
+    const start = toMinutes(block.startTime);
+    const end = toMinutes(block.endTime);
+    return start < slotEndMinutes && end > slotStartMinutes;
+  });
+
+  if (active.some((block) => block.colour === 'red')) return 'red';
+  if (active.some((block) => block.colour === 'yellow')) return 'yellow';
+  if (active.some((block) => block.colour === 'green')) return 'green';
+  return null;
 }

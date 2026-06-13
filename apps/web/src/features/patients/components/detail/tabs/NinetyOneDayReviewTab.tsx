@@ -47,6 +47,7 @@ interface EpisodeListResponse {
 
 interface NoteContactMeta {
   planType?: string | null;
+  [key: string]: unknown;
 }
 
 interface PatientNote {
@@ -102,6 +103,77 @@ interface AssessmentListResponse {
   data?: AssessmentRow[];
 }
 
+interface EpisodeAllocationResponse {
+  orgUnitId: string | null;
+  primaryClinicianId: string | null;
+  keyWorkerId: string | null;
+  mdt: Array<{ staffId: string; roleName: string; staffName: string }>;
+}
+
+interface ReviewRecencyCard {
+  label: string;
+  date: Date | null;
+  daysSince: number | null;
+  subtitle: string;
+}
+
+function normalizeText(value: string | null | undefined): string {
+  return (value ?? '').trim().toLocaleLowerCase();
+}
+
+function noteDate(note: PatientNote | null | undefined): Date | null {
+  const raw = note?.createdAt ?? note?.noteDate ?? null;
+  if (!raw) return null;
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function daysSince(date: Date | null): number | null {
+  if (!date) return null;
+  return Math.floor((Date.now() - date.getTime()) / 86400000);
+}
+
+function matchesAnyNeedle(text: string, needles: readonly string[]): boolean {
+  return needles.some((needle) => text.includes(needle));
+}
+
+function findLatestNote(
+  notes: readonly PatientNote[],
+  predicate: (note: PatientNote, normalizedText: string) => boolean,
+): PatientNote | null {
+  const sorted = [...notes].sort((left, right) => {
+    const leftDate = noteDate(left)?.getTime() ?? 0;
+    const rightDate = noteDate(right)?.getTime() ?? 0;
+    return rightDate - leftDate;
+  });
+
+  for (const note of sorted) {
+    const normalizedText = [
+      note.noteType,
+      note.noteCategory,
+      note.title,
+      note.content,
+      note.authorName,
+    ].map(normalizeText).join(' ');
+    if (predicate(note, normalizedText)) {
+      return note;
+    }
+  }
+
+  return null;
+}
+
+function formatRecencyValue(date: Date | null): string {
+  return date ? date.toLocaleDateString('en-AU') : 'No record';
+}
+
+function formatDaysSinceValue(days: number | null): string {
+  if (days === null) return 'Not documented';
+  if (days === 0) return 'Today';
+  if (days === 1) return '1 day ago';
+  return `${days} days ago`;
+}
+
 interface NinetyOneDayReviewTabProps { patientId: string }
 export function NinetyOneDayReviewTab({ patientId }: NinetyOneDayReviewTabProps) {
   const qc = useQueryClient();
@@ -149,6 +221,11 @@ export function NinetyOneDayReviewTab({ patientId }: NinetyOneDayReviewTabProps)
   });
 
   const activeEpisode = episodes?.find((e) => e.status === 'open' && e.episodeType !== 'triage');
+  const { data: allocation } = useQuery({
+    queryKey: activeEpisode?.id ? episodesKeys.allocation(activeEpisode.id) : ['episode-allocation', 'none'],
+    queryFn: () => apiClient.get<EpisodeAllocationResponse>(`episodes/${activeEpisode!.id}/allocation`),
+    enabled: Boolean(activeEpisode?.id),
+  });
   const last91Days = notes?.filter((n) => n.createdAt && new Date(n.createdAt) > new Date(Date.now() - 91 * 86400000)) ?? [];
   const activeMedCount = (meds ?? []).filter((m) => m.status === 'active').length;
   const assessmentCount = (assessments ?? []).length;
@@ -180,6 +257,71 @@ export function NinetyOneDayReviewTab({ patientId }: NinetyOneDayReviewTabProps)
   const assessmentsList = assessments ?? [];
   const physicals = assessmentsList.filter((a) => a.assessmentType === 'physical_tracking');
   const outcomeAssessments = assessmentsList.filter((a) => a.assessmentType === 'outcome_measure');
+  const staffNameById = new Map((staffList ?? []).map((staff) => [staff.id, `${staff.givenName} ${staff.familyName}`]));
+  const keyClinicianName =
+    staffNameById.get(allocation?.keyWorkerId ?? '') ??
+    staffNameById.get(allocation?.primaryClinicianId ?? '') ??
+    null;
+  const consultantNames = (allocation?.mdt ?? [])
+    .filter((row) => normalizeText(row.roleName).includes('consultant psychiatrist'))
+    .map((row) => row.staffName);
+
+  const medicalReviewNote = findLatestNote(notes ?? [], (_note, text) =>
+    matchesAnyNeedle(text, ['ward_round', 'medical review', 'consultant review', 'psychiatrist review', 'medication review']),
+  );
+  const keyClinicianReviewNote = findLatestNote(notes ?? [], (note, text) => {
+    const author = normalizeText(note.authorName);
+    return Boolean(
+      (keyClinicianName && author === normalizeText(keyClinicianName))
+      || matchesAnyNeedle(text, ['key clinician review', 'key worker review', 'primary clinician review']),
+    );
+  });
+  const consultantPsychiatristReviewNote = findLatestNote(notes ?? [], (note, text) => {
+    const author = normalizeText(note.authorName);
+    return Boolean(
+      consultantNames.some((name) => author === normalizeText(name))
+      || matchesAnyNeedle(text, ['consultant psychiatrist review', 'consultant review', 'psychiatrist review']),
+    );
+  });
+  const gpContactNote = findLatestNote(notes ?? [], (_note, text) =>
+    matchesAnyNeedle(text, [' gp ', 'general practitioner', 'family doctor', 'primary care', 'dr ']),
+  );
+  const familyContactNote = findLatestNote(notes ?? [], (_note, text) =>
+    matchesAnyNeedle(text, ['family contact', 'carer contact', 'next of kin', 'family', 'carer', 'parent', 'spouse', 'partner']),
+  );
+
+  const reviewRecencyCards: ReviewRecencyCard[] = [
+    {
+      label: 'Last Key Clinician Review',
+      date: noteDate(keyClinicianReviewNote),
+      daysSince: daysSince(noteDate(keyClinicianReviewNote)),
+      subtitle: keyClinicianName ?? 'No key clinician allocated',
+    },
+    {
+      label: 'Medical Review',
+      date: noteDate(medicalReviewNote),
+      daysSince: daysSince(noteDate(medicalReviewNote)),
+      subtitle: medicalReviewNote?.title ?? 'No medical review note found',
+    },
+    {
+      label: 'Consultant Psychiatrist Review',
+      date: noteDate(consultantPsychiatristReviewNote),
+      daysSince: daysSince(noteDate(consultantPsychiatristReviewNote)),
+      subtitle: consultantNames[0] ?? 'No consultant psychiatrist allocated',
+    },
+    {
+      label: 'Last GP Contact',
+      date: noteDate(gpContactNote),
+      daysSince: daysSince(noteDate(gpContactNote)),
+      subtitle: gpContactNote?.title ?? 'No GP contact recorded',
+    },
+    {
+      label: 'Last Family Contact',
+      date: noteDate(familyContactNote),
+      daysSince: daysSince(noteDate(familyContactNote)),
+      subtitle: familyContactNote?.title ?? 'No family contact recorded',
+    },
+  ];
 
   const aiSummary = `91-DAY REVIEW SUMMARY
 Period: ${new Date(Date.now() - 91 * 86400000).toLocaleDateString('en-AU')} — ${new Date().toLocaleDateString('en-AU')}
@@ -189,6 +331,13 @@ CLINICAL SUMMARY:
 - Primary diagnosis: ${activeEpisode?.primaryDiagnosis ?? activeEpisode?.diagnoses ?? 'Not recorded'}
 - ${last91Days.length} clinical encounters documented in this period
 - ${progressNotes.length} progress/review notes, ${dna.length} DNA events${incidents.length > 0 ? `, ${incidents.length} incident(s)` : ''}
+
+REVIEW & CONTACT CADENCE:
+- Key clinician review: ${formatRecencyValue(noteDate(keyClinicianReviewNote))} (${formatDaysSinceValue(daysSince(noteDate(keyClinicianReviewNote)))})
+- Medical review: ${formatRecencyValue(noteDate(medicalReviewNote))} (${formatDaysSinceValue(daysSince(noteDate(medicalReviewNote)))})
+- Consultant psychiatrist review: ${formatRecencyValue(noteDate(consultantPsychiatristReviewNote))} (${formatDaysSinceValue(daysSince(noteDate(consultantPsychiatristReviewNote)))})
+- GP contact: ${formatRecencyValue(noteDate(gpContactNote))} (${formatDaysSinceValue(daysSince(noteDate(gpContactNote)))})
+- Family contact: ${formatRecencyValue(noteDate(familyContactNote))} (${formatDaysSinceValue(daysSince(noteDate(familyContactNote)))})
 
 MEDICATION SUMMARY:
 - ${activeMeds.length} active medication(s): ${activeMeds.map((m) => `${m.medicationName ?? m.drugLabel ?? '?'} ${m.dose ?? ''}`).join(', ') || 'None'}
@@ -284,7 +433,6 @@ SUMMARY STATISTICS
           { value: last91Days.length, label: 'Encounters', sub: '91 days', color: '#b8621a', bg: '#FFF3E0' },
           { value: last91Days.filter((n) => !n.didNotAttend).length, label: 'Attended', sub: last91Days.length > 0 ? `${Math.round(((last91Days.length - dna.length) / last91Days.length) * 100)}%` : '—', color: '#327C8D', bg: '#E0F2F1' },
           { value: dna.length, label: 'DNA', sub: dna.length > 0 ? 'action needed' : 'none', color: '#D32F2F', bg: dna.length > 0 ? '#FFEBEE' : '#E8F5E9' },
-          { value: activeMedCount, label: 'Medications', sub: `${newInPeriod.length} new, ${ceasedInPeriod.length} ceased`, color: '#5C6BC0', bg: '#E8EAF6' },
           { value: assessmentCount, label: 'Assessments', sub: `${outcomeAssessments.length} outcome`, color: '#2E7D32', bg: '#E8F5E9' },
         ].map(stat => (
           <Card key={stat.label} variant="outlined" sx={{ flex: '1 1 140px', minWidth: 130, maxWidth: 200, bgcolor: stat.bg, borderColor: stat.color + '40' }}>
@@ -292,6 +440,31 @@ SUMMARY STATISTICS
               <Typography variant="h4" fontWeight={800} sx={{ color: stat.color, lineHeight: 1.1 }}>{stat.value}</Typography>
               <Typography variant="body2" fontWeight={600} sx={{ color: stat.color, fontSize: 12, mt: 0.25 }}>{stat.label}</Typography>
               <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>{stat.sub}</Typography>
+            </CardContent>
+          </Card>
+        ))}
+      </Box>
+
+      <Box sx={{ display: 'flex', gap: 1.5, mb: 3, flexWrap: 'wrap' }}>
+        {reviewRecencyCards.map((card) => (
+          <Card
+            key={card.label}
+            variant="outlined"
+            sx={{ flex: '1 1 200px', minWidth: 180, maxWidth: 240, borderColor: '#327C8D33', bgcolor: '#F8FCFD' }}
+          >
+            <CardContent sx={{ py: 1.5, px: 2, '&:last-child': { pb: 1.5 } }}>
+              <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>
+                {card.label}
+              </Typography>
+              <Typography variant="body1" fontWeight={700} sx={{ color: '#1E4F59', mt: 0.4 }}>
+                {formatRecencyValue(card.date)}
+              </Typography>
+              <Typography variant="caption" sx={{ display: 'block', color: '#327C8D', fontWeight: 600, mt: 0.25 }}>
+                {formatDaysSinceValue(card.daysSince)}
+              </Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75 }}>
+                {card.subtitle}
+              </Typography>
             </CardContent>
           </Card>
         ))}

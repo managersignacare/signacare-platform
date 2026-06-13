@@ -19,12 +19,26 @@ import {
   Alert, Box, Chip, Paper, Slider, TextField, ToggleButton,
   ToggleButtonGroup, Typography,
 } from '@mui/material';
+import { DrawingFieldCanvas } from './DrawingFieldCanvas';
+import { describeDrawingFieldForText } from './drawingField';
 
 // ── Types ──
 
 export interface TemplateField {
+  /**
+   * 'drawing' (P-CLAUDE-LANE 4B): tablet capture used by MMSE
+   * intersecting pentagons + MoCA cube / clock items. The stored value
+   * is a serialised DrawingPayload (see
+   * packages/shared/src/drawingPayload.ts) in the FormValues string
+   * slot. The renderer round-trips via the canonical helpers
+   * tryParseDrawingPayload / serializeDrawingPayload. Not scorable
+   * (isScorableField excludes it). formValuesToText emits a
+   * "[drawing captured]" / "[drawing not captured]" marker via
+   * describeDrawingFieldForText so the exported clinical record
+   * carries the signal without embedding the raw strokes.
+   */
   type: 'heading' | 'instruction' | 'text_block' | 'short_answer' | 'yes_no' |
-        'multiple_choice' | 'multi_select' | 'likert' | 'score';
+        'multiple_choice' | 'multi_select' | 'likert' | 'score' | 'drawing';
   label?: string;
   text?: string;
   min?: number;
@@ -347,6 +361,17 @@ function FieldRenderer({
       );
     }
 
+    // ── Drawing (tablet capture; MMSE pentagons + MoCA cube/clock) ──
+    case 'drawing':
+      return (
+        <DrawingFieldCanvas
+          label={field.label}
+          value={value}
+          onValueChange={(next) => onValueChange(next)}
+          readOnly={readOnly}
+        />
+      );
+
     // ── Calculated Score ──
     case 'score': {
       const scoped = computeScoreForField(fields, values, field);
@@ -452,6 +477,13 @@ export function formValuesToText(fields: TemplateField[], values: FormValues): s
       case 'multi_select':
         lines.push(`${f.label}: ${Array.isArray(v) ? v.join(', ') : 'None selected'}`);
         break;
+      case 'drawing': {
+        const state = describeDrawingFieldForText(v);
+        lines.push(
+          `${f.label}: ${state === 'captured' ? '[drawing captured]' : '[drawing not captured]'}`,
+        );
+        break;
+      }
       case 'likert': {
         const score = typeof v === 'number' ? v : (f.min ?? 0);
         const optLabel = f.options?.find(o => {

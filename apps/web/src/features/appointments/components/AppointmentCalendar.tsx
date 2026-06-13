@@ -2,10 +2,15 @@
 import { Alert, Box, Chip, Grid, Paper, Stack, Typography } from '@mui/material';
 import type { Appointment } from '../types/appointmentTypes';
 import { getAppointmentStatusMeta } from '../types/appointmentTypes';
+import type { AvailabilityColour } from '@signacare/shared';
 
 interface Props {
   appointments: Appointment[];
   month: Date;
+  getAvailabilitySummary?: (day: Date) => {
+    blockCount: number;
+    dominantColour: AvailabilityColour | null;
+  };
   onDropAppointment?: (appointment: Appointment, day: Date) => void;
   onSelectAppointment?: (appointment: Appointment) => void;
   onSelectDay?: (day: Date) => void;
@@ -30,6 +35,7 @@ const isSameDay = (left: Date, right: Date): boolean =>
 export const AppointmentCalendar = ({
   appointments,
   month,
+  getAvailabilitySummary,
   onDropAppointment,
   onSelectAppointment,
   onSelectDay,
@@ -58,6 +64,10 @@ export const AppointmentCalendar = ({
           const dayAppointments = appointments.filter((appointment) =>
             isSameDay(new Date(appointment.startTime), day),
           );
+          const availability = getAvailabilitySummary?.(day) ?? {
+            blockCount: 0,
+            dominantColour: null,
+          };
           const isCurrentMonth = day.getMonth() === month.getMonth();
           return (
             <Grid size={12 / 7} key={day.toISOString()}>
@@ -98,6 +108,40 @@ export const AppointmentCalendar = ({
                   ) : null}
                 </Stack>
                 <Stack spacing={0.75} mt={1}>
+                  {availability.blockCount > 0 ? (
+                    <Chip
+                      size="small"
+                      variant="outlined"
+                      label={
+                        availability.dominantColour === 'red'
+                          ? 'Blocked'
+                          : availability.dominantColour === 'yellow'
+                            ? 'Tentative'
+                            : 'Available'
+                      }
+                      sx={{
+                        justifyContent: 'flex-start',
+                        borderColor:
+                          availability.dominantColour === 'red'
+                            ? '#D32F2F'
+                            : availability.dominantColour === 'yellow'
+                              ? '#C58A00'
+                              : '#2E7D32',
+                        color:
+                          availability.dominantColour === 'red'
+                            ? '#D32F2F'
+                            : availability.dominantColour === 'yellow'
+                              ? '#8A5A00'
+                              : '#2E7D32',
+                        bgcolor:
+                          availability.dominantColour === 'red'
+                            ? '#FFEBEE'
+                            : availability.dominantColour === 'yellow'
+                              ? '#FFF8E1'
+                              : '#E8F5E9',
+                      }}
+                    />
+                  ) : null}
                   {dayAppointments.slice(0, 3).map((appointment) => {
                     const meta = getAppointmentStatusMeta(appointment.status);
                     return (

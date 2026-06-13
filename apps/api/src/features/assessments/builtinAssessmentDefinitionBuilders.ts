@@ -10,7 +10,19 @@ export interface ScaleField {
     | 'multiple_choice'
     | 'multi_select'
     | 'likert'
-    | 'score';
+    | 'score'
+    /**
+     * Real tablet drawing capture (P-CLAUDE-LANE 4B). Used by MMSE
+     * intersecting pentagons + MoCA cube / clock items. The stored
+     * value is a serialised DrawingPayload (see
+     * packages/shared/src/drawingPayload.ts) in the FormValues string
+     * slot; the renderer round-trips via tryParseDrawingPayload /
+     * serializeDrawingPayload. Not scorable (isScorableField excludes
+     * 'drawing'). formValuesToText emits a "[drawing captured]" /
+     * "[drawing not captured]" marker so the exported clinical record
+     * carries the signal without embedding the raw strokes.
+     */
+    | 'drawing';
   label?: string;
   text?: string;
   min?: number;

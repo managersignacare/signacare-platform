@@ -106,6 +106,13 @@ export const StaffSelfUpdateSchema = StaffCredentialFields.extend({
   email: z.string().email().optional(),
   discipline: z.string().optional(),
   phoneMobile: z.string().optional(),
+  providerNumbers: z.array(z.object({
+    type: z.string(),
+    number: z.string(),
+    location: z.string().optional(),
+  })).optional(),
+  phiProvider: z.string().optional(),
+  phiNumber: z.string().optional(),
   specialties: z.array(StaffSpecialtyEnrollmentSchema).optional(),
 });
 export type StaffSelfUpdateDTO = z.infer<typeof StaffSelfUpdateSchema>;

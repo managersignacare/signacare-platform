@@ -566,14 +566,17 @@ jobs:
           set -euo pipefail
           ENV="${{ needs.build-and-push.outputs.env_name }}"
           SLOT_ARGS=()
+          API_BASE_URL="https://${{ steps.sites.outputs.api_site }}.azurewebsites.net"
           if [[ -n "${{ steps.sites.outputs.slot }}" ]]; then
             SLOT_ARGS=(--slot "${{ steps.sites.outputs.slot }}")
+            API_BASE_URL="https://${{ steps.sites.outputs.api_site }}-${{ steps.sites.outputs.slot }}.azurewebsites.net"
           fi
           az webapp config appsettings set \
             --name "${{ steps.sites.outputs.api_site }}" \
             --resource-group "${{ steps.sites.outputs.rg }}" \
             "${SLOT_ARGS[@]}" \
             --settings \
+              API_BASE_URL="$API_BASE_URL" \
               SIGNACARE_RELEASE_ENV="$ENV" \
               SIGNACARE_COMMIT_SHA="${{ needs.build-and-push.outputs.commit_sha }}" \
               SIGNACARE_PIPELINE_WORKFLOW="${{ needs.build-and-push.outputs.pipeline_workflow }}" \
@@ -831,12 +834,23 @@ jobs:
             --resource-group "$RG" \
             --settings API_UPSTREAM="https://${API_SITE}.azurewebsites.net/api"
 
+          az webapp config appsettings set \
+            --name "$API_SITE" \
+            --resource-group "$RG" \
+            --settings API_BASE_URL="https://${API_SITE}.azurewebsites.net"
+
           if [[ -n "$SLOT" ]]; then
             az webapp config appsettings set \
               --name "$WEB_SITE" \
               --resource-group "$RG" \
               --slot "$SLOT" \
               --settings API_UPSTREAM="https://${API_SITE}-${SLOT}.azurewebsites.net/api"
+
+            az webapp config appsettings set \
+              --name "$API_SITE" \
+              --resource-group "$RG" \
+              --slot "$SLOT" \
+              --settings API_BASE_URL="https://${API_SITE}-${SLOT}.azurewebsites.net"
           fi
 
       - name: Wait for web proxy normalization

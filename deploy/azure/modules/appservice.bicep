@@ -180,6 +180,7 @@ var apiBaseAppSettings = [
   { name: 'SLACK_WEBHOOK_OPS',                      value: '@Microsoft.KeyVault(SecretUri=${keyVaultUri}secrets/slack-webhook-ops)' }
   { name: 'TRUST_PROXY',                            value: 'true' }
   { name: 'CORS_ORIGIN',                            value: customDomain == '' ? 'https://${webAppName}.azurewebsites.net' : 'https://${customDomain}' }
+  { name: 'API_BASE_URL',                           value: 'https://${apiAppName}.azurewebsites.net' }
   { name: 'NODE_ENV',                               value: apiNodeEnv }
 ]
 var apiSlotAppSettings = concat(apiBaseAppSettings, azureOpenAiAppSettings)

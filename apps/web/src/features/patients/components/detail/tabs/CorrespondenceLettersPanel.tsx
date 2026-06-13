@@ -32,6 +32,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { PatientResponse } from '@signacare/shared';
 import DOMPurify from 'dompurify';
 import React, { useEffect, useState } from 'react';
+import { useTemplates } from '../../../../templates/hooks/useTemplates';
 import { Letterhead } from '../../../../../shared/components/ui/Letterhead';
 import { apiClient } from '../../../../../shared/services/apiClient';
 import { llmAiJobsApi } from '../../../../../shared/services/llmAiJobsApi';
@@ -43,9 +44,9 @@ import {
   episodesKeys,
   patientReferralsKeys,
   patientsKeys,
-  patientTemplatesKeys,
 } from '../../../queryKeys';
 import { ContactFormDialog } from '../../notes/ContactFormDialog';
+import { templateSectionsToDraftText } from '../../notes/AddNoteDialogSupport';
 
 interface Recipient {
   id: string;
@@ -132,21 +133,6 @@ interface EpisodeSummary {
 
 interface EpisodeListResponse {
   data?: EpisodeSummary[];
-}
-
-interface TemplateField {
-  text?: string | null;
-}
-
-interface TemplateItem {
-  id: string;
-  name: string;
-  categoryName?: string;
-  content: TemplateField[];
-}
-
-interface TemplateListResponse {
-  templates: TemplateItem[];
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -349,9 +335,9 @@ export function LettersPanel({
     }
   }, [sourceNote, notePrefilled, body, subject]);
 
-  const { data: templates } = useQuery({
-    queryKey: patientTemplatesKeys.byType('letters-category'),
-    queryFn: () => apiClient.get<TemplateListResponse>('staff-settings/templates').then((r) => r.templates.filter((t) => t.categoryName === 'Letters')),
+  const { data: templates = [] } = useTemplates({
+    status: 'published',
+    category: 'Letters',
   });
 
   const qc = useQueryClient();
@@ -467,7 +453,7 @@ export function LettersPanel({
     const t = templates?.find((x) => x.id === id);
     if (t) {
       setSubject(t.name);
-      setBody(t.content?.map((f) => f.text ?? '').join('\n') ?? '');
+      setBody(templateSectionsToDraftText(t.sections));
     }
   };
 

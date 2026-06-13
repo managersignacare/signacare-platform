@@ -13,6 +13,7 @@ describe('AgenticScribePage recorder wiring', () => {
   it('requires patient context before starting embedded medical scribe', () => {
     expect(source).toContain('Select a patient to start Medical Scribe from this page');
     expect(source).toContain('patientId={selectedPatient.id}');
+    expect(source).toContain('Select a patient to enable recording');
   });
 
   it('pipes recorder output straight into the transcript field for draft generation', () => {

@@ -10,23 +10,12 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../../../../shared/services/apiClient';
-import { patientReferralsKeys, episodesKeys, patientTemplatesKeys, patientsKeys } from '../../../queryKeys';
+import { useTemplates } from '../../../../templates/hooks/useTemplates';
+import { patientReferralsKeys, episodesKeys, patientsKeys } from '../../../queryKeys';
 import React, { useMemo, useState } from 'react';
 import { useOrgTree } from '../../../../org-settings/hooks/useOrgSettings';
 import type { OrgUnit } from '../../../../org-settings/services/orgSettingsApi';
-
-interface ReferralTemplateField {
-  type?: string;
-  text?: string;
-  label?: string;
-}
-
-interface ReferralTemplate {
-  id: string;
-  name: string;
-  categoryName?: string;
-  content: ReferralTemplateField[];
-}
+import { templateSectionsToDraftText } from '../../notes/AddNoteDialogSupport';
 
 interface ReferralRow {
   id: string;
@@ -57,12 +46,9 @@ function getErrorMessage(error: unknown): string {
 }
 
 function useReferralTemplates() {
-  return useQuery({
-    queryKey: patientTemplatesKeys.byType('referral-letters'),
-    queryFn: () => apiClient.get<{ templates: ReferralTemplate[] }>('staff-settings/templates').then(r =>
-      r.templates.filter(t => t.categoryName === 'Referral Letters')
-    ),
-    staleTime: 5 * 60 * 1000,
+  return useTemplates({
+    status: 'published',
+    category: 'Referral Letters',
   });
 }
 
@@ -158,13 +144,7 @@ function ReferralsList({ patientId }: ReferralsListProps) {
     setSelectedTemplate(id);
     const tmpl = templates.find(t => t.id === id);
     if (tmpl) {
-      const body = (tmpl.content ?? []).map((f) => {
-        if (f.type === 'heading') return `\n=== ${f.text || f.label} ===\n`;
-        if (f.type === 'text_block') return f.text + '\n';
-        if (f.type === 'short_answer') return `${f.label}:\n\n`;
-        return f.text ?? '';
-      }).join('') || '';
-      setLetterBody(body);
+      setLetterBody(templateSectionsToDraftText(tmpl.sections));
     }
   };
 

@@ -1,5 +1,30 @@
 import { describe, expect, it } from 'vitest';
-import { buildRescheduledTimes, matchesSchedulingSearch } from './schedulingWorkspaceSupport';
+import type { AvailabilityBlock } from '@signacare/shared';
+import {
+  buildRescheduledTimes,
+  getAvailabilityColourForSlot,
+  getAvailabilitySummaryForDate,
+  listAvailabilityBlocksForDate,
+  matchesSchedulingSearch,
+} from './schedulingWorkspaceSupport';
+
+function block(overrides: Partial<AvailabilityBlock>): AvailabilityBlock {
+  return {
+    id: '11111111-1111-1111-1111-111111111111',
+    clinicianId: '22222222-2222-2222-2222-222222222222',
+    colour: 'green',
+    recurrence: 'weekly',
+    dayOfWeek: 1,
+    specificDate: null,
+    startTime: '09:00',
+    endTime: '11:00',
+    effectiveFrom: '2026-01-01',
+    effectiveUntil: null,
+    label: null,
+    notes: null,
+    ...overrides,
+  };
+}
 
 describe('schedulingWorkspaceSupport', () => {
   it('preserves appointment duration when rescheduling to a new slot', () => {
@@ -44,5 +69,38 @@ describe('schedulingWorkspaceSupport', () => {
     expect(matchesSchedulingSearch(appointment, 'rivera')).toBe(true);
     expect(matchesSchedulingSearch(appointment, 'confirmed')).toBe(true);
     expect(matchesSchedulingSearch(appointment, 'south ward')).toBe(false);
+  });
+
+  it('lists weekly and date-specific time blocks for a calendar date', () => {
+    const result = listAvailabilityBlocksForDate([
+      block({ id: 'a', dayOfWeek: 1, startTime: '09:00', endTime: '12:00' }),
+      block({ id: 'b', recurrence: 'none', dayOfWeek: null, specificDate: '2026-06-15', startTime: '13:00', endTime: '14:00' }),
+      block({ id: 'c', dayOfWeek: 2, startTime: '09:00', endTime: '10:00' }),
+    ], '2026-06-15');
+
+    expect(result.map((entry) => entry.id)).toEqual(['a', 'b']);
+  });
+
+  it('summarizes availability with the highest-priority colour for a date', () => {
+    const summary = getAvailabilitySummaryForDate([
+      block({ id: 'green', colour: 'green', label: 'Clinic hours' }),
+      block({ id: 'yellow', colour: 'yellow', label: 'Tentative MDT' }),
+      block({ id: 'red', colour: 'red', label: 'Leave' }),
+    ], '2026-06-15');
+
+    expect(summary).toEqual({
+      blockCount: 3,
+      dominantColour: 'red',
+      labels: ['Clinic hours', 'Tentative MDT', 'Leave'],
+    });
+  });
+
+  it('returns slot colour for overlapping availability blocks', () => {
+    const colour = getAvailabilityColourForSlot([
+      block({ colour: 'green', startTime: '08:00', endTime: '12:00' }),
+      block({ colour: 'red', startTime: '09:30', endTime: '10:30' }),
+    ], '2026-06-15', 9 * 60, 60);
+
+    expect(colour).toBe('red');
   });
 });

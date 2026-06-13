@@ -28,6 +28,7 @@ import { useOrgTree } from '../../org-settings/hooks/useOrgSettings';
 import type { OrgUnit } from '../../org-settings/services/orgSettingsApi';
 import {
   useClinicianMetrics,
+  useDashboardPreferences,
   useManagerMetrics,
   useTeamDashboardMetrics,
   useTeamDashboardScopes,
@@ -42,6 +43,7 @@ import {
   ServiceStats,
   StatRow,
 } from './DashboardViewBits';
+import { readDashboardPreferences } from './dashboardPreferenceUtils';
 import {
   type CaseloadRow,
   type ClinicalAlertsResponse,
@@ -113,6 +115,11 @@ export default function DashboardPage(): React.ReactElement {
   const normalizedRole = role.trim().toLowerCase();
   const name = user ? `${user.givenName} ${user.familyName}` : 'User';
   const availableRoles = useMemo(() => getDashboardViewsForRole(role), [role]);
+  const { data: dashboardPreferencesResponse } = useDashboardPreferences(Boolean(user?.id));
+  const dashboardPreferences = useMemo(
+    () => readDashboardPreferences(dashboardPreferencesResponse?.preferences),
+    [dashboardPreferencesResponse?.preferences],
+  );
   const clinicianViews = useMemo(() => new Set(['my_dashboard', 'clinician', 'nurse', 'case_manager']), []);
   const canReadMyClinic = useMemo(() => new Set(['clinician', 'psychiatrist', 'psychologist', 'nurse', 'case_manager', 'readonly', 'referral_coordinator', 'admin', 'superadmin']), []);
   const canReadTriage = useMemo(() => new Set(['receptionist', 'admin', 'superadmin']), []);
@@ -120,7 +127,19 @@ export default function DashboardPage(): React.ReactElement {
   const { data: tree } = useOrgTree();
   const flatUnits = useMemo(() => tree ? flattenUnits(tree) : [], [tree]);
 
-  const [activeView, setActiveView] = useState(availableRoles[0]);
+  const enabledRoles = useMemo(() => {
+    const filtered = availableRoles.filter((viewId) => dashboardPreferences.enabledViews.includes(viewId));
+    return filtered.length > 0 ? filtered : availableRoles;
+  }, [availableRoles, dashboardPreferences.enabledViews]);
+  const preferredDefaultView = useMemo(() => {
+    const requested = dashboardPreferences.defaultView;
+    if (requested && enabledRoles.includes(requested)) {
+      return requested;
+    }
+    return enabledRoles[0];
+  }, [dashboardPreferences.defaultView, enabledRoles]);
+  const userChangedViewRef = React.useRef(false);
+  const [activeView, setActiveView] = useState(preferredDefaultView);
   const [period, setPeriod] = useState('week');
   const [teamFilter, setTeamFilter] = useState('');
   const [teamScopeType, setTeamScopeType] = useState<'team' | 'parent_team' | 'program' | 'clinic'>('team');
@@ -134,10 +153,17 @@ export default function DashboardPage(): React.ReactElement {
   const showTeamDashboard = activeView === 'team_dashboard';
 
   useEffect(() => {
-    if (!availableRoles.includes(activeView)) {
-      setActiveView(availableRoles[0]);
+    if (!enabledRoles.includes(activeView)) {
+      userChangedViewRef.current = false;
+      setActiveView(preferredDefaultView);
     }
-  }, [activeView, availableRoles]);
+  }, [activeView, enabledRoles, preferredDefaultView]);
+
+  useEffect(() => {
+    if (!userChangedViewRef.current && activeView !== preferredDefaultView) {
+      setActiveView(preferredDefaultView);
+    }
+  }, [activeView, preferredDefaultView]);
 
   // Auto-refresh every 2 minutes
   useEffect(() => {
@@ -928,9 +954,9 @@ export default function DashboardPage(): React.ReactElement {
         </Box>
 
         {/* Role Switcher */}
-        {availableRoles.length > 1 && (
+        {enabledRoles.length > 1 && (
           <Box sx={{ display: 'flex', gap: 1, mt: 1.5, flexWrap: 'wrap' }}>
-            {availableRoles.map(r => {
+            {enabledRoles.map(r => {
               const def = ROLE_LABELS[r];
               if (!def) return null;
               const isActive = activeView === r;
@@ -939,7 +965,10 @@ export default function DashboardPage(): React.ReactElement {
                   key={r}
                   icon={def.icon}
                   label={def.label}
-                  onClick={() => setActiveView(r)}
+                  onClick={() => {
+                    userChangedViewRef.current = true;
+                    setActiveView(r);
+                  }}
                   variant={isActive ? 'filled' : 'outlined'}
                   sx={{
                     fontWeight: isActive ? 700 : 500,

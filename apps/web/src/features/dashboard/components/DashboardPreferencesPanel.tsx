@@ -65,6 +65,7 @@ export function DashboardPreferencesPanel(): React.ReactElement {
   const preferences = readDashboardPreferences(draft ?? data?.preferences);
   const catalog = data?.catalog ?? [];
   const isSaving = update.isPending;
+  const currentDefaultView = preferences.defaultView ?? preferences.enabledViews[0] ?? 'my_dashboard';
 
   const save = async (next: DashboardPreferences) => {
     setDraft(next);
@@ -97,14 +98,14 @@ export function DashboardPreferencesPanel(): React.ReactElement {
               Dashboard Options
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              Activate separate cockpit dashboards without changing the existing Dashboard page.
-              Safety-critical widgets are locked and cannot be hidden.
+              Choose which dashboard replaces the default <code>/dashboard</code> landing view,
+              then use the toggle chips on the dashboard itself to switch between enabled options.
             </Typography>
           </Box>
         </Box>
         <Alert severity="info" sx={{ mt: 2 }}>
-          The current `/dashboard` remains available. These options add separate dashboards for
-          clinicians, teams, managers, and patient-command workflows.
+          Safety-critical widgets are locked and cannot be hidden. Enabled dashboard options remain
+          available as toggle chips inside the main dashboard.
         </Alert>
       </Paper>
 
@@ -115,7 +116,7 @@ export function DashboardPreferencesPanel(): React.ReactElement {
               <InputLabel>Default dashboard option</InputLabel>
               <Select
                 label="Default dashboard option"
-                value={preferences.defaultView ?? preferences.enabledViews[0] ?? 'my_dashboard'}
+                value={currentDefaultView}
                 onChange={(event) => {
                   const next = readDashboardPreferences({
                     ...preferences,
@@ -162,11 +163,11 @@ export function DashboardPreferencesPanel(): React.ReactElement {
               onClick={() => {
                 const viewId = preferences.defaultView ?? preferences.enabledViews[0];
                 if (!viewId) return;
-                navigate(getDashboardOption(viewId).path);
+                navigate('/dashboard');
               }}
               sx={{ textTransform: 'none', bgcolor: '#327C8D', '&:hover': { bgcolor: '#255F6B' } }}
             >
-              Open default dashboard option
+              Open selected default dashboard
             </Button>
           </Grid>
         </Grid>
@@ -176,6 +177,7 @@ export function DashboardPreferencesPanel(): React.ReactElement {
         {DASHBOARD_VIEW_IDS.map((viewId) => {
           const option = getDashboardOption(viewId);
           const enabled = preferences.enabledViews.includes(viewId);
+          const isDefault = currentDefaultView === viewId;
           const cards = getDashboardCatalogForView(viewId);
           const viewPreference = preferences.viewPreferences[viewId];
           const hidden = new Set(viewPreference?.hiddenCardIds ?? []);
@@ -198,9 +200,15 @@ export function DashboardPreferencesPanel(): React.ReactElement {
                       checked={enabled}
                       disabled={preferences.enabledViews.length === 1 && enabled}
                       onChange={(_, checked) => {
-                        void save(setDashboardViewEnabled(preferences, viewId, checked));
+                        const next = setDashboardViewEnabled(preferences, viewId, checked);
+                        void save(readDashboardPreferences({
+                          ...next,
+                          defaultView: checked
+                            ? viewId
+                            : next.defaultView ?? next.enabledViews[0],
+                        }));
                       }}
-                      inputProps={{ 'aria-label': `Enable ${option.title}` }}
+                      inputProps={{ 'aria-label': `Activate ${option.title}` }}
                     />
                   </Box>
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
@@ -214,6 +222,9 @@ export function DashboardPreferencesPanel(): React.ReactElement {
                   <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 1.5 }}>
                     <Chip size="small" label={`${activeCount}/${availableCount} widgets active`} />
                     <Chip size="small" label={LAYOUT_LABELS[viewPreference?.layoutMode ?? 'clinical_cockpit']} />
+                    {isDefault ? (
+                      <Chip size="small" color="primary" label="Default landing dashboard" />
+                    ) : null}
                   </Box>
                   <Divider sx={{ my: 1.5 }} />
                   {cards.map((card) => {
@@ -269,6 +280,21 @@ export function DashboardPreferencesPanel(): React.ReactElement {
                       sx={{ textTransform: 'none' }}
                     >
                       Open
+                    </Button>
+                    <Button
+                      size="small"
+                      variant={isDefault ? 'contained' : 'text'}
+                      onClick={() => {
+                        if (isDefault) return;
+                        void save(readDashboardPreferences({
+                          ...preferences,
+                          defaultView: viewId,
+                        }));
+                      }}
+                      disabled={!enabled}
+                      sx={{ textTransform: 'none' }}
+                    >
+                      {isDefault ? 'Default' : 'Use as default'}
                     </Button>
                   </Box>
                 </CardContent>

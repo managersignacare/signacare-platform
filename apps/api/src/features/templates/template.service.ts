@@ -3,13 +3,53 @@ import { AppError } from '../../shared/errors';
 import type { TemplateRow } from './template.repository';
 import type {
   CreateTemplateDTO,
+  CreateTemplateCategoryDTO,
   UpdateTemplateDTO,
+  UpdateTemplateCategoryDTO,
 } from '@signacare/shared';
 
 export const templateService = {
+  async listCategories(clinicId: string) {
+    return templateRepository.listCategories(clinicId);
+  },
+
+  async createCategory(clinicId: string, dto: CreateTemplateCategoryDTO) {
+    const existing = await templateRepository.findCategoryByName(clinicId, dto.name);
+    if (existing) {
+      throw new AppError('Template category name already exists', 409, 'TEMPLATE_CATEGORY_NAME_CONFLICT');
+    }
+    return templateRepository.createCategory(clinicId, dto.name);
+  },
+
+  async updateCategory(clinicId: string, id: string, dto: UpdateTemplateCategoryDTO) {
+    if (dto.name !== undefined) {
+      const existing = await templateRepository.findCategoryByName(clinicId, dto.name, id);
+      if (existing) {
+        throw new AppError('Template category name already exists', 409, 'TEMPLATE_CATEGORY_NAME_CONFLICT');
+      }
+    }
+    const category = await templateRepository.updateCategory(clinicId, id, dto);
+    if (!category) throw new AppError('Template category not found', 404, 'TEMPLATE_CATEGORY_NOT_FOUND');
+    return category;
+  },
+
+  async deleteCategory(clinicId: string, id: string): Promise<void> {
+    const category = await templateRepository.findCategoryById(clinicId, id);
+    if (!category) throw new AppError('Template category not found', 404, 'TEMPLATE_CATEGORY_NOT_FOUND');
+    const templatesUsingCategory = await templateRepository.countTemplatesUsingCategory(clinicId, category.name);
+    if (templatesUsingCategory > 0) {
+      throw new AppError(
+        'Template category is still in use by existing templates',
+        409,
+        'TEMPLATE_CATEGORY_IN_USE',
+      );
+    }
+    await templateRepository.deleteCategory(clinicId, id);
+  },
+
   async list(
     clinicId: string,
-    filters: { status?: string; q?: string },
+    filters: { status?: string; category?: string; q?: string },
   ): Promise<TemplateRow[]> {
     return templateRepository.list(clinicId, filters);
   },

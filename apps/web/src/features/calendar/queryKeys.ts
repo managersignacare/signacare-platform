@@ -6,6 +6,23 @@
 
 export const calendarKeys = {
   all: ['calendar'] as const,
+  appointments: (filters: {
+    clinicianId?: string;
+    patientId?: string;
+    from: string;
+    to: string;
+    limit?: string;
+    offset?: string;
+  }) => [
+    ...calendarKeys.all,
+    'appointments',
+    filters.clinicianId ?? 'all-clinicians',
+    filters.patientId ?? 'all-patients',
+    filters.from,
+    filters.to,
+    filters.limit ?? 'default-limit',
+    filters.offset ?? 'default-offset',
+  ] as const,
   blocks: (clinicianId?: string) =>
     [...calendarKeys.all, 'blocks', clinicianId ?? 'me'] as const,
   preferences: () => [...calendarKeys.all, 'preferences'] as const,

@@ -1,15 +1,92 @@
 import type { Request, Response, NextFunction } from 'express';
+import { z } from 'zod';
 import { templateService } from './template.service';
-import { CreateTemplateSchema, UpdateTemplateSchema } from '@signacare/shared';
+import {
+  CreateTemplateCategorySchema,
+  CreateTemplateSchema,
+  UpdateTemplateCategorySchema,
+  UpdateTemplateSchema,
+} from '@signacare/shared';
 import { logger } from '../../utils/logger';
 
+const TemplateCategoryResponseSchema = z.object({
+  id: z.string().uuid(),
+  clinicId: z.string().uuid(),
+  name: z.string(),
+  isActive: z.boolean(),
+  sortOrder: z.number().int(),
+  createdAt: z.string(),
+  updatedAt: z.string().nullable(),
+});
+
+const TemplateCategoryListResponseSchema = z.object({
+  categories: z.array(TemplateCategoryResponseSchema),
+});
+
+const TemplateCategoryMutationResponseSchema = z.object({
+  category: TemplateCategoryResponseSchema,
+});
+
 export const templateController = {
+  async listCategories(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { clinicId } = req.user!;
+      const categories = await templateService.listCategories(clinicId);
+      res.json(TemplateCategoryListResponseSchema.parse({ categories }));
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async createCategory(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { clinicId } = req.user!;
+      const parsed = CreateTemplateCategorySchema.safeParse(req.body);
+      if (!parsed.success) {
+        // @response-shape-exempt: canonical validation error envelope
+        res.status(400).json({ error: 'Validation failed', code: 'VALIDATION_ERROR', details: parsed.error.flatten() });
+        return;
+      }
+      const category = await templateService.createCategory(clinicId, parsed.data);
+      res.status(201).json(TemplateCategoryMutationResponseSchema.parse({ category }));
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async updateCategory(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { clinicId } = req.user!;
+      const parsed = UpdateTemplateCategorySchema.safeParse(req.body);
+      if (!parsed.success) {
+        // @response-shape-exempt: canonical validation error envelope
+        res.status(400).json({ error: 'Validation failed', code: 'VALIDATION_ERROR', details: parsed.error.flatten() });
+        return;
+      }
+      const category = await templateService.updateCategory(clinicId, req.params.id, parsed.data);
+      res.json(TemplateCategoryMutationResponseSchema.parse({ category }));
+    } catch (err) {
+      next(err);
+    }
+  },
+
+  async deleteCategory(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { clinicId } = req.user!;
+      await templateService.deleteCategory(clinicId, req.params.id);
+      res.json({ ok: true });
+    } catch (err) {
+      next(err);
+    }
+  },
+
   async list(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { clinicId } = req.user!;
       const status = typeof req.query.status === 'string' ? req.query.status : undefined;
+      const category = typeof req.query.category === 'string' ? req.query.category : undefined;
       const q      = typeof req.query.q      === 'string' ? req.query.q      : undefined;
-      const templates = await templateService.list(clinicId, { status, q });
+      const templates = await templateService.list(clinicId, { status, category, q });
       res.json(templates);
     } catch (err) {
       next(err);

@@ -2,6 +2,7 @@ import AddIcon from '@mui/icons-material/Add';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import TodayIcon from '@mui/icons-material/Today';
 import ViewDayIcon from '@mui/icons-material/ViewDay';
 import ViewListIcon from '@mui/icons-material/ViewList';
@@ -10,6 +11,7 @@ import {
   Alert,
   Box,
   Button,
+  Chip,
   CircularProgress,
   Container,
   FormControl,
@@ -28,6 +30,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ALL_SPECIALTIES,
   SPECIALTY_DISPLAY,
+  type AvailabilityBlock,
   type AppointmentMode,
   type AppointmentStatus,
   type AppointmentResponse,
@@ -47,16 +50,19 @@ import { appointmentKeys } from '../../appointments/queryKeys';
 import { appointmentApi } from '../../appointments/services/appointmentApi';
 import { AppointmentCalendar } from '../../appointments/components/AppointmentCalendar';
 import { calendarKeys } from '../queryKeys';
+import { calendarApi } from '../services/calendarApi';
 import {
   useCalendarPreferences,
   useUpdateCalendarPreferences,
 } from '../hooks/useCalendarPreferences';
 import { useCalendarBlocks } from '../hooks/useCalendarBlocks';
 import { useTodayView } from '../hooks/useTodayView';
-import { AvailabilityGridEditor } from './AvailabilityGridEditor';
+import { TimeBlockingRulesDialog } from './TimeBlockingRulesDialog';
 import { ICalSubscribeCard } from './ICalSubscribeCard';
 import {
   buildRescheduledTimes,
+  getAvailabilityColourForSlot,
+  getAvailabilitySummaryForDate,
   matchesSchedulingSearch,
 } from './schedulingWorkspaceSupport';
 import { TodayContactsView } from './TodayContactsView';
@@ -64,23 +70,19 @@ import { TodayContactsView } from './TodayContactsView';
 type CalendarScope = 'mine' | 'team' | 'clinic';
 type CalendarView = 'month' | 'day' | 'workweek' | 'week' | 'list';
 type DragSlot = `${string}|${string}`;
-
 interface StaffLookupRow {
   id: string;
   givenName: string;
   familyName: string;
 }
-
 interface SchedulingWorkspaceProps {
   routeLabel?: string;
 }
-
 interface AppointmentDraftSeed {
   date?: string;
   duration?: number;
   startTime?: string;
 }
-
 interface AppointmentSummary {
   clinicianId: string;
   clinicianName: string;
@@ -197,10 +199,12 @@ function formatRangeDate(date: Date): string {
 
 function DayWeekGrid({
   appointments,
+  availabilityBlocks,
   dates,
   dayLabels,
   draggingAppointmentId,
   dropTargetSlot,
+  slotMinutes,
   onDragHoverSlot,
   onDragEndAppointment,
   onDragStartAppointment,
@@ -209,10 +213,12 @@ function DayWeekGrid({
   onSelect,
 }: {
   appointments: AppointmentSummary[];
+  availabilityBlocks: readonly AvailabilityBlock[];
   dates: Date[];
   dayLabels: string[];
   draggingAppointmentId: string | null;
   dropTargetSlot: DragSlot | null;
+  slotMinutes: number;
   onDragHoverSlot: (slot: DragSlot | null) => void;
   onDragEndAppointment: () => void;
   onDragStartAppointment: (appointment: AppointmentResponse) => void;
@@ -249,6 +255,12 @@ function DayWeekGrid({
               const iso = date.toISOString().slice(0, 10);
               const slotAppointments = appointments.filter((appointment) => appointment.date === iso && appointment.startHour === hour);
               const slotKey = `${iso}|${String(hour).padStart(2, '0')}:00` as DragSlot;
+              const availabilityColour = getAvailabilityColourForSlot(
+                availabilityBlocks,
+                iso,
+                hour * 60,
+                Math.max(slotMinutes, 60),
+              );
               return (
                 <Box
                   key={`${iso}-${hour}`}
@@ -262,7 +274,15 @@ function DayWeekGrid({
                     minHeight: 54,
                     p: 0.25,
                     cursor: 'pointer',
-                    bgcolor: dropTargetSlot === slotKey ? '#FFF3E0' : undefined,
+                    bgcolor: dropTargetSlot === slotKey
+                      ? '#FFF3E0'
+                      : availabilityColour === 'red'
+                        ? '#FFEBEE'
+                        : availabilityColour === 'yellow'
+                          ? '#FFF8E1'
+                          : availabilityColour === 'green'
+                            ? '#F1F8E9'
+                            : undefined,
                   }}
                   onClick={() => onCreateSlot(iso, `${String(hour).padStart(2, '0')}:00`)}
                   onDragOver={(event) => {
@@ -423,6 +443,8 @@ export function SchedulingWorkspace({
   const [dropTargetSlot, setDropTargetSlot] = React.useState<DragSlot | null>(null);
   const [rescheduleError, setRescheduleError] = React.useState('');
   const [reschedulingAppointmentId, setReschedulingAppointmentId] = React.useState<string | null>(null);
+  const [timeBlockingDialogOpen, setTimeBlockingDialogOpen] = React.useState(false);
+  const syncCardRef = React.useRef<HTMLDivElement | null>(null);
 
   const prefs = useCalendarPreferences();
   const updatePrefs = useUpdateCalendarPreferences();
@@ -442,14 +464,21 @@ export function SchedulingWorkspace({
   );
 
   const appointmentsQuery = useQuery({
-    queryKey: appointmentKeys.list({ from, limit: '300', patientId: patientFilter?.id ?? '', to }),
+    queryKey: calendarKeys.appointments({
+      from,
+      limit: '300',
+      patientId: patientFilter?.id ?? '',
+      to,
+    }),
     queryFn: () =>
-      appointmentApi.list({
-        from: `${from}T00:00:00.000Z`,
-        limit: '300',
-        patientId: patientFilter?.id ?? undefined,
-        to: `${to}T23:59:59.999Z`,
-      }),
+      calendarApi
+        .listAppointments({
+          from: `${from}T00:00:00.000Z`,
+          limit: '300',
+          patientId: patientFilter?.id ?? undefined,
+          to: `${to}T23:59:59.999Z`,
+        })
+        .then((response) => response.appointments),
     enabled: Boolean(me?.id),
     staleTime: 30_000,
   });
@@ -606,6 +635,24 @@ export function SchedulingWorkspace({
   };
 
   const slotMinutes = prefs.data?.slotMinutes ?? 30;
+  const appointmentsLoadFailed = Boolean(appointmentsQuery.error);
+  const timeBlockingLoadFailed = Boolean(blocks.error || prefs.error);
+  const todayViewLoadFailed = Boolean(today.error);
+  const activeAvailabilityBlocks = React.useMemo(
+    () => blocks.data ?? [],
+    [blocks.data],
+  );
+
+  const refreshCalendarWorkspace = React.useCallback(() => {
+    void Promise.all([
+      queryClient.invalidateQueries({ queryKey: calendarKeys.all }),
+      queryClient.invalidateQueries({ queryKey: appointmentKeys.all }),
+    ]);
+  }, [queryClient]);
+
+  const scrollToSyncSetup = React.useCallback(() => {
+    syncCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, []);
 
   if (meLoading || !me) {
     return (
@@ -623,22 +670,47 @@ export function SchedulingWorkspace({
             {routeLabel}
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            One scheduling surface for clinician, team, and clinic appointments, plus time blocking and external calendar sync.
+            One scheduling surface for clinician, team, and clinic appointments, with time blocking shown as availability overlays and explicit external calendar sync controls.
           </Typography>
         </Box>
-        <Button
-          startIcon={<AddIcon />}
-          variant="contained"
-          onClick={() => handleOpenNew()}
-          sx={{ bgcolor: '#b8621a', '&:hover': { bgcolor: '#d6741f' } }}
-        >
-          New Appointment
-        </Button>
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+          <Button
+            startIcon={<RefreshIcon />}
+            variant="outlined"
+            onClick={refreshCalendarWorkspace}
+            sx={{ textTransform: 'none' }}
+          >
+            Refresh Calendar
+          </Button>
+          <Button
+            startIcon={<CalendarMonthIcon />}
+            variant="outlined"
+            onClick={scrollToSyncSetup}
+            sx={{ textTransform: 'none' }}
+          >
+            Sync Setup
+          </Button>
+          <Button
+            variant="outlined"
+            onClick={() => setTimeBlockingDialogOpen(true)}
+            sx={{ textTransform: 'none' }}
+          >
+            Manage Time Blocking
+          </Button>
+          <Button
+            startIcon={<AddIcon />}
+            variant="contained"
+            onClick={() => handleOpenNew()}
+            sx={{ bgcolor: '#b8621a', '&:hover': { bgcolor: '#d6741f' } }}
+          >
+            New Appointment
+          </Button>
+        </Stack>
       </Stack>
 
-      {(appointmentsQuery.error || blocks.error || prefs.error || today.error) ? (
+      {appointmentsLoadFailed ? (
         <Alert severity="error" sx={{ mb: 2 }}>
-          Failed to load calendar data. Try refreshing.
+          Failed to load appointments. Try refreshing.
         </Alert>
       ) : null}
 
@@ -729,6 +801,12 @@ export function SchedulingWorkspace({
                 </ToggleButtonGroup>
               </Stack>
 
+              <Stack direction={{ xs: 'column', lg: 'row' }} spacing={1} alignItems={{ xs: 'flex-start', lg: 'center' }}>
+                <Chip size="small" label="Green = available time block" sx={{ bgcolor: '#E8F5E9', color: '#2E7D32' }} />
+                <Chip size="small" label="Yellow = tentative / protected time" sx={{ bgcolor: '#FFF8E1', color: '#8A5A00' }} />
+                <Chip size="small" label="Red = unavailable / leave" sx={{ bgcolor: '#FFEBEE', color: '#C62828' }} />
+              </Stack>
+
               <Stack direction={{ xs: 'column', lg: 'row' }} spacing={1.5}>
                 <PatientSearchAutocomplete
                   value={patientFilter}
@@ -817,6 +895,10 @@ export function SchedulingWorkspace({
           ) : view === 'month' ? (
             <AppointmentCalendar
               appointments={displayedRawAppointments}
+              getAvailabilitySummary={(day) => getAvailabilitySummaryForDate(
+                activeAvailabilityBlocks,
+                day.toISOString().slice(0, 10),
+              )}
               month={monthDate}
               onDropAppointment={(appointment, day) =>
                 handleDropAppointment(appointment, day.toISOString().slice(0, 10))
@@ -827,10 +909,12 @@ export function SchedulingWorkspace({
           ) : view === 'day' ? (
             <DayWeekGrid
               appointments={filteredAppointments}
+              availabilityBlocks={activeAvailabilityBlocks}
               dates={[currentDate]}
               dayLabels={[currentDate.toLocaleDateString('en-AU', { weekday: 'short' })]}
               draggingAppointmentId={draggingAppointmentId}
               dropTargetSlot={dropTargetSlot}
+              slotMinutes={slotMinutes}
               onCreateSlot={(date, startTime) => handleOpenNew({ date, startTime })}
               onDragHoverSlot={setDropTargetSlot}
               onDragEndAppointment={handleDragEndAppointment}
@@ -841,10 +925,12 @@ export function SchedulingWorkspace({
           ) : (
             <DayWeekGrid
               appointments={filteredAppointments}
+              availabilityBlocks={activeAvailabilityBlocks}
               dates={weekDates}
               dayLabels={view === 'week' ? ALLDAYS : WEEKDAYS}
               draggingAppointmentId={draggingAppointmentId}
               dropTargetSlot={dropTargetSlot}
+              slotMinutes={slotMinutes}
               onCreateSlot={(date, startTime) => handleOpenNew({ date, startTime })}
               onDragHoverSlot={setDropTargetSlot}
               onDragEndAppointment={handleDragEndAppointment}
@@ -854,22 +940,27 @@ export function SchedulingWorkspace({
             />
           )}
 
-          {prefs.data && blocks.data ? (
-            <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 2 }}>
-              <Stack spacing={1.5}>
-                <Typography variant="h6">Time blocking</Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Availability and protected time live on the same scheduling page so clinicians can adjust workload and booked appointments together.
-                </Typography>
-                <AvailabilityGridEditor blocks={blocks.data} preferences={prefs.data} />
-              </Stack>
-            </Paper>
+          {timeBlockingLoadFailed ? (
+            <Alert severity="warning" sx={{ mt: 1 }}>
+              Appointments are loaded, but time blocking is temporarily unavailable. Refresh to retry.
+            </Alert>
+          ) : prefs.data && blocks.data ? (
+            <Alert severity="info" sx={{ mt: 1 }}>
+              Time blocking is integrated into the calendar above as green, yellow, and red overlays. Use
+              <strong> Manage Time Blocking</strong> to adjust those rules without switching to a second calendar surface.
+            </Alert>
           ) : null}
         </Stack>
 
         <Stack spacing={2.5}>
-          {today.data ? <TodayContactsView data={today.data} /> : <Box display="flex" justifyContent="center" py={6}><CircularProgress /></Box>}
-          <ICalSubscribeCard />
+          {todayViewLoadFailed ? (
+            <Alert severity="warning">
+              Today&apos;s contacts and workload summary are temporarily unavailable. Your appointment calendar is still available.
+            </Alert>
+          ) : today.data ? <TodayContactsView data={today.data} /> : <Box display="flex" justifyContent="center" py={6}><CircularProgress /></Box>}
+          <Box ref={syncCardRef}>
+            <ICalSubscribeCard onRefreshCalendar={refreshCalendarWorkspace} />
+          </Box>
         </Stack>
       </Box>
 
@@ -894,6 +985,12 @@ export function SchedulingWorkspace({
         }}
         onEdit={handleEditAppointment}
         staffNamesById={staffNamesById}
+      />
+      <TimeBlockingRulesDialog
+        blocks={blocks.data}
+        open={timeBlockingDialogOpen}
+        preferences={prefs.data}
+        onClose={() => setTimeBlockingDialogOpen(false)}
       />
     </Container>
   );

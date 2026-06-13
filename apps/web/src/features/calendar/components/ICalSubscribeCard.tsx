@@ -30,7 +30,13 @@ import { calendarApi, type CalendarSubscriptionInfo } from '../services/calendar
 import { calendarKeys } from '../queryKeys';
 import { useRotateIcalToken } from '../hooks/useCalendarPreferences';
 
-export const ICalSubscribeCard: React.FC = () => {
+interface ICalSubscribeCardProps {
+  onRefreshCalendar?: () => void;
+}
+
+export const ICalSubscribeCard: React.FC<ICalSubscribeCardProps> = ({
+  onRefreshCalendar,
+}) => {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const rotate = useRotateIcalToken();
@@ -58,11 +64,11 @@ export const ICalSubscribeCard: React.FC = () => {
     <Card variant="outlined">
       <CardContent>
         <Typography variant="subtitle1" gutterBottom>
-          Subscribe in Outlook / Google Calendar
+          External Calendar Sync
         </Typography>
         <Typography variant="body2" color="text.secondary" mb={2}>
-          Add this URL to your calendar app to see your availability and
-          appointments inside Outlook, Google Calendar, or Apple Calendar.
+          Sync setup starts here. Add this URL to Outlook, Google Calendar, or Apple
+          Calendar to see your Signacare appointments and time blocks in the same place.
         </Typography>
 
         <Stack direction="row" spacing={1} alignItems="center">
@@ -84,14 +90,27 @@ export const ICalSubscribeCard: React.FC = () => {
         )}
 
         <Box mt={2}>
-          <Button
-            size="small"
-            color="warning"
-            startIcon={<RefreshIcon />}
-            onClick={() => setConfirmOpen(true)}
-          >
-            Rotate token
-          </Button>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<RefreshIcon />}
+              onClick={() => {
+                void sub.refetch();
+                onRefreshCalendar?.();
+              }}
+            >
+              Refresh sync status
+            </Button>
+            <Button
+              size="small"
+              color="warning"
+              startIcon={<RefreshIcon />}
+              onClick={() => setConfirmOpen(true)}
+            >
+              Rotate token
+            </Button>
+          </Stack>
         </Box>
       </CardContent>
 

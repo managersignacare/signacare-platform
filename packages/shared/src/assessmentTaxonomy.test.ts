@@ -92,13 +92,53 @@ describe('Operator-mandated separation invariants', () => {
   });
 
   it('seeded clinician-rated instruments are clinician_rated rating_scales with diagnosisCategory', () => {
-    for (const slug of ['hamd17', 'madrs', 'bprs24', 'panss', 'aims', 'gaf', 'mmse', 'moca']) {
+    for (const slug of ['hamd17', 'madrs', 'bprs24', 'panss', 'aims', 'gaf', 'mmse', 'moca', 'minicog', 'cdt-shulman', 'altman-clinician-mania', 'acsa', 'audit-clinician', 'assq', 'dss-brief', 'btq', 'gds15', 'iqcode-short', 'ipf-brief', 'padua', 'tsq', 'zung-sds']) {
       const entry = SCALE_REGISTRY.find((e) => e.slug === slug);
       expect(entry, `missing entry for ${slug}`).toBeDefined();
       expect(entry!.family).toBe('rating_scale');
       expect(entry!.raterType).toBe('clinician_rated');
       expect(entry!.diagnosisCategory).toBeDefined();
     }
+  });
+
+  /**
+   * P-CLAUDE-LANE 4B/6 — Mini-Cog registry entry guard.
+   *
+   * Mini-Cog is the third clinician-rated cognitive-screening
+   * instrument (after MMSE + MoCA) and the first instrument added
+   * AFTER drawing capture became a first-class field type. Pinning
+   * the registry shape prevents the diagnosisCategory / ageGroup /
+   * raterType from silently drifting away from the
+   * cognitive-dementia / older-adult / clinician-rated triple the
+   * UI uses for grouping in the assessment catalogue.
+   */
+  it('Mini-Cog is registered as a clinician-rated cognitive-dementia screen for older adults', () => {
+    const minicog = SCALE_REGISTRY.find((e) => e.slug === 'minicog');
+    expect(minicog).toBeDefined();
+    expect(minicog!.family).toBe('rating_scale');
+    expect(minicog!.raterType).toBe('clinician_rated');
+    expect(minicog!.diagnosisCategory).toBe('cognitive_dementia');
+    expect(minicog!.ageGroup).toBe('older_adult');
+    expect(minicog!.aliases).toContain('Mini-Cog');
+  });
+
+  /**
+   * P-CLAUDE-LANE 4B/7 — standalone Clock Drawing Test registry pin.
+   *
+   * The CDT slug uses the kebab-case `cdt-shulman` to disambiguate
+   * from any future scoring rubric (e.g. `cdt-sunderland`,
+   * `cdt-mendez`) — Shulman is the most clinically common rubric but
+   * not the only one, and reserving the rubric in the slug keeps the
+   * registry honest as the catalogue grows.
+   */
+  it('Shulman CDT is registered with rubric-bearing slug for future-proof catalogue growth', () => {
+    const cdt = SCALE_REGISTRY.find((e) => e.slug === 'cdt-shulman');
+    expect(cdt).toBeDefined();
+    expect(cdt!.family).toBe('rating_scale');
+    expect(cdt!.raterType).toBe('clinician_rated');
+    expect(cdt!.diagnosisCategory).toBe('cognitive_dementia');
+    expect(cdt!.ageGroup).toBe('older_adult');
+    expect(cdt!.aliases).toEqual(expect.arrayContaining(['CDT', 'Shulman CDT', 'Clock Drawing Test']));
   });
 });
 
@@ -135,6 +175,28 @@ describe('normaliseScaleName + resolveScaleByTemplateName', () => {
   it('returns undefined for unknown scale names (no silent fallback)', () => {
     expect(resolveScaleByTemplateName('definitely-not-a-scale')).toBeUndefined();
     expect(resolveScaleByTemplateName('')).toBeUndefined();
+  });
+
+  it('resolves the newly requested aliases to the correct registry entries', () => {
+    const cases: Array<[string, string]> = [
+      ['ASRM (Altman Self-Rating Mania Scale)', 'asrm14'],
+      ['Altman clinician rated mania', 'altman-clinician-mania'],
+      ['Amphetamine Cessation Symptom Assessment', 'acsa'],
+      ['AUDIT - alcohol', 'audit-clinician'],
+      ['Autism Spectrum Screening Questionnaire', 'assq'],
+      ['Dissociative Symptom Scale - Brief', 'dss-brief'],
+      ['Brief Trauma Questionnaire', 'btq'],
+      ['Geriatric Depression Scale 15', 'gds15'],
+      ['IQCODE short', 'iqcode-short'],
+      ['Inventory psychosocial functioning brief', 'ipf-brief'],
+      ['Padua Inventory', 'padua'],
+      ['Trauma Screening Questionnaire (TSQ)', 'tsq'],
+      ['Zung self rating depression scale', 'zung-sds'],
+    ];
+
+    for (const [name, expectedSlug] of cases) {
+      expect(resolveScaleByTemplateName(name)?.slug).toBe(expectedSlug);
+    }
   });
 
   it('normaliseScaleName is case-insensitive + strips punctuation', () => {

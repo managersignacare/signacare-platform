@@ -149,6 +149,64 @@ check_contains() {
   fi
 }
 
+check_smart_config_contract() {
+  local body status result expected_issuer
+  body="$(mktemp)"
+  expected_issuer="$API/api/v1/fhir"
+  status="$(
+    run_with_retries "$SMOKE_HTTP_RETRIES" "$SMOKE_HTTP_RETRY_SLEEP_SECONDS" \
+      curl --max-time 20 -sS \
+        -o "$body" -w '%{http_code}' \
+        "$API/api/v1/fhir/.well-known/smart-configuration" || echo '000'
+  )"
+
+  if [[ "$status" != "200" ]]; then
+    printf "  ✗ %-30s /.well-known/smart-configuration → %s (expected 200)\n" "SMART config contract" "$status"
+    fail=1
+    rm -f "$body"
+    return
+  fi
+
+  result="$(python3 - <<'PY' "$body" "$expected_issuer"
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as fh:
+    payload = json.load(fh)
+
+expected_issuer = sys.argv[2]
+expected_prefix = expected_issuer + "/auth/"
+checks = [
+    ("issuer", payload.get("issuer"), expected_issuer),
+    ("authorization_endpoint", payload.get("authorization_endpoint"), expected_prefix + "authorize"),
+    ("token_endpoint", payload.get("token_endpoint"), expected_prefix + "token"),
+    ("introspection_endpoint", payload.get("introspection_endpoint"), expected_prefix + "introspect"),
+    ("revocation_endpoint", payload.get("revocation_endpoint"), expected_prefix + "revoke"),
+]
+
+mismatches = [
+    f"{name}: actual={actual!r} expected={expected!r}"
+    for name, actual, expected in checks
+    if actual != expected
+]
+
+if mismatches:
+    print("; ".join(mismatches))
+else:
+    print("ok")
+PY
+)"
+
+  if [[ "$result" == "ok" ]]; then
+    printf "  ✓ %-30s discovery endpoints use live public base URL\n" "SMART config contract"
+  else
+    printf "  ✗ %-30s %s\n" "SMART config contract" "$result"
+    fail=1
+  fi
+
+  rm -f "$body"
+}
+
 check_release_version() {
   if [[ -z "${EXPECTED_SIGNACARE_RELEASE_MANIFEST_SHA256:-}" ]]; then
     printf "  ○ %-30s skipped (no expected release manifest)\n" "Release version"
@@ -441,15 +499,20 @@ check_observability_config() {
   slot="${SMOKE_AZURE_API_SLOT:-}"
   settings_body="$(mktemp)"
 
-  local slot_args=()
   if [[ -n "$slot" ]]; then
-    slot_args=(--slot "$slot")
-  fi
-
-  if ! az webapp config appsettings list \
+    if ! az webapp config appsettings list \
+      --resource-group "$rg" \
+      --name "$app" \
+      --slot "$slot" \
+      --output json > "$settings_body"; then
+      printf "  ✗ %-30s unable to read app settings for %s/%s slot=%s\n" "Observability config" "$rg" "$app" "$slot"
+      fail=1
+      rm -f "$settings_body"
+      return
+    fi
+  elif ! az webapp config appsettings list \
     --resource-group "$rg" \
     --name "$app" \
-    "${slot_args[@]}" \
     --output json > "$settings_body"; then
     printf "  ✗ %-30s unable to read app settings for %s/%s\n" "Observability config" "$rg" "$app"
     fail=1
@@ -821,6 +884,7 @@ check_observability_config
 check_allow_redirect "API docs" "$API/api/docs"
 check "FHIR metadata"           "$API/api/v1/fhir/metadata"           200
 check "SMART config"            "$API/api/v1/fhir/.well-known/smart-configuration" 200
+check_smart_config_contract
 
 # ── Migration verification ──────────────────────────────────────────────
 # The /ready endpoint returns 200 only if postgres + redis are reachable

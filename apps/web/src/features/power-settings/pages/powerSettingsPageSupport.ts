@@ -25,8 +25,12 @@ export type AppointmentModeRow = {
 
 export type TemplateCategoryRow = {
   id: string
+  clinicId?: string
   name: string
   isActive?: boolean
+  sortOrder?: number
+  createdAt?: string
+  updatedAt?: string | null
 }
 
 export type EpisodeTypeRow = {

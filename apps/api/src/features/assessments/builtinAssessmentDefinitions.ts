@@ -5,7 +5,9 @@ import type {
 import { resolveScaleByTemplateName } from '@signacare/shared';
 import {
   buildLikertScale,
+  buildYesNoScale,
   descriptor,
+  FIVE_POINT_EXTENT,
   FIVE_POINT_SEVERITY_0_4,
   SEVEN_POINT_CLINICAL,
   type BuiltinAssessmentTemplate,
@@ -239,13 +241,30 @@ const CLINICIAN_RATED_BUILTIN_RATING_SCALE_DEFINITIONS: readonly BuiltinAssessme
       { type: 'likert', label: 'Write a sentence (0-1)', min: 0, max: 1, options: [] },
       { type: 'likert', label: 'Copy intersecting pentagons (0-1)', min: 0, max: 1, options: [] },
       {
+        // P-CLAUDE-LANE 4B: tablet capture of the intersecting-pentagons
+        // figure. The 0-1 likert above remains the score item; this
+        // drawing field carries the clinical artefact for later review.
+        // Stored as a DrawingPayload (see
+        // packages/shared/src/drawingPayload.ts); not scorable
+        // (isScorableField excludes 'drawing').
+        type: 'drawing',
+        label: 'Intersecting pentagons — copy the figure (tablet capture)',
+      },
+      {
+        // Standard Folstein MMSE interpretation thresholds. Bands are
+        // CLOSED intervals [min, max] inclusive at both ends. These bands
+        // mirror the canonical scoring SSoT at
+        // packages/shared/src/assessmentScoring.ts (slug 'mmse'); the
+        // regression test in builtinAssessmentDefinitions.test.ts pins
+        // the alignment so the two surfaces cannot drift again.
         type: 'score',
         label: 'Total MMSE Score (0-30)',
         formula: 'sum',
         ranges: [
-          { min: 0, max: 17, label: 'Severe cognitive impairment' },
-          { min: 18, max: 23, label: 'Mild cognitive impairment range' },
-          { min: 24, max: 30, label: 'Cognition broadly intact' },
+          { min: 0, max: 9, label: 'Severe impairment' },
+          { min: 10, max: 18, label: 'Moderate impairment' },
+          { min: 19, max: 23, label: 'Mild impairment' },
+          { min: 24, max: 30, label: 'Normal' },
         ],
       },
     ],
@@ -259,6 +278,24 @@ const CLINICIAN_RATED_BUILTIN_RATING_SCALE_DEFINITIONS: readonly BuiltinAssessme
       { type: 'heading', text: 'MoCA (Montreal Cognitive Assessment)' },
       { type: 'instruction', text: 'Score each domain according to standard MoCA administration.' },
       { type: 'likert', label: 'Visuospatial/executive (0-5)', min: 0, max: 5, options: [] },
+      {
+        // P-CLAUDE-LANE 4B: tablet capture of the visuospatial cube
+        // copy item. The 0-5 visuospatial/executive likert above remains
+        // the score item; this drawing field carries the clinical
+        // artefact for later review. Stored as a DrawingPayload
+        // (packages/shared/src/drawingPayload.ts); not scorable.
+        type: 'drawing',
+        label: 'Visuospatial — copy the cube (tablet capture)',
+      },
+      {
+        // P-CLAUDE-LANE 4B: tablet capture of the clock-draw 11:10
+        // item (executive function component of the visuospatial
+        // subscore). The 0-5 visuospatial/executive likert above
+        // remains the score item; this drawing field carries the
+        // clinical artefact.
+        type: 'drawing',
+        label: 'Visuospatial — draw the clock showing 11:10 (tablet capture)',
+      },
       { type: 'likert', label: 'Naming (0-3)', min: 0, max: 3, options: [] },
       { type: 'likert', label: 'Attention (0-6)', min: 0, max: 6, options: [] },
       { type: 'likert', label: 'Language (0-3)', min: 0, max: 3, options: [] },
@@ -267,13 +304,474 @@ const CLINICIAN_RATED_BUILTIN_RATING_SCALE_DEFINITIONS: readonly BuiltinAssessme
       { type: 'likert', label: 'Orientation (0-6)', min: 0, max: 6, options: [] },
       { type: 'likert', label: 'Education correction (+1 if <=12 years education)', min: 0, max: 1, options: [] },
       {
+        // Standard Nasreddine MoCA interpretation. The published cutoff
+        // is ≥26/30 = within normal limits; <26/30 = below cognitive
+        // threshold (clinical follow-up indicated). Bands are CLOSED
+        // intervals [min, max] inclusive at both ends. These bands
+        // mirror the canonical scoring SSoT at
+        // packages/shared/src/assessmentScoring.ts (slug 'moca'); the
+        // regression test in builtinAssessmentDefinitions.test.ts pins
+        // the alignment so the two surfaces cannot drift again.
         type: 'score',
         label: 'Total MoCA Score (0-30)',
         formula: 'sum',
         ranges: [
-          { min: 0, max: 17, label: 'Moderate/severe impairment range' },
-          { min: 18, max: 25, label: 'Mild impairment range' },
-          { min: 26, max: 30, label: 'Normal range' },
+          { min: 0, max: 25, label: 'Below cognitive threshold' },
+          { min: 26, max: 30, label: 'Normal' },
+        ],
+      },
+    ],
+  },
+  // P-CLAUDE-LANE 4B/6: Mini-Cog (Borson et al., 2000) — 3-minute
+  // primary-care cognitive screen. Two-item structure:
+  //
+  //   1. 3-word recall (clinician administers per the protocol; scores
+  //      0-3, one point per word recalled after distraction).
+  //   2. Clock Drawing Test (binary: 0 abnormal, 2 normal).
+  //
+  // Total 0-5. Cutoff ≤2 = positive screen (further workup indicated),
+  // ≥3 = negative. The clock-drawing item carries a tablet-capture
+  // drawing field adjacent to the 0-or-2 likert (the likert remains
+  // the SCORED item; the drawing is the clinical artefact for later
+  // review). Drawing field is non-scorable so the 0-5 total cannot be
+  // perturbed.
+  //
+  // Bands mirror the canonical scoring SSoT at
+  // packages/shared/src/assessmentScoring.ts (slug 'minicog'); the
+  // regression test in builtinAssessmentDefinitions.test.ts pins the
+  // alignment so the two surfaces cannot drift.
+  {
+    name: 'Mini-Cog (3-word recall + clock drawing)',
+    type: 'assessment',
+    category: 'Rating Scales',
+    description: descriptor('clinician', 'Older adult/General', 'Cognitive screening — primary care'),
+    content: [
+      { type: 'heading', text: 'Mini-Cog (3-word recall + clock drawing)' },
+      { type: 'instruction', text: 'Administer per the standard Mini-Cog protocol. Score recall 0-3 (one point per word recalled after distraction). Score clock drawing 0 (abnormal) or 2 (normal).' },
+      { type: 'likert', label: 'Three-word recall (0-3)', min: 0, max: 3, options: [] },
+      { type: 'likert', label: 'Clock drawing (0 abnormal / 2 normal)', min: 0, max: 2, options: [] },
+      {
+        type: 'drawing',
+        label: 'Clock drawing — draw a clock face with numbers and set the hands to 11:10 (tablet capture)',
+      },
+      {
+        type: 'score',
+        label: 'Total Mini-Cog Score (0-5)',
+        formula: 'sum',
+        ranges: [
+          { min: 0, max: 2, label: 'Positive screen — further workup indicated' },
+          { min: 3, max: 5, label: 'Negative screen' },
+        ],
+      },
+    ],
+  },
+  // P-CLAUDE-LANE 4B/7: Standalone Clock Drawing Test scored by the
+  // Shulman 6-band rubric (Shulman et al., 1993). Distinct from the
+  // embedded clock items in MoCA + Mini-Cog: this is the standalone
+  // instrument administered when the clinician wants to assess
+  // visuospatial / executive function without running a full
+  // cognitive battery. The single likert (0-5) carries the Shulman
+  // grade; the drawing field captures the patient's actual figure
+  // for review and longitudinal comparison. Drawing is non-scorable
+  // (isScorableField excludes 'drawing') so the 0-5 total cannot be
+  // perturbed.
+  //
+  // Bands mirror the canonical scoring SSoT at
+  // packages/shared/src/assessmentScoring.ts (slug 'cdt-shulman');
+  // the regression test in builtinAssessmentDefinitions.test.ts pins
+  // the alignment so the two surfaces cannot drift.
+  {
+    name: 'CDT (Shulman Clock Drawing Test, 6-band)',
+    type: 'assessment',
+    category: 'Rating Scales',
+    description: descriptor('clinician', 'Older adult/General', 'Visuospatial / executive function — standalone clock'),
+    content: [
+      { type: 'heading', text: 'CDT (Shulman Clock Drawing Test, 6-band)' },
+      { type: 'instruction', text: 'Ask the patient: "Draw a clock face with the numbers on it. Set the hands to 10 past 11." Score the result using the Shulman 6-band rubric (0-5). The tablet capture below preserves the patient\'s drawing for review.' },
+      {
+        type: 'drawing',
+        label: 'Clock drawing — draw a clock face with the numbers and set the hands to 10 past 11 (tablet capture)',
+      },
+      { type: 'likert', label: 'Shulman grade (0-5)', min: 0, max: 5, options: [] },
+      {
+        type: 'score',
+        label: 'Total CDT (Shulman) Score (0-5)',
+        formula: 'sum',
+        ranges: [
+          { min: 0, max: 0, label: 'No reasonable representation' },
+          { min: 1, max: 1, label: 'Severe disorganization' },
+          { min: 2, max: 2, label: 'Moderate visuospatial disorganization' },
+          { min: 3, max: 3, label: 'Inaccurate representation of 10 past 11' },
+          { min: 4, max: 4, label: 'Minor visuospatial errors' },
+          { min: 5, max: 5, label: 'Perfect' },
+        ],
+      },
+    ],
+  },
+  buildLikertScale({
+    name: 'Altman Clinician-Rated Mania Scale',
+    respondentType: 'clinician',
+    ageGroup: 'Adult',
+    focus: 'Mania / hypomania symptom severity',
+    instruction: 'Rate the severity of manic symptoms over the past week using interview and observation.',
+    items: [
+      'Elevated / expansive mood',
+      'Increased self-confidence or grandiosity',
+      'Reduced need for sleep',
+      'Pressured speech / talkativeness',
+      'Increased activity / psychomotor acceleration',
+    ],
+    min: 0,
+    max: 4,
+    options: FIVE_POINT_SEVERITY_0_4,
+    totalLabel: 'Total Score (0-20)',
+    totalRanges: [
+      { min: 0, max: 5, label: 'Below mania screening threshold' },
+      { min: 6, max: 9, label: 'Possible hypomania' },
+      { min: 10, max: 14, label: 'Moderate mania symptom burden' },
+      { min: 15, max: 20, label: 'High mania symptom burden' },
+    ],
+  }),
+  buildLikertScale({
+    name: 'ACSA (Amphetamine Cessation Symptom Assessment)',
+    respondentType: 'clinician',
+    ageGroup: 'Adult',
+    focus: 'Amphetamine withdrawal / cessation symptom burden',
+    instruction: 'Rate the severity of amphetamine cessation symptoms observed or reported during the current review period.',
+    items: [
+      'Craving for amphetamines',
+      'Fatigue or reduced energy',
+      'Hypersomnia / sleeping more than usual',
+      'Vivid or unpleasant dreams',
+      'Increased appetite',
+      'Psychomotor slowing',
+      'Anxiety / tension',
+      'Irritability',
+      'Low mood / dysphoria',
+      'Anhedonia / reduced interest',
+      'Poor concentration',
+      'Restlessness',
+      'Agitation',
+      'Suspiciousness / paranoia',
+      'Thoughts of self-harm',
+      'Physical discomfort / aches',
+    ],
+    min: 0,
+    max: 3,
+    options: ['None (0)', 'Mild (1)', 'Moderate (2)', 'Severe (3)'],
+    totalLabel: 'Total Score (0-48)',
+  }),
+  buildLikertScale({
+    name: 'AUDIT (Alcohol Use Disorders Identification Test — Clinician Administered)',
+    respondentType: 'clinician',
+    ageGroup: 'Adult',
+    focus: 'Alcohol use risk',
+    instruction: 'Complete the AUDIT using interview data and collateral history where available.',
+    items: [
+      'How often does the person have a drink containing alcohol?',
+      'How many standard drinks are taken on a typical drinking day?',
+      'How often are 6 or more drinks taken on one occasion?',
+      'How often are they unable to stop drinking once started?',
+      'How often do they fail expected responsibilities because of drinking?',
+      'How often is a morning drink needed after heavy drinking?',
+      'How often is there guilt or remorse after drinking?',
+      'How often can they not remember the night before because of drinking?',
+      'Has anyone been injured because of the drinking?',
+      'Has someone else expressed concern or suggested cutting down?',
+    ],
+    min: 0,
+    max: 4,
+    options: ['Never (0)', 'Monthly or less (1)', '2-4 times a month / sometimes (2)', 'Weekly / often (3)', 'Daily or almost daily / very often (4)'],
+    totalLabel: 'Total Score (0-40)',
+    totalRanges: [
+      { min: 0, max: 7, label: 'Low risk' },
+      { min: 8, max: 15, label: 'Hazardous use' },
+      { min: 16, max: 19, label: 'Harmful use' },
+      { min: 20, max: 40, label: 'Likely dependence' },
+    ],
+  }),
+  buildLikertScale({
+    name: 'ASSQ (Autism Spectrum Screening Questionnaire)',
+    respondentType: 'clinician',
+    ageGroup: 'Child/Adolescent',
+    focus: 'Autism spectrum screening',
+    instruction: 'Rate how true each social communication or restricted-interest item is for the child or adolescent.',
+    items: [
+      'Old-fashioned or precocious manner',
+      'Regarded as different by other children',
+      'Lives in an idiosyncratic world of special interests',
+      'Accumulates facts on unusual topics',
+      'Poor awareness of social cues',
+      'Overly literal understanding of language',
+      'Problems with reciprocal conversation',
+      'One-sided communication style',
+      'Difficulties making or keeping friends',
+      'Limited or awkward facial expression',
+      'Motor clumsiness or odd gait',
+      'Unusual sensory sensitivities',
+      'Insists on routines or sameness',
+      'Becomes upset by change',
+      'Repetitive questions or comments',
+      'Peculiar or pedantic speech',
+      'Limited imagination in play',
+      'Difficulty understanding humour or sarcasm',
+      'Appears naive or socially vulnerable',
+      'Takes things very personally',
+      'Narrow range of emotional expression',
+      'Intense focus on preferred topics',
+      'Rarely joins group activities spontaneously',
+      'Does not easily read others’ intentions',
+      'Rigid thinking style',
+      'Odd posture or body movements',
+      'Overall autism-spectrum concern',
+    ],
+    min: 0,
+    max: 2,
+    options: ['No (0)', 'Somewhat / sometimes (1)', 'Certainly / often (2)'],
+    totalLabel: 'Total Score (0-54)',
+  }),
+  buildLikertScale({
+    name: 'DSS-B (Dissociative Symptom Scale — Brief)',
+    respondentType: 'clinician',
+    ageGroup: 'Adult',
+    focus: 'Brief dissociative symptom burden',
+    instruction: 'Rate how much each dissociative symptom was present during the assessment period.',
+    items: [
+      'Feeling disconnected from body or self',
+      'Feeling the world is unreal or dreamlike',
+      'Memory gaps for part of the day',
+      'Losing track of what happened during conversations',
+      'Acting on “autopilot” without recall',
+      'Feeling emotionally numb or detached',
+      'Hearing internal voices or inner parts arguing',
+      'Sense of identity confusion or switching',
+    ],
+    min: 0,
+    max: 4,
+    options: FIVE_POINT_EXTENT,
+    totalLabel: 'Total Score (0-32)',
+  }),
+  buildYesNoScale({
+    name: 'BTQ (Brief Trauma Questionnaire)',
+    respondentType: 'clinician',
+    ageGroup: 'Adult',
+    focus: 'Trauma exposure screening',
+    instruction: 'Mark Yes for each lifetime exposure category that applies.',
+    items: [
+      'Serious accident, fire, or explosion',
+      'Natural disaster',
+      'Life-threatening illness or medical emergency',
+      'Physical assault',
+      'Assault with a weapon',
+      'Sexual assault or unwanted sexual contact',
+      'Combat or war-zone exposure',
+      'Captivity, coercive control, or torture',
+      'Witnessing severe injury or death',
+      'Learning of violent or accidental death of someone close',
+    ],
+    totalLabel: 'Total Exposure Categories (0-10)',
+  }),
+  {
+    name: 'GDS-15 (Geriatric Depression Scale-15)',
+    type: 'assessment',
+    category: 'Rating Scales',
+    description: descriptor('clinician', 'Older adult', 'Late-life depression screening'),
+    content: [
+      { type: 'heading', text: 'GDS-15 (Geriatric Depression Scale-15)' },
+      { type: 'instruction', text: 'Ask each question and record the depressive response shown in brackets.' },
+      { type: 'likert', label: '1. Are you basically satisfied with your life?', min: 0, max: 1, options: ['Yes (0)', 'No (1)'] },
+      { type: 'likert', label: '2. Have you dropped many of your activities and interests?', min: 0, max: 1, options: ['No (0)', 'Yes (1)'] },
+      { type: 'likert', label: '3. Do you feel that your life is empty?', min: 0, max: 1, options: ['No (0)', 'Yes (1)'] },
+      { type: 'likert', label: '4. Do you often get bored?', min: 0, max: 1, options: ['No (0)', 'Yes (1)'] },
+      { type: 'likert', label: '5. Are you in good spirits most of the time?', min: 0, max: 1, options: ['Yes (0)', 'No (1)'] },
+      { type: 'likert', label: '6. Are you afraid that something bad is going to happen to you?', min: 0, max: 1, options: ['No (0)', 'Yes (1)'] },
+      { type: 'likert', label: '7. Do you feel happy most of the time?', min: 0, max: 1, options: ['Yes (0)', 'No (1)'] },
+      { type: 'likert', label: '8. Do you often feel helpless?', min: 0, max: 1, options: ['No (0)', 'Yes (1)'] },
+      { type: 'likert', label: '9. Do you prefer to stay at home rather than going out and doing new things?', min: 0, max: 1, options: ['No (0)', 'Yes (1)'] },
+      { type: 'likert', label: '10. Do you feel you have more problems with memory than most?', min: 0, max: 1, options: ['No (0)', 'Yes (1)'] },
+      { type: 'likert', label: '11. Do you think it is wonderful to be alive now?', min: 0, max: 1, options: ['Yes (0)', 'No (1)'] },
+      { type: 'likert', label: '12. Do you feel pretty worthless the way you are now?', min: 0, max: 1, options: ['No (0)', 'Yes (1)'] },
+      { type: 'likert', label: '13. Do you feel full of energy?', min: 0, max: 1, options: ['Yes (0)', 'No (1)'] },
+      { type: 'likert', label: '14. Do you feel that your situation is hopeless?', min: 0, max: 1, options: ['No (0)', 'Yes (1)'] },
+      { type: 'likert', label: '15. Do you think that most people are better off than you are?', min: 0, max: 1, options: ['No (0)', 'Yes (1)'] },
+      {
+        type: 'score',
+        label: 'Total GDS-15 Score (0-15)',
+        formula: 'sum',
+        ranges: [
+          { min: 0, max: 4, label: 'Within normal range' },
+          { min: 5, max: 8, label: 'Mild depression range' },
+          { min: 9, max: 11, label: 'Moderate depression range' },
+          { min: 12, max: 15, label: 'Severe depression range' },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'IQCODE Short (Informant Questionnaire on Cognitive Decline in the Elderly)',
+    type: 'assessment',
+    category: 'Rating Scales',
+    description: descriptor('clinician', 'Older adult', 'Informant-rated cognitive decline'),
+    content: [
+      { type: 'heading', text: 'IQCODE Short (Informant Questionnaire on Cognitive Decline in the Elderly)' },
+      { type: 'instruction', text: 'Compared with 10 years ago, how is the person now at each task? Use an informant who knows the person well.' },
+      ...[
+        'Remembering things about family and friends',
+        'Remembering recent events',
+        'Recalling conversations a few days later',
+        'Remembering their address or phone number',
+        'Remembering the day, date, month, and year',
+        'Knowing where things are usually kept',
+        'Understanding what is going on and what people mean',
+        'Following a story in a book, television program, or film',
+        'Making decisions on everyday matters',
+        'Handling money for shopping',
+        'Managing financial matters (bills, banking, balancing accounts)',
+        'Using gadgets or household appliances',
+        'Learning how to use a new device or routine',
+        'Finding the way around familiar streets',
+        'Finding the way around an unfamiliar place',
+        'Using words and following conversations',
+      ].map((item) => ({
+        type: 'likert' as const,
+        label: item,
+        min: 1,
+        max: 5,
+        options: [
+          'Much improved (1)',
+          'A bit improved (2)',
+          'Not much change (3)',
+          'A bit worse (4)',
+          'Much worse (5)',
+        ],
+      })),
+      {
+        type: 'score',
+        label: 'Average IQCODE Score (1-5)',
+        formula: 'mean',
+        itemIndexes: Array.from({ length: 16 }, (_, index) => index + 2),
+        ranges: [
+          { min: 1, max: 3, label: 'No significant decline reported' },
+          { min: 3.01, max: 3.3, label: 'Borderline decline signal' },
+          { min: 3.31, max: 5, label: 'Likely cognitive decline' },
+        ],
+      },
+    ],
+  },
+  buildLikertScale({
+    name: 'IPF-Brief (Inventory of Psychosocial Functioning)',
+    respondentType: 'clinician',
+    ageGroup: 'Adult',
+    focus: 'Psychosocial functioning impairment',
+    instruction: 'Rate impairment over the review period across the major functioning domains.',
+    items: [
+      'Work or study functioning',
+      'Home and daily responsibilities',
+      'Intimate relationship functioning',
+      'Family relationship functioning',
+      'Friendship / social network functioning',
+      'Parenting or caregiving functioning',
+      'Self-care, community participation, and leisure functioning',
+    ],
+    min: 0,
+    max: 6,
+    options: ['No impairment (0)', 'Very mild (1)', 'Mild (2)', 'Moderate (3)', 'Marked (4)', 'Severe (5)', 'Extreme / unable (6)'],
+    totalLabel: 'Total Score (0-42)',
+  }),
+  buildLikertScale({
+    name: 'Padua Inventory',
+    respondentType: 'clinician',
+    ageGroup: 'Adult',
+    focus: 'Obsessive-compulsive symptoms',
+    instruction: 'Rate how strongly each obsessive or compulsive symptom has been present recently.',
+    items: [
+      'Intrusive contamination thoughts',
+      'Excessive hand washing',
+      'Checking doors, locks, or appliances repeatedly',
+      'Checking that no mistakes were made',
+      'Re-reading or re-doing tasks repeatedly',
+      'Need to arrange or order objects exactly',
+      'Compulsive counting or repeating',
+      'Fear of losing control over aggressive impulses',
+      'Fear of acting on socially embarrassing impulses',
+      'Disturbing taboo or blasphemous thoughts',
+      'Fear of accidental harm to others',
+      'Excessive doubt about having caused harm',
+      'Urges to collect or keep useless items',
+      'Superstitious need to perform rituals',
+      'Mental rituals to neutralize thoughts',
+      'Need for certainty before making decisions',
+      'Obsessive rumination over insignificant details',
+      'Avoidance because of obsessional fears',
+      'Difficulty stopping compulsive acts once started',
+      'Overall interference from obsessions / compulsions',
+    ],
+    min: 0,
+    max: 4,
+    options: FIVE_POINT_EXTENT,
+    totalLabel: 'Total Score (0-80)',
+  }),
+  buildYesNoScale({
+    name: 'TSQ (Trauma Screening Questionnaire)',
+    respondentType: 'clinician',
+    ageGroup: 'Adult',
+    focus: 'Post-traumatic stress screening',
+    instruction: 'Mark Yes for symptoms present at least twice in the past week.',
+    items: [
+      'Upsetting thoughts or memories about the event',
+      'Upsetting dreams about the event',
+      'Acting or feeling as if the event were happening again',
+      'Feeling upset by reminders of the event',
+      'Bodily reactions to reminders of the event',
+      'Difficulty falling or staying asleep',
+      'Irritability or outbursts of anger',
+      'Difficulty concentrating',
+      'Heightened alertness / hypervigilance',
+      'Being jumpy or easily startled',
+    ],
+    totalLabel: 'Total TSQ Score (0-10)',
+    totalRanges: [
+      { min: 0, max: 5, label: 'Below positive screening threshold' },
+      { min: 6, max: 10, label: 'Positive trauma screen — assess further' },
+    ],
+  }),
+  {
+    name: 'ZUNG SDS (Zung Self-Rating Depression Scale)',
+    type: 'assessment',
+    category: 'Rating Scales',
+    description: descriptor('clinician', 'Adult', 'Depression symptom severity'),
+    content: [
+      { type: 'heading', text: 'ZUNG SDS (Zung Self-Rating Depression Scale)' },
+      { type: 'instruction', text: 'Rate how often each statement applied during the recent period. Positively worded items are reverse-scored in the response options below.' },
+      { type: 'likert', label: '1. I feel down-hearted and blue.', min: 1, max: 4, options: ['A little of the time (1)', 'Some of the time (2)', 'Good part of the time (3)', 'Most of the time (4)'] },
+      { type: 'likert', label: '2. Morning is when I feel the best.', min: 1, max: 4, options: ['A little of the time (4)', 'Some of the time (3)', 'Good part of the time (2)', 'Most of the time (1)'] },
+      { type: 'likert', label: '3. I have crying spells or feel like it.', min: 1, max: 4, options: ['A little of the time (1)', 'Some of the time (2)', 'Good part of the time (3)', 'Most of the time (4)'] },
+      { type: 'likert', label: '4. I have trouble sleeping at night.', min: 1, max: 4, options: ['A little of the time (1)', 'Some of the time (2)', 'Good part of the time (3)', 'Most of the time (4)'] },
+      { type: 'likert', label: '5. I eat as much as I used to.', min: 1, max: 4, options: ['A little of the time (4)', 'Some of the time (3)', 'Good part of the time (2)', 'Most of the time (1)'] },
+      { type: 'likert', label: '6. I still enjoy sex.', min: 1, max: 4, options: ['A little of the time (4)', 'Some of the time (3)', 'Good part of the time (2)', 'Most of the time (1)'] },
+      { type: 'likert', label: '7. I notice that I am losing weight.', min: 1, max: 4, options: ['A little of the time (1)', 'Some of the time (2)', 'Good part of the time (3)', 'Most of the time (4)'] },
+      { type: 'likert', label: '8. I have trouble with constipation.', min: 1, max: 4, options: ['A little of the time (1)', 'Some of the time (2)', 'Good part of the time (3)', 'Most of the time (4)'] },
+      { type: 'likert', label: '9. My heart beats faster than usual.', min: 1, max: 4, options: ['A little of the time (1)', 'Some of the time (2)', 'Good part of the time (3)', 'Most of the time (4)'] },
+      { type: 'likert', label: '10. I get tired for no reason.', min: 1, max: 4, options: ['A little of the time (1)', 'Some of the time (2)', 'Good part of the time (3)', 'Most of the time (4)'] },
+      { type: 'likert', label: '11. My mind is as clear as it used to be.', min: 1, max: 4, options: ['A little of the time (4)', 'Some of the time (3)', 'Good part of the time (2)', 'Most of the time (1)'] },
+      { type: 'likert', label: '12. I find it easy to do the things I used to.', min: 1, max: 4, options: ['A little of the time (4)', 'Some of the time (3)', 'Good part of the time (2)', 'Most of the time (1)'] },
+      { type: 'likert', label: '13. I am restless and cannot keep still.', min: 1, max: 4, options: ['A little of the time (1)', 'Some of the time (2)', 'Good part of the time (3)', 'Most of the time (4)'] },
+      { type: 'likert', label: '14. I feel hopeful about the future.', min: 1, max: 4, options: ['A little of the time (4)', 'Some of the time (3)', 'Good part of the time (2)', 'Most of the time (1)'] },
+      { type: 'likert', label: '15. I am more irritable than usual.', min: 1, max: 4, options: ['A little of the time (1)', 'Some of the time (2)', 'Good part of the time (3)', 'Most of the time (4)'] },
+      { type: 'likert', label: '16. I find it easy to make decisions.', min: 1, max: 4, options: ['A little of the time (4)', 'Some of the time (3)', 'Good part of the time (2)', 'Most of the time (1)'] },
+      { type: 'likert', label: '17. I feel that I am useful and needed.', min: 1, max: 4, options: ['A little of the time (4)', 'Some of the time (3)', 'Good part of the time (2)', 'Most of the time (1)'] },
+      { type: 'likert', label: '18. My life is pretty full.', min: 1, max: 4, options: ['A little of the time (4)', 'Some of the time (3)', 'Good part of the time (2)', 'Most of the time (1)'] },
+      { type: 'likert', label: '19. I feel that others would be better off if I were dead.', min: 1, max: 4, options: ['A little of the time (1)', 'Some of the time (2)', 'Good part of the time (3)', 'Most of the time (4)'] },
+      { type: 'likert', label: '20. I still enjoy the things I used to do.', min: 1, max: 4, options: ['A little of the time (4)', 'Some of the time (3)', 'Good part of the time (2)', 'Most of the time (1)'] },
+      {
+        type: 'score',
+        label: 'Total ZUNG SDS Score (20-80)',
+        formula: 'sum',
+        ranges: [
+          { min: 20, max: 39, label: 'Within normal range' },
+          { min: 40, max: 47, label: 'Mild depression range' },
+          { min: 48, max: 55, label: 'Moderate depression range' },
+          { min: 56, max: 80, label: 'Severe depression range' },
         ],
       },
     ],

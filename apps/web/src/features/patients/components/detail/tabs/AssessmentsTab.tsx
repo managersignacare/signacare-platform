@@ -43,9 +43,14 @@ import {
   type FormValues, type TemplateField,
 } from '../../../../../shared/components/TemplateFormRenderer';
 import {
-  parseContactMeta, parseTemplateFields,
+  extractCapturedDrawings, parseContactMeta, parseTemplateFields,
   type CompletedAssessment,
 } from './assessmentsTemplateUtils';
+import { DrawingFieldCanvas } from '../../../../../shared/components/DrawingFieldCanvas';
+import {
+  describeCapturedDrawingChips,
+  readDrawingFieldValue,
+} from '../../../../../shared/components/drawingField';
 import { MultiInstrumentMeasurementPanel } from './measurements';
 
 // ── Types ────────────────────────────────────────────────────────────────
@@ -368,6 +373,55 @@ export function AssessmentsTab({ patientId }: AssessmentsTabProps) {
               </Box>
               {isExp && (
                 <Box sx={{ mt: 1.5, pt: 1, borderTop: '1px solid #E0E0E0' }}>
+                  {cm?.drawings && cm.drawings.length > 0 && (
+                    <Box sx={{ mb: 1.5 }}>
+                      <Typography variant="caption" fontWeight={600} sx={{ display: 'block', mb: 0.75 }}>
+                        Captured Drawings
+                      </Typography>
+                      {cm.drawings.map((drawing, i) => {
+                        // P-CLAUDE-LANE 4B/5: derive review-time metrics
+                        // (stroke count, cumulative drawing time, mean
+                        // pressure, canvas coverage) from the persisted
+                        // payload. Pure-logic via @signacare/shared so
+                        // the .NET parity reads the same numbers.
+                        const metricsChips = describeCapturedDrawingChips(
+                          readDrawingFieldValue(drawing.payload),
+                        );
+                        return (
+                          <Box key={i} sx={{ mb: 1.5 }}>
+                            <DrawingFieldCanvas
+                              label={drawing.label}
+                              value={drawing.payload}
+                              readOnly
+                              onValueChange={() => { /* read-only review surface; no-op */ }}
+                            />
+                            {metricsChips.length > 0 && (
+                              <Box
+                                aria-label="Drawing metrics"
+                                sx={{
+                                  mt: 0.5,
+                                  display: 'flex',
+                                  flexWrap: 'wrap',
+                                  gap: 0.5,
+                                  justifyContent: 'center',
+                                }}
+                              >
+                                {metricsChips.map((label, ci) => (
+                                  <Chip
+                                    key={ci}
+                                    label={label}
+                                    size="small"
+                                    variant="outlined"
+                                    sx={{ fontSize: 10, height: 22 }}
+                                  />
+                                ))}
+                              </Box>
+                            )}
+                          </Box>
+                        );
+                      })}
+                    </Box>
+                  )}
                   {hasItems && (
                     <Box sx={{ mb: 1 }}>
                       <Typography variant="caption" fontWeight={600} sx={{ display: 'block', mb: 0.5 }}>Item Scores</Typography>
@@ -501,6 +555,13 @@ export function AssessmentsTab({ patientId }: AssessmentsTabProps) {
             onClick={() => {
               const textContent = formValuesToText(ratingFields, ratingFormValues);
               const scoreData = extractScoreData(ratingFields, ratingFormValues);
+              // P-CLAUDE-LANE 4B/4: persist captured drawing payloads
+              // alongside the assessment so the read-back path in the
+              // expand view can re-render the patient's actual figures
+              // (MMSE pentagons, MoCA cube/clock). Empty payloads are
+              // skipped — only drawings the clinician actually
+              // populated are stored.
+              const capturedDrawings = extractCapturedDrawings(ratingFields, ratingFormValues);
               saveRatingMut.mutate({
                 episodeId: selectedEpisodeId || undefined,
                 title: ratingTitle.trim(),
@@ -522,6 +583,7 @@ export function AssessmentsTab({ patientId }: AssessmentsTabProps) {
                     itemScores: scoreData.itemScores,
                     scoreBreakdowns: scoreData.scoreBreakdowns,
                   },
+                  ...(capturedDrawings.length > 0 ? { drawings: capturedDrawings } : {}),
                 },
               });
             }}

@@ -39,6 +39,8 @@ import { LookupListPanel } from '../../staff-settings/components/LookupListPanel
 import { ReferralSourcesPanel } from '../../staff-settings/components/ReferralSourcesPanel'
 import { RetentionPanel } from '../components/RetentionPanel'
 import { SessionIdlePanel } from '../components/SessionIdlePanel'
+import { templateApi } from '../../templates/services/templateApi'
+import { templateKeys } from '../../templates/queryKeys'
 import {
   useDisciplines,
   useCreateDiscipline,
@@ -107,7 +109,7 @@ export const PowerSettingsPage: React.FC = () => {
         Power Settings
       </Typography>
       <Typography variant="body2" color="text.secondary" mb={2}>
-        Platform-level configuration. Manage branding, role catalogues, clinical policies, workflow builder, access control, audit log, and backup settings.
+        Platform-level configuration. Manage branding, role catalogues, clinical policies, workflow builder, access control, audit log, and backup settings. Reference data seeded during clinic onboarding stays editable here through the catalogue tabs such as Professional Disciplines, Clinical Roles, Referral Sources, Investigation Types, Alert Types, Appointment Modes, Template Categories, and Episode Types.
       </Typography>
       <Tabs aria-label="Navigation tabs" value={tab} onChange={(_, v: TabId) => setTab(v)} sx={{ mb: 2 }} variant="scrollable" scrollButtons="auto">
         <Tab label="Onboard Clinic" value="onboarding" />
@@ -469,17 +471,28 @@ function AppointmentModesPanel() {
 // --- Template Categories Panel ---
 function TemplateCategoriesPanel() {
   const { data, isLoading } = useQuery({
-    queryKey: powerSettingsKeys.templateCategories(),
-    queryFn: () => apiClient.get<{ categories: TemplateCategoryRow[] }>('staff-settings/template-categories').then(r => r.categories),
+    queryKey: templateKeys.categories(),
+    queryFn: () => templateApi.listCategories() as Promise<TemplateCategoryRow[]>,
   })
   const qc = useQueryClient()
-  const createMut = useMutation({ mutationFn: (d: { name: string }) => apiClient.post('staff-settings/template-categories', d), onSuccess: () => qc.invalidateQueries({ queryKey: powerSettingsKeys.templateCategories() }) })
-  const deleteMut = useMutation({ mutationFn: (id: string) => apiClient.delete(`staff-settings/template-categories/${id}`), onSuccess: () => qc.invalidateQueries({ queryKey: powerSettingsKeys.templateCategories() }) })
+  const createMut = useMutation({
+    mutationFn: (d: { name: string }) => templateApi.createCategory(d),
+    onSuccess: () => qc.invalidateQueries({ queryKey: templateKeys.all }),
+  })
+  const updateMut = useMutation({
+    mutationFn: ({ id, data: d }: { id: string; data: { name?: string; isActive?: boolean } }) =>
+      templateApi.updateCategory(id, d),
+    onSuccess: () => qc.invalidateQueries({ queryKey: templateKeys.all }),
+  })
+  const deleteMut = useMutation({
+    mutationFn: (id: string) => templateApi.deleteCategory(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: templateKeys.all }),
+  })
   return (
     <LookupListPanel title="Template Categories" description="Manage categories for clinical templates (e.g. Clinical Notes, Rating Scales, Assessments, Letters)."
-      items={data?.map((t: TemplateCategoryRow) => ({ id: t.id, name: t.name, isActive: t.isActive ?? true, sortOrder: 0 })) ?? []}
+      items={data?.map((t: TemplateCategoryRow) => ({ id: t.id, name: t.name, isActive: t.isActive ?? true, sortOrder: t.sortOrder ?? 0 })) ?? []}
       isLoading={isLoading} onCreate={async (name) => { await createMut.mutateAsync({ name }) }}
-      onUpdate={async () => {}} onDelete={async (id) => { await deleteMut.mutateAsync(id) }} />
+      onUpdate={async (id, d) => { await updateMut.mutateAsync({ id, data: d }) }} onDelete={async (id) => { await deleteMut.mutateAsync(id) }} />
   )
 }
 
@@ -540,7 +553,7 @@ function SystemRolesPanel() {
       <CardContent>
         <Typography variant="h6" fontWeight={700} sx={{ mb: 1 }}>System Roles</Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          System roles control login permissions and access levels. These are fixed by the application and cannot be created or deleted — only descriptions can be customised.
+          System roles control login permissions and access levels. Their security keys are fixed platform-wide for safety, so they cannot be renamed or deleted per clinic. Clinic-seeded onboarding catalogues such as disciplines, clinical roles, referral sources, and investigation types remain editable in the surrounding Power Settings tabs.
         </Typography>
         {[
           { role: 'superadmin', desc: 'Full platform access. Can manage all clinics, staff, settings, and billing. Intended for platform administrators.' },

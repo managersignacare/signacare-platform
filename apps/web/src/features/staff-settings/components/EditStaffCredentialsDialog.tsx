@@ -80,7 +80,7 @@ export function EditStaffCredentialsDialog({ open, onClose, onSaved, staffId, cl
   const [phiNumber, setPhiNumber] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const { data: disciplineOptions } = useDisciplines();
+  const { data: disciplineOptions } = useDisciplines(!isSelf ? clinicId : undefined);
   const roleGrantsPrescribing = isPrescriberSystemRole(form.role ?? null);
 
   useEffect(() => {
@@ -133,8 +133,20 @@ export function EditStaffCredentialsDialog({ open, onClose, onSaved, staffId, cl
       phiProvider?: string;
       phiNumber?: string;
     } = {
-      ...form,
-      isPrescriber,
+      givenName: form.givenName,
+      familyName: form.familyName,
+      email: form.email,
+      discipline: form.discipline,
+      phoneMobile: form.phoneMobile,
+      phoneWork: form.phoneWork,
+      ahpraNumber: form.ahpraNumber,
+      ahpraExpiry: form.ahpraExpiry,
+      prescriberNumber: form.prescriberNumber,
+      providerNumber: form.providerNumber,
+      hpii: form.hpii,
+      qualifications: form.qualifications,
+      specialisation: form.specialisation,
+      specialties: form.specialties,
       providerNumbers: providerNumbers
         .map((row) => ({
           type: row.type.trim(),
@@ -145,6 +157,11 @@ export function EditStaffCredentialsDialog({ open, onClose, onSaved, staffId, cl
       phiProvider: phiProvider.trim() || undefined,
       phiNumber: phiNumber.trim() || undefined,
     };
+    if (!isSelf) {
+      payload.role = form.role;
+      payload.settingsProfileTabVisible = form.settingsProfileTabVisible;
+      payload.isPrescriber = isPrescriber;
+    }
     if (!isPrescriber) {
       payload.prescriberNumber = '';
     }
@@ -250,35 +267,39 @@ export function EditStaffCredentialsDialog({ open, onClose, onSaved, staffId, cl
               <Grid size={{ xs: 12, sm: 4 }}>
                 <TextField label="Phone" fullWidth size="small" value={form.phoneMobile ?? ''} onChange={e => set('phoneMobile', e.target.value)} placeholder="04xx xxx xxx" />
               </Grid>
-              <Grid size={{ xs: 12, sm: 4 }}>
-                <FormControl fullWidth size="small">
-                  <InputLabel>System Role</InputLabel>
-                  <Select
-                    value={form.role ?? 'clinician'}
-                    onChange={(e) => set('role', e.target.value)}
-                    label="System Role"
-                  >
-                    {STAFF_SYSTEM_ROLES.map((systemRole) => (
-                      <MenuItem key={systemRole} value={systemRole} sx={{ textTransform: 'capitalize' }}>
-                        {systemRole}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid size={{ xs: 12 }}>
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={!!form.settingsProfileTabVisible}
-                      onChange={(_, checked) =>
-                        setForm((prev) => ({ ...prev, settingsProfileTabVisible: checked }))}
-                      size="small"
-                    />
-                  }
-                  label={<Typography variant="body2">Allow Settings -&gt; My Profile for this staff member</Typography>}
-                />
-              </Grid>
+              {!isSelf && (
+                <Grid size={{ xs: 12, sm: 4 }}>
+                  <FormControl fullWidth size="small">
+                    <InputLabel>System Role</InputLabel>
+                    <Select
+                      value={form.role ?? 'clinician'}
+                      onChange={(e) => set('role', e.target.value)}
+                      label="System Role"
+                    >
+                      {STAFF_SYSTEM_ROLES.map((systemRole) => (
+                        <MenuItem key={systemRole} value={systemRole} sx={{ textTransform: 'capitalize' }}>
+                          {systemRole}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+              )}
+              {!isSelf && (
+                <Grid size={{ xs: 12 }}>
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={!!form.settingsProfileTabVisible}
+                        onChange={(_, checked) =>
+                          setForm((prev) => ({ ...prev, settingsProfileTabVisible: checked }))}
+                        size="small"
+                      />
+                    }
+                    label={<Typography variant="body2">Allow Settings -&gt; My Profile for this staff member</Typography>}
+                  />
+                </Grid>
+              )}
             </Grid>
           </Box>
 

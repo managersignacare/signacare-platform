@@ -1,4 +1,5 @@
-import type { TemplateField } from '../../../../../shared/components/TemplateFormRenderer';
+import type { TemplateField, FormValues } from '../../../../../shared/components/TemplateFormRenderer';
+import { describeDrawingFieldForText } from '../../../../../shared/components/drawingField';
 
 export interface RatingScaleTemplate {
   id: string;
@@ -31,10 +32,39 @@ export interface RatingScaleMeta {
   }>;
 }
 
+/**
+ * Captured drawing artefact persisted alongside the assessment
+ * (P-CLAUDE-LANE 4B/4). One entry per drawing field on the template
+ * that was actually populated by the clinician — empty payloads are
+ * NOT persisted to keep the saved record lean.
+ *
+ * `payload` is the serialised DrawingPayload (see
+ * packages/shared/src/drawingPayload.ts) — the same wire shape the
+ * canvas writes to the FormValues string slot, round-tripped through
+ * serializeDrawingPayload / tryParseDrawingPayload.
+ *
+ * `label` carries the source field's label so the read-back surface
+ * can describe each drawing without needing the template definition
+ * to be loaded (self-describing persisted artefacts).
+ */
+export interface CapturedDrawingArtefact {
+  label: string;
+  payload: string;
+}
+
 export interface ContactMeta {
   ratingScale?: RatingScaleMeta;
   itemScores?: Record<string, number>;
   planType?: string;
+  /**
+   * Drawing artefacts captured during the assessment (MMSE pentagons,
+   * MoCA cube / clock). Persisted on save by AssessmentsTab so the
+   * expand-view read-back surface can render the patient's actual
+   * figures via DrawingFieldCanvas in readOnly mode. Optional — present
+   * only when the template contained drawing fields AND at least one
+   * was populated.
+   */
+  drawings?: CapturedDrawingArtefact[];
 }
 
 export interface CompletedAssessment {
@@ -83,9 +113,14 @@ export function parseTemplateFields(content: TemplateField[] | string | null | u
       : fieldType === 'date'
         ? 'short_answer'
         : fieldType;
+    // 'drawing' supports the MMSE pentagons + MoCA cube/clock tablet
+    // capture (P-CLAUDE-LANE 4B). Must stay in sync with the
+    // TemplateField union at apps/web/src/shared/components/
+    // TemplateFormRenderer.tsx and ScaleField in
+    // apps/api/src/features/assessments/builtinAssessmentDefinitionBuilders.ts.
     const validTypes = new Set([
       'heading', 'instruction', 'text_block', 'short_answer', 'yes_no',
-      'multiple_choice', 'multi_select', 'likert', 'score',
+      'multiple_choice', 'multi_select', 'likert', 'score', 'drawing',
     ]);
     if (!validTypes.has(mappedType)) return null;
 
@@ -146,6 +181,39 @@ export function parseTemplateFields(content: TemplateField[] | string | null | u
     }
   }
   return [];
+}
+
+/**
+ * Extract captured drawing artefacts from the FormValues at save
+ * time (P-CLAUDE-LANE 4B/4).
+ *
+ * One entry per template drawing field where the FormValues slot
+ * carries a populated payload (`describeDrawingFieldForText` returns
+ * 'captured'). Empty payloads — including drawing fields the
+ * clinician opened but did not draw into — are skipped so the
+ * persisted record stays lean and the read-back surface does not show
+ * empty placeholder canvases.
+ *
+ * Labels are sourced from the field. The persisted artefacts are
+ * self-describing: the read-back path does not need the template
+ * definition to re-render the captured figures.
+ */
+export function extractCapturedDrawings(
+  fields: TemplateField[],
+  values: FormValues,
+): CapturedDrawingArtefact[] {
+  const out: CapturedDrawingArtefact[] = [];
+  fields.forEach((field, index) => {
+    if (field.type !== 'drawing') return;
+    const slot = values[String(index)];
+    if (typeof slot !== 'string' || slot.length === 0) return;
+    if (describeDrawingFieldForText(slot) !== 'captured') return;
+    out.push({
+      label: field.label ?? `Drawing ${index + 1}`,
+      payload: slot,
+    });
+  });
+  return out;
 }
 
 export function parseTemplateDescriptor(description: string | null | undefined): ParsedTemplateDescriptor {

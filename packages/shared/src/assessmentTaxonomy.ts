@@ -383,6 +383,15 @@ export const SCALE_REGISTRY: readonly ScaleRegistryEntry[] = (
       ageGroup: 'child_adolescent',
       aliases: ['RCADS-25', 'RCADS-25 (Revised Child Anxiety and Depression Scale)'],
     },
+    {
+      slug: 'asrm14',
+      displayName: 'ASRM (Altman Self-Rating Mania Scale)',
+      family: 'rating_scale',
+      raterType: 'self_rated',
+      diagnosisCategory: 'mania_bipolar',
+      ageGroup: 'adult',
+      aliases: ['ASRM', 'Altman Self-Rating Mania Scale', 'Altman self rated mania 14'],
+    },
 
     // ── CLINICIAN-RATED RATING SCALES (grouped by diagnosis) ─────────
     {
@@ -492,6 +501,145 @@ export const SCALE_REGISTRY: readonly ScaleRegistryEntry[] = (
       diagnosisCategory: 'cognitive_dementia',
       ageGroup: 'older_adult',
       aliases: ['MoCA', 'MOCA', 'MoCA (Montreal Cognitive Assessment)', 'Montreal Cognitive Assessment'],
+    },
+    // P-CLAUDE-LANE 4B/6: Mini-Cog — a 3-minute primary-care
+    // cognitive screen widely used in general practice. Combines
+    // 3-word recall (0-3) with the Clock Drawing Test (0 or 2) for a
+    // total of 0-5. Cutoff: ≤2 = positive screen (suggests further
+    // workup); ≥3 = negative. Borson et al., 2000.
+    {
+      slug: 'minicog',
+      displayName: 'Mini-Cog (3-word recall + clock drawing)',
+      family: 'rating_scale',
+      raterType: 'clinician_rated',
+      diagnosisCategory: 'cognitive_dementia',
+      ageGroup: 'older_adult',
+      aliases: ['Mini-Cog', 'MiniCog', 'Mini Cog', 'Mini-Cog (3-word recall + clock drawing)'],
+    },
+    // P-CLAUDE-LANE 4B/7: Standalone Clock Drawing Test, Shulman
+    // 6-band scoring (Shulman et al., 1993). A widely used dementia-
+    // screening tool when administered alone. 0-5 with 6 bands from
+    // "no reasonable representation" through "perfect". Distinct from
+    // the embedded clock items in MoCA + Mini-Cog: the standalone
+    // CDT is the clinician's preferred instrument when they want to
+    // assess visuospatial / executive function without administering
+    // a full cognitive battery.
+    {
+      slug: 'cdt-shulman',
+      displayName: 'CDT (Shulman Clock Drawing Test, 6-band)',
+      family: 'rating_scale',
+      raterType: 'clinician_rated',
+      diagnosisCategory: 'cognitive_dementia',
+      ageGroup: 'older_adult',
+      aliases: ['CDT', 'Clock Drawing Test', 'Shulman CDT', 'CDT (Shulman Clock Drawing Test, 6-band)'],
+    },
+    {
+      slug: 'altman-clinician-mania',
+      displayName: 'Altman Clinician-Rated Mania Scale',
+      family: 'rating_scale',
+      raterType: 'clinician_rated',
+      diagnosisCategory: 'mania_bipolar',
+      ageGroup: 'adult',
+      aliases: ['Altman Clinician-Rated Mania Scale', 'Altman clinician rated mania'],
+    },
+    {
+      slug: 'acsa',
+      displayName: 'ACSA (Amphetamine Cessation Symptom Assessment)',
+      family: 'rating_scale',
+      raterType: 'clinician_rated',
+      diagnosisCategory: 'substance_use',
+      ageGroup: 'adult',
+      aliases: ['ACSA', 'Amphetamine Cessation Symptom Assessment'],
+    },
+    {
+      slug: 'audit-clinician',
+      displayName: 'AUDIT (Alcohol Use Disorders Identification Test — Clinician Administered)',
+      family: 'rating_scale',
+      raterType: 'clinician_rated',
+      diagnosisCategory: 'substance_use',
+      ageGroup: 'adult',
+      aliases: ['AUDIT clinician', 'AUDIT - alcohol', 'AUDIT clinician administered'],
+    },
+    {
+      slug: 'assq',
+      displayName: 'ASSQ (Autism Spectrum Screening Questionnaire)',
+      family: 'rating_scale',
+      raterType: 'clinician_rated',
+      diagnosisCategory: 'general_functional',
+      ageGroup: 'child_adolescent',
+      aliases: ['ASSQ', 'Autism Spectrum Screening Questionnaire'],
+    },
+    {
+      slug: 'dss-brief',
+      displayName: 'DSS-B (Dissociative Symptom Scale — Brief)',
+      family: 'rating_scale',
+      raterType: 'clinician_rated',
+      diagnosisCategory: 'trauma_stress',
+      ageGroup: 'adult',
+      aliases: ['DSS-B', 'Dissociative Symptom Scale- Brief', 'Dissociative Symptom Scale - Brief'],
+    },
+    {
+      slug: 'btq',
+      displayName: 'BTQ (Brief Trauma Questionnaire)',
+      family: 'rating_scale',
+      raterType: 'clinician_rated',
+      diagnosisCategory: 'trauma_stress',
+      ageGroup: 'adult',
+      aliases: ['BTQ', 'Brief trauma questionnaire', 'Brief Trauma Questionnaire'],
+    },
+    {
+      slug: 'gds15',
+      displayName: 'GDS-15 (Geriatric Depression Scale-15)',
+      family: 'rating_scale',
+      raterType: 'clinician_rated',
+      diagnosisCategory: 'mood',
+      ageGroup: 'older_adult',
+      aliases: ['GDS-15', 'Geriatric Depression rating Scale 15', 'Geriatric Depression Scale 15'],
+    },
+    {
+      slug: 'iqcode-short',
+      displayName: 'IQCODE Short (Informant Questionnaire on Cognitive Decline in the Elderly)',
+      family: 'rating_scale',
+      raterType: 'clinician_rated',
+      diagnosisCategory: 'cognitive_dementia',
+      ageGroup: 'older_adult',
+      aliases: ['IQCODE Short', 'Informant Questionnaire on cognitive decline in elderly short', 'IQCODE short'],
+    },
+    {
+      slug: 'ipf-brief',
+      displayName: 'IPF-Brief (Inventory of Psychosocial Functioning)',
+      family: 'rating_scale',
+      raterType: 'clinician_rated',
+      diagnosisCategory: 'general_functional',
+      ageGroup: 'adult',
+      aliases: ['IPF-Brief', 'Inventory psychosocial functioning brief', 'Inventory of Psychosocial Functioning brief'],
+    },
+    {
+      slug: 'padua',
+      displayName: 'Padua Inventory',
+      family: 'rating_scale',
+      raterType: 'clinician_rated',
+      diagnosisCategory: 'anxiety',
+      ageGroup: 'adult',
+      aliases: ['Padua Inventory'],
+    },
+    {
+      slug: 'tsq',
+      displayName: 'TSQ (Trauma Screening Questionnaire)',
+      family: 'rating_scale',
+      raterType: 'clinician_rated',
+      diagnosisCategory: 'trauma_stress',
+      ageGroup: 'adult',
+      aliases: ['TSQ', 'Trauma Screening Questionnaire (TSQ)', 'Trauma Screening Questionnaire'],
+    },
+    {
+      slug: 'zung-sds',
+      displayName: 'ZUNG SDS (Zung Self-Rating Depression Scale)',
+      family: 'rating_scale',
+      raterType: 'clinician_rated',
+      diagnosisCategory: 'mood',
+      ageGroup: 'adult',
+      aliases: ['ZUNG SDS', 'Zung self rating depression scale', 'Zung Self-Rating Depression Scale'],
     },
   ] as const satisfies readonly ScaleRegistryEntry[]
 ).map((entry) => ScaleRegistryEntrySchema.parse(entry));

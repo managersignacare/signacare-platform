@@ -12,6 +12,7 @@
 
 import { apiClient } from '../../../shared/services/apiClient';
 import type {
+  AppointmentResponse,
   AvailabilityBlock,
   AvailabilityBlockCreateDTO,
   AvailabilityBlockUpdateDTO,
@@ -26,6 +27,23 @@ export interface CalendarSubscriptionInfo {
 }
 
 export const calendarApi = {
+  // ── Calendar appointments (calendar-module scoped) ───────────
+
+  listAppointments: async (params?: {
+    clinicianId?: string;
+    patientId?: string;
+    specialtyCode?: string;
+    status?: string;
+    from?: string;
+    to?: string;
+    limit?: string;
+    offset?: string;
+  }): Promise<{ appointments: AppointmentResponse[] }> =>
+    apiClient.get<{ appointments: AppointmentResponse[] }>(
+      'calendar/appointments',
+      params,
+    ),
+
   // ── Availability blocks ─────────────────────────────────────
 
   listBlocks: async (params?: {

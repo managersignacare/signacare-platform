@@ -83,6 +83,7 @@ const SAFE_STAFF_COLUMNS = [
 ];
 
 const SETTINGS_PROFILE_TAB_VISIBLE_KEY = 'settings_profile_tab_visible';
+const AHPRA_EXPIRY_KEY = 'ahpra_expiry';
 
 function parseProfileTabVisibilitySetting(value: unknown): boolean {
   if (typeof value === 'boolean') return value;
@@ -239,6 +240,43 @@ export class StaffRepository {
       .onConflict(['staff_id', 'setting_key'])
       .merge({
         setting_value: visible,
+        updated_at: new Date(),
+      });
+  }
+
+  async getAhpraExpiry(
+    staffId: string,
+    clinicId: string,
+  ): Promise<string | null> {
+    const row = await db<{ setting_value: unknown }>('staff_settings as ss')
+      .join('staff as s', 's.id', 'ss.staff_id')
+      .where({ 'ss.staff_id': staffId, 'ss.setting_key': AHPRA_EXPIRY_KEY })
+      .andWhere('s.clinic_id', clinicId)
+      .whereNull('s.deleted_at')
+      .first('ss.setting_value');
+    if (typeof row?.setting_value === 'string') {
+      const normalized = row.setting_value.trim();
+      return normalized.length > 0 ? normalized : null;
+    }
+    return null;
+  }
+
+  async setAhpraExpiry(
+    staffId: string,
+    value: string | null,
+  ): Promise<void> {
+    const normalized = value?.trim() ?? '';
+    await db('staff_settings')
+      .insert({
+        staff_id: staffId,
+        setting_key: AHPRA_EXPIRY_KEY,
+        setting_value: normalized.length > 0 ? JSON.stringify(normalized) : null,
+        created_at: new Date(),
+        updated_at: new Date(),
+      })
+      .onConflict(['staff_id', 'setting_key'])
+      .merge({
+        setting_value: normalized.length > 0 ? JSON.stringify(normalized) : null,
         updated_at: new Date(),
       });
   }

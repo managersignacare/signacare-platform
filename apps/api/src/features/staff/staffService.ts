@@ -66,6 +66,7 @@ function mapStaffRowToResponse(
   row: StaffRow,
   specialties?: Array<{ code: string; isPrimary: boolean }>,
   settingsProfileTabVisible = false,
+  ahpraExpiry: string | null = null,
 ): StaffResponse {
   return {
     id: row.id,
@@ -79,7 +80,7 @@ function mapStaffRowToResponse(
     phoneMobile: row.phone_mobile ?? undefined,
     phoneWork: row.phone_work ?? undefined,
     ahpraNumber: row.ahpra_number ?? undefined,
-    ahpraExpiry: undefined, // stored in qualifications JSON
+    ahpraExpiry: ahpraExpiry ?? undefined,
     prescriberNumber: row.prescriber_number ?? undefined,
     providerNumber: row.provider_number ?? undefined,
     hpii: row.hpii ?? undefined,
@@ -149,7 +150,8 @@ export class StaffService {
     if (!row) throw new HttpError(404, "NOT_FOUND", "Staff not found");
     const specialties = await this.repo.listSpecialtiesForStaff(id, clinicId);
     const settingsProfileTabVisible = await this.repo.getProfileTabVisibility(id, clinicId);
-    return mapStaffRowToResponse(row, specialties, settingsProfileTabVisible);
+    const ahpraExpiry = await this.repo.getAhpraExpiry(id, clinicId);
+    return mapStaffRowToResponse(row, specialties, settingsProfileTabVisible, ahpraExpiry);
   }
 
   async createStaff(clinicId: string, dto: {
@@ -249,10 +251,14 @@ export class StaffService {
       row.id,
       dto.settingsProfileTabVisible ?? false,
     );
+    if (dto.ahpraExpiry !== undefined) {
+      await this.repo.setAhpraExpiry(row.id, dto.ahpraExpiry ?? null);
+    }
     const specialties = await this.repo.listSpecialtiesForStaff(row.id, clinicId);
     const settingsProfileTabVisible = await this.repo.getProfileTabVisibility(row.id, clinicId);
+    const ahpraExpiry = await this.repo.getAhpraExpiry(row.id, clinicId);
 
-    const response = mapStaffRowToResponse(row, specialties, settingsProfileTabVisible);
+    const response = mapStaffRowToResponse(row, specialties, settingsProfileTabVisible, ahpraExpiry);
     await this.invalidateLookupCache(clinicId);
     // Return the temporary password so admin can share it with the new staff member.
     // This is the only time the password is ever visible — it is not stored in plaintext.
@@ -432,9 +438,13 @@ export class StaffService {
     if (dto.settingsProfileTabVisible !== undefined) {
       await this.repo.setProfileTabVisibility(id, dto.settingsProfileTabVisible);
     }
+    if (dto.ahpraExpiry !== undefined) {
+      await this.repo.setAhpraExpiry(id, dto.ahpraExpiry ?? null);
+    }
     const specialties = await this.repo.listSpecialtiesForStaff(id, clinicId);
     const settingsProfileTabVisible = await this.repo.getProfileTabVisibility(id, clinicId);
+    const ahpraExpiry = await this.repo.getAhpraExpiry(id, clinicId);
     await this.invalidateLookupCache(clinicId);
-    return mapStaffRowToResponse(updated, specialties, settingsProfileTabVisible);
+    return mapStaffRowToResponse(updated, specialties, settingsProfileTabVisible, ahpraExpiry);
   }
 }

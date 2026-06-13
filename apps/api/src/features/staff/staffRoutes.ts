@@ -178,6 +178,8 @@ staffRouter.get("/me", async (req: Request, res: Response, next: NextFunction) =
       .andWhere('staff_settings.setting_key', SETTINGS_PROFILE_TAB_VISIBLE_KEY)
       .first('setting_value');
     const settingsProfileTabVisible = parseProfileTabVisibilitySetting(profileTabSettingRow?.setting_value);
+    const { staffRepository: repo } = await import('./staffRepository');
+    const ahpraExpiry = await repo.getAhpraExpiry(userId, clinicId);
 
     res.json({
       id: row.id,
@@ -189,6 +191,7 @@ staffRouter.get("/me", async (req: Request, res: Response, next: NextFunction) =
       phoneMobile: row.phone_mobile ?? null,
       phoneWork: row.phone_work ?? null,
       ahpraNumber: row.ahpra_number ?? null,
+      ahpraExpiry,
       prescriberNumber: row.prescriber_number ?? null,
       providerNumber: row.provider_number ?? null,
       hpii: row.hpii ?? null,
@@ -217,7 +220,7 @@ staffRouter.put("/me", async (req: Request, res: Response, next: NextFunction) =
     const { StaffSelfUpdateSchema } = await import('@signacare/shared');
     const selfBody = StaffSelfUpdateSchema.parse(req.body);
     const allowed = ['givenName', 'familyName', 'email', 'phoneMobile', 'phoneWork',
-      'ahpraNumber', 'ahpraExpiry', 'prescriberNumber', 'providerNumber', 'hpii', 'qualifications', 'specialisation'] as const;
+      'ahpraNumber', 'prescriberNumber', 'providerNumber', 'hpii', 'qualifications', 'specialisation'] as const;
     const patch: Record<string, unknown> = { updated_at: new Date() };
     // Narrow via keyof: every value in `allowed` is a valid property of the
     // parsed schema (StaffSelfUpdate), so we can index safely.
@@ -248,6 +251,27 @@ staffRouter.put("/me", async (req: Request, res: Response, next: NextFunction) =
         patch.discipline = disciplineRow.name;
       }
     }
+    if (selfBody.providerNumbers !== undefined) {
+      const cleanProviderNumbers = selfBody.providerNumbers
+        .map((row) => ({
+          type: row.type?.trim() ?? '',
+          number: row.number?.trim() ?? '',
+          location: row.location?.trim() ?? '',
+        }))
+        .filter((row) => row.number.length > 0);
+      patch.qualifications = cleanProviderNumbers.length > 0
+        ? JSON.stringify(cleanProviderNumbers)
+        : null;
+      if (selfBody.providerNumber === undefined) {
+        patch.provider_number = cleanProviderNumbers[0]?.number ?? null;
+      }
+    }
+    if (selfBody.phiProvider !== undefined) {
+      patch.specialisation = selfBody.phiProvider?.trim() ? selfBody.phiProvider.trim() : null;
+    }
+    if (selfBody.phiNumber !== undefined) {
+      patch.hpii = selfBody.phiNumber?.trim() ? selfBody.phiNumber.trim() : null;
+    }
 
     // SECURITY: explicit safe-column allowlist. Sensitive secret columns
     // (auth credentials, MFA material, OAuth tokens) are intentionally
@@ -274,14 +298,18 @@ staffRouter.put("/me", async (req: Request, res: Response, next: NextFunction) =
       );
     }
     const { staffRepository: repo } = await import('./staffRepository');
+    if (selfBody.ahpraExpiry !== undefined) {
+      await repo.setAhpraExpiry(userId, selfBody.ahpraExpiry ?? null);
+    }
     const specialties = await repo.listSpecialtiesForStaff(userId, clinicId);
     const settingsProfileTabVisible = await repo.getProfileTabVisibility(userId, clinicId);
+    const ahpraExpiry = await repo.getAhpraExpiry(userId, clinicId);
 
     res.json({
       id: row.id, givenName: row.given_name, familyName: row.family_name,
       email: row.email, role: row.role, discipline: row.discipline_id ?? null,
       phoneMobile: row.phone_mobile ?? null, phoneWork: row.phone_work ?? null,
-      ahpraNumber: row.ahpra_number ?? null, prescriberNumber: row.prescriber_number ?? null,
+      ahpraNumber: row.ahpra_number ?? null, ahpraExpiry, prescriberNumber: row.prescriber_number ?? null,
       providerNumber: row.provider_number ?? null, hpii: row.hpii ?? null,
       qualifications: row.qualifications ?? null, specialisation: row.specialisation ?? null,
       settingsProfileTabVisible,

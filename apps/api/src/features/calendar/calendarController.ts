@@ -8,10 +8,14 @@
 
 import type { NextFunction, Request, Response } from 'express';
 import {
+  AppointmentSearchDTO,
+  AppointmentResponse,
   AvailabilityBlockCreateSchema,
   AvailabilityBlockUpdateSchema,
   CalendarPreferencesSchema,
 } from '@signacare/shared';
+import { appointmentService } from '../appointments/appointmentService';
+import { buildAuthContext } from '../../shared/buildAuthContext';
 import { calendarService } from './calendarService';
 
 function requireClinicId(req: Request): string {
@@ -39,7 +43,43 @@ function resolveClinicianId(req: Request): string {
   return q ?? requireStaffId(req);
 }
 
+const DATE_ONLY_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+const CalendarAppointmentsListResponseSchema = AppointmentResponse.array().transform((appointments) => ({ appointments }));
+
+function normaliseAppointmentDateQuery(
+  value: unknown,
+  boundary: 'from' | 'to',
+): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  if (!DATE_ONLY_REGEX.test(trimmed)) return trimmed;
+  return boundary === 'from'
+    ? `${trimmed}T00:00:00.000Z`
+    : `${trimmed}T23:59:59.999Z`;
+}
+
 export const calendarController = {
+  async listAppointments(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const query = AppointmentSearchDTO.parse({
+        patientId: req.query['patientId'],
+        clinicianId: req.query['clinicianId'],
+        specialtyCode: req.query['specialtyCode'],
+        status: req.query['status'],
+        from: normaliseAppointmentDateQuery(req.query['from'], 'from'),
+        to: normaliseAppointmentDateQuery(req.query['to'], 'to'),
+        limit: req.query['limit'] ? Number(req.query['limit']) : undefined,
+        offset: req.query['offset'] ? Number(req.query['offset']) : undefined,
+      });
+      const auth = buildAuthContext(req, query.patientId ?? undefined);
+      const appointments = await appointmentService.list(auth, query);
+      res.json(CalendarAppointmentsListResponseSchema.parse(appointments));
+    } catch (err) {
+      next(err);
+    }
+  },
+
   async listBlocks(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const clinicId = requireClinicId(req);

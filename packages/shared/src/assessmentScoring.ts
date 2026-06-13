@@ -333,6 +333,18 @@ const SCORING_METADATA: Record<string, ScoringMetadata> = {
     minScore: 0,
     severityBands: [],
   },
+  asrm14: {
+    slug: 'asrm14',
+    family: 'rating_scale',
+    maxScore: 20,
+    minScore: 0,
+    severityBands: [
+      { from: 0, to: 5, label: 'Below mania screening threshold', color: SEVERITY_COLOR.green },
+      { from: 6, to: 9, label: 'Possible hypomania', color: SEVERITY_COLOR.amber },
+      { from: 10, to: 14, label: 'Moderate mania symptom burden', color: SEVERITY_COLOR.orange },
+      { from: 15, to: 20, label: 'High mania symptom burden', color: SEVERITY_COLOR.red },
+    ],
+  },
 
   // ── Clinician-rated rating scales ─────────────────────────────────────
   hamd17: {
@@ -460,6 +472,160 @@ const SCORING_METADATA: Record<string, ScoringMetadata> = {
     severityBands: [
       { from: 0, to: 25, label: 'Below cognitive threshold', color: SEVERITY_COLOR.red },
       { from: 26, to: 30, label: 'Normal', color: SEVERITY_COLOR.green },
+    ],
+  },
+  // P-CLAUDE-LANE 4B/6: Mini-Cog (Borson et al., 2000) — quick
+  // primary-care screen, 3-minute admin. Total 0-5:
+  //   3-word recall: 0-3 points (1 per word recalled)
+  //   Clock drawing: 0 (abnormal) or 2 (normal)
+  // Two-band cutoff is the published shape: ≤2 positive screen
+  // (suggests further cognitive workup); ≥3 negative.
+  minicog: {
+    slug: 'minicog',
+    family: 'rating_scale',
+    maxScore: 5,
+    minScore: 0,
+    severityBands: [
+      { from: 0, to: 2, label: 'Positive screen — further workup indicated', color: SEVERITY_COLOR.red },
+      { from: 3, to: 5, label: 'Negative screen', color: SEVERITY_COLOR.green },
+    ],
+  },
+  // P-CLAUDE-LANE 4B/7: Shulman Clock Drawing Test 6-band scoring
+  // (Shulman et al., 1993). Standalone CDT scoring rubric used when
+  // the clinician wants the patient's clock drawing assessed without
+  // running a full cognitive battery. 0-5:
+  //   5 = perfect
+  //   4 = minor visuospatial errors
+  //   3 = inaccurate representation of 10 past 11
+  //   2 = moderate visuospatial disorganization
+  //   1 = severe disorganization
+  //   0 = no reasonable representation
+  // Lower scores = more cognitive impairment. Cutoff at ≤3 is the
+  // most commonly cited screening threshold; the 6-band shape
+  // preserves grade-level granularity for longitudinal tracking.
+  'cdt-shulman': {
+    slug: 'cdt-shulman',
+    family: 'rating_scale',
+    maxScore: 5,
+    minScore: 0,
+    severityBands: [
+      { from: 0, to: 0, label: 'No reasonable representation', color: SEVERITY_COLOR.red },
+      { from: 1, to: 1, label: 'Severe disorganization', color: SEVERITY_COLOR.red },
+      { from: 2, to: 2, label: 'Moderate visuospatial disorganization', color: SEVERITY_COLOR.orange },
+      { from: 3, to: 3, label: 'Inaccurate representation of 10 past 11', color: SEVERITY_COLOR.amber },
+      { from: 4, to: 4, label: 'Minor visuospatial errors', color: SEVERITY_COLOR.green },
+      { from: 5, to: 5, label: 'Perfect', color: SEVERITY_COLOR.green },
+    ],
+  },
+  'altman-clinician-mania': {
+    slug: 'altman-clinician-mania',
+    family: 'rating_scale',
+    maxScore: 20,
+    minScore: 0,
+    severityBands: [
+      { from: 0, to: 5, label: 'Below mania screening threshold', color: SEVERITY_COLOR.green },
+      { from: 6, to: 9, label: 'Possible hypomania', color: SEVERITY_COLOR.amber },
+      { from: 10, to: 14, label: 'Moderate mania symptom burden', color: SEVERITY_COLOR.orange },
+      { from: 15, to: 20, label: 'High mania symptom burden', color: SEVERITY_COLOR.red },
+    ],
+  },
+  acsa: {
+    slug: 'acsa',
+    family: 'rating_scale',
+    maxScore: 48,
+    minScore: 0,
+    severityBands: [],
+  },
+  'audit-clinician': {
+    slug: 'audit-clinician',
+    family: 'rating_scale',
+    maxScore: 40,
+    minScore: 0,
+    severityBands: [
+      { from: 0, to: 7, label: 'Low risk', color: SEVERITY_COLOR.green },
+      { from: 8, to: 15, label: 'Hazardous use', color: SEVERITY_COLOR.amber },
+      { from: 16, to: 19, label: 'Harmful use', color: SEVERITY_COLOR.orange },
+      { from: 20, to: 40, label: 'Likely dependence', color: SEVERITY_COLOR.red },
+    ],
+  },
+  assq: {
+    slug: 'assq',
+    family: 'rating_scale',
+    maxScore: 54,
+    minScore: 0,
+    severityBands: [],
+  },
+  'dss-brief': {
+    slug: 'dss-brief',
+    family: 'rating_scale',
+    maxScore: 32,
+    minScore: 0,
+    severityBands: [],
+  },
+  btq: {
+    slug: 'btq',
+    family: 'rating_scale',
+    maxScore: 10,
+    minScore: 0,
+    severityBands: [],
+  },
+  gds15: {
+    slug: 'gds15',
+    family: 'rating_scale',
+    maxScore: 15,
+    minScore: 0,
+    severityBands: [
+      { from: 0, to: 4, label: 'Within normal range', color: SEVERITY_COLOR.green },
+      { from: 5, to: 8, label: 'Mild depression range', color: SEVERITY_COLOR.amber },
+      { from: 9, to: 11, label: 'Moderate depression range', color: SEVERITY_COLOR.orange },
+      { from: 12, to: 15, label: 'Severe depression range', color: SEVERITY_COLOR.red },
+    ],
+  },
+  'iqcode-short': {
+    slug: 'iqcode-short',
+    family: 'rating_scale',
+    maxScore: 5,
+    minScore: 1,
+    severityBands: [
+      { from: 1, to: 3, label: 'No significant decline reported', color: SEVERITY_COLOR.green },
+      { from: 3.01, to: 3.3, label: 'Borderline decline signal', color: SEVERITY_COLOR.amber },
+      { from: 3.31, to: 5, label: 'Likely cognitive decline', color: SEVERITY_COLOR.red },
+    ],
+  },
+  'ipf-brief': {
+    slug: 'ipf-brief',
+    family: 'rating_scale',
+    maxScore: 42,
+    minScore: 0,
+    severityBands: [],
+  },
+  padua: {
+    slug: 'padua',
+    family: 'rating_scale',
+    maxScore: 80,
+    minScore: 0,
+    severityBands: [],
+  },
+  tsq: {
+    slug: 'tsq',
+    family: 'rating_scale',
+    maxScore: 10,
+    minScore: 0,
+    severityBands: [
+      { from: 0, to: 5, label: 'Below positive screening threshold', color: SEVERITY_COLOR.green },
+      { from: 6, to: 10, label: 'Positive trauma screen — assess further', color: SEVERITY_COLOR.red },
+    ],
+  },
+  'zung-sds': {
+    slug: 'zung-sds',
+    family: 'rating_scale',
+    maxScore: 80,
+    minScore: 20,
+    severityBands: [
+      { from: 20, to: 39, label: 'Within normal range', color: SEVERITY_COLOR.green },
+      { from: 40, to: 47, label: 'Mild depression range', color: SEVERITY_COLOR.amber },
+      { from: 48, to: 55, label: 'Moderate depression range', color: SEVERITY_COLOR.orange },
+      { from: 56, to: 80, label: 'Severe depression range', color: SEVERITY_COLOR.red },
     ],
   },
 };

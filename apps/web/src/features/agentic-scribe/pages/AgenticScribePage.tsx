@@ -265,9 +265,24 @@ export default function AgenticScribePage() {
                   </Paper>
                 </Box>
               ) : (
-                <Alert severity="info" sx={{ mb: 2 }}>
-                  Select a patient to start Medical Scribe from this page, or paste a transcript manually below.
-                </Alert>
+                <Paper variant="outlined" sx={{ mb: 2, p: 1.5, borderRadius: 2, bgcolor: '#FCFBF9' }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.75 }}>
+                    Medical Scribe
+                  </Typography>
+                  <Stack spacing={1.25}>
+                    <Alert severity="info">
+                      Select a patient to start Medical Scribe from this page, or paste a transcript manually below.
+                    </Alert>
+                    <Button
+                      variant="outlined"
+                      startIcon={<AutoAwesomeIcon />}
+                      disabled
+                      sx={{ alignSelf: 'flex-start', textTransform: 'none' }}
+                    >
+                      Select a patient to enable recording
+                    </Button>
+                  </Stack>
+                </Paper>
               )}
 
               <TextField

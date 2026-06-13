@@ -103,7 +103,7 @@ export function AmbientRecorderControls({
               fontWeight: 600,
             }}
           >
-            {processing ? 'Processing...' : recording ? `Stop (${formatDuration(duration)})` : 'Medical Scribe'}
+            {processing ? 'Processing...' : recording ? `Stop Recording (${formatDuration(duration)})` : 'Start Recording'}
           </Button>
 
           {/* Drafting entry point — visible alongside Medical Scribe so a

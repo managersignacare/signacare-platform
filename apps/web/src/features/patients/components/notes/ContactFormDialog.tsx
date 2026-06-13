@@ -10,12 +10,13 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../../../shared/services/apiClient';
 import { useOrgTree, usePrograms } from '../../../org-settings/hooks/useOrgSettings';
 import type { OrgUnit } from '../../../org-settings/services/orgSettingsApi';
+import { useTemplates } from '../../../templates/hooks/useTemplates';
 import {
   patientsKeys,
   episodesKeys,
   patientReferralsKeys,
-  patientTemplatesKeys,
 } from '../../queryKeys';
+import { templateSectionsToDraftText } from './AddNoteDialogSupport';
 
 // ── Contact types ────────────────────────────────────────────────────────────
 
@@ -66,30 +67,6 @@ export const NOTE_TYPE_CONTACT_CONFIG: Record<string, ActivityContactConfig> = {
 
 const DURATION_PRESETS = [5, 10, 15, 20, 30, 45, 60, 75];
 
-// ── Template content renderer ─────────────────────────────────────────────────
-
-interface TemplateField {
-  type?: string;
-  text?: string;
-  label?: string;
-  options?: string[];
-  min?: number;
-  max?: number;
-}
-
-function templateToText(content: TemplateField[]): string {
-  return (content ?? []).map((f) => {
-    if (f.type === 'heading')        return `\n=== ${f.text || f.label} ===\n`;
-    if (f.type === 'instruction')    return `[${f.text}]\n`;
-    if (f.type === 'text_block')     return (f.text ?? '') + '\n';
-    if (f.type === 'short_answer')   return `${f.label}:\n\n`;
-    if (f.type === 'yes_no')         return `${f.label}: [ ] Yes  [ ] No\n`;
-    if (f.type === 'multiple_choice') return `${f.label}:\n${(f.options ?? []).map((o: string) => `  [ ] ${o}`).join('\n')}\n`;
-    if (f.type === 'likert')         return `${f.label}: [${f.min ?? 0}–${f.max ?? 10}]\n`;
-    return '';
-  }).join('');
-}
-
 function flattenUnits(nodes: OrgUnit[]): { id: string; name: string }[] {
   const r: { id: string; name: string }[] = [];
   function w(l: OrgUnit[], d: number) { for (const n of l) { r.push({ id: n.id, name: '\u00A0'.repeat(d * 2) + n.name }); if (n.children?.length) w(n.children, d + 1); } }
@@ -104,10 +81,6 @@ function nowRounded(): { date: string; time: string } {
     time: d.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', hour12: false }),
   };
 }
-
-// ── Hooks ─────────────────────────────────────────────────────────────────────
-
-interface ContactTemplate { id: string; name: string; categoryName?: string; content: TemplateField[] }
 
 interface EpisodeOption {
   id: string;
@@ -132,11 +105,9 @@ function toContactErrorMessage(error: unknown): string {
 }
 
 function useContactFormTemplates() {
-  return useQuery<ContactTemplate[]>({
-    queryKey: patientTemplatesKeys.byType('contact-forms'),
-    queryFn: () => apiClient.get<{ templates: ContactTemplate[] }>('staff-settings/templates')
-      .then(r => r.templates.filter(t => t.categoryName === 'Contact Forms')),
-    staleTime: 5 * 60 * 1000,
+  return useTemplates({
+    status: 'published',
+    category: 'Contact Forms',
   });
 }
 
@@ -251,7 +222,7 @@ export function ContactFormDialog({
     const match = templates.find(t => t.name === targetName);
     if (match && templateId !== match.id) {
       setTemplateId(match.id);
-      setContent(templateToText(match.content));
+      setContent(templateSectionsToDraftText(match.sections));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [templates, open, initialNoteType]);
@@ -274,14 +245,14 @@ export function ContactFormDialog({
   }, [episodeId, episodes, orgPrograms]);
 
   const handleTemplateChange = (id: string) => {
-    setTemplateId(id);
-    if (!id) { setContent(''); return; }
-    const tmpl = (templates ?? []).find(t => t.id === id);
-    if (tmpl) {
-      setContent(templateToText(tmpl.content));
-      if (tmpl.name.toLowerCase().includes('collateral')) {
-        setIsReportable(false);
-        setServiceRecipients('Carer / Family Only');
+      setTemplateId(id);
+      if (!id) { setContent(''); return; }
+      const tmpl = (templates ?? []).find(t => t.id === id);
+      if (tmpl) {
+      setContent(templateSectionsToDraftText(tmpl.sections));
+        if (tmpl.name.toLowerCase().includes('collateral')) {
+          setIsReportable(false);
+          setServiceRecipients('Carer / Family Only');
       }
     }
   };

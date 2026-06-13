@@ -2,24 +2,6 @@ export interface CreatedAlertResponse {
   alert?: { id?: string };
 }
 
-export interface PlanTemplateField {
-  type?: string;
-  text?: string;
-  label?: string;
-}
-
-export interface PlanTemplate {
-  id: string;
-  name: string;
-  categoryName?: string;
-  type?: string;
-  content?: unknown;
-}
-
-export interface StaffTemplatesResponse {
-  templates?: PlanTemplate[];
-}
-
 export interface PatientNote {
   id: string;
   title?: string;

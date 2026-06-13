@@ -16,6 +16,26 @@ describe('calendarKeys factory', () => {
     expect(key).toEqual(['calendar', 'blocks', 'c123']);
   });
 
+  it('appointments key includes filter identity', () => {
+    const key = calendarKeys.appointments({
+      clinicianId: 'c123',
+      patientId: 'p456',
+      from: '2026-04-16',
+      to: '2026-04-30',
+      limit: '300',
+    });
+    expect(key).toEqual([
+      'calendar',
+      'appointments',
+      'c123',
+      'p456',
+      '2026-04-16',
+      '2026-04-30',
+      '300',
+      'default-offset',
+    ]);
+  });
+
   it('blocks key defaults to "me" when no clinicianId', () => {
     const key = calendarKeys.blocks();
     expect(key).toEqual(['calendar', 'blocks', 'me']);
