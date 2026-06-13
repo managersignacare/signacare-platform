@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { PATIENT_TABS, PATIENT_TAB_GROUPS, type KnownPatientTabId } from './patientTypes';
+import {
+  DEFAULT_HIDDEN_PATIENT_TABS,
+  PATIENT_TABS,
+  PATIENT_TAB_GROUPS,
+  type KnownPatientTabId,
+} from './patientTypes';
 
 /**
  * Regression tests for the canonical patient-detail tab registry.
@@ -51,17 +56,33 @@ describe('PATIENT_TABS canonical registry', () => {
     expect(tab?.label).toContain('Pathways');
   });
 
-  it('places documentation between episodes and rating scales in the mental health navigation group', () => {
+  it('keeps documentation ahead of rating scales in the mental health navigation group', () => {
     const mentalHealthGroup = PATIENT_TAB_GROUPS.find((group) => group.label === 'Mental Health');
     expect(mentalHealthGroup).toBeDefined();
 
-    const episodesIndex = mentalHealthGroup!.tabs.indexOf('episodes');
     const documentationIndex = mentalHealthGroup!.tabs.indexOf('documentation');
     const assessmentsIndex = mentalHealthGroup!.tabs.indexOf('assessments');
 
-    expect(episodesIndex).toBeGreaterThanOrEqual(0);
-    expect(documentationIndex).toBe(episodesIndex + 1);
+    expect(documentationIndex).toBeGreaterThanOrEqual(0);
     expect(assessmentsIndex).toBe(documentationIndex + 1);
+    expect(mentalHealthGroup!.tabs).not.toContain('episodes');
+  });
+
+  it('moves episodes into the admin group directly under overview', () => {
+    const adminGroup = PATIENT_TAB_GROUPS.find((group) => group.label === 'Admin');
+    expect(adminGroup).toBeDefined();
+    expect(adminGroup?.tabs.slice(0, 2)).toEqual(['overview', 'episodes']);
+  });
+
+  it('tracks the default hidden workbench tabs in a single source of truth', () => {
+    expect(DEFAULT_HIDDEN_PATIENT_TABS).toEqual([
+      'problems',
+      'tracking',
+      'billing',
+      'inpatient-care',
+      'ect',
+      'tms',
+    ]);
   });
 
   it('every tab id is registered exactly once', () => {

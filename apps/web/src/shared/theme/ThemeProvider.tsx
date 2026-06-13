@@ -210,8 +210,8 @@ interface ThemeStore {
 export const useThemeStore = create<ThemeStore>()(
   persist(
     (set) => ({
-      themeId: 'signacare',
-      palette: THEME_PALETTES.signacare,
+      themeId: 'therapeutic',
+      palette: THEME_PALETTES.therapeutic,
       setTheme: (id: ThemeId) => set({ themeId: id, palette: THEME_PALETTES[id] }),
     }),
     { name: 'signacare-theme' }

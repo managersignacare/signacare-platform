@@ -34,4 +34,13 @@ describe('buildNavGroups', () => {
     const allPaths = groups.flatMap((g) => g.items.map((i) => i.path));
     expect(allPaths).toContain('agentic-scribe');
   });
+
+  it('uses My Calendar as the only workspace calendar entry', () => {
+    const groups = buildNavGroups('clinician');
+    const workspaceGroup = groups.find((group) => group.group === 'Workspace');
+    const workspacePaths = workspaceGroup?.items.map((item) => item.path) ?? [];
+
+    expect(workspacePaths).toContain('calendar');
+    expect(workspacePaths).not.toContain('appointments');
+  });
 });

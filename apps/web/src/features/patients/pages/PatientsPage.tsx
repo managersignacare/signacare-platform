@@ -12,7 +12,6 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import { PatientList } from '../components/PatientList';
 import { PatientRegistrationWizard } from '../components/registration/PatientRegistrationWizard';
-import { ZitaviSyncButton } from '../components/ZitaviSyncButton';
 import { apiClient } from '../../../shared/services/apiClient';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { patientsKeys, episodesKeys } from '../queryKeys';
@@ -41,7 +40,6 @@ export const PatientsPage: React.FC = () => {
             sx={{ textTransform: 'none', borderColor: '#327C8D', color: '#327C8D' }}>
             Bulk Reassign
           </Button>
-          <ZitaviSyncButton />
           <Button startIcon={<PersonAddAltIcon />} variant="contained" onClick={() => setWizardOpen(true)}
             sx={{ fontFamily: 'Albert Sans, sans-serif', fontWeight: 600, bgcolor: '#b8621a', px: 2.5, py: 1, borderRadius: 2, textTransform: 'none', '&:hover': { bgcolor: '#d6741f' } }}>
             Register Patient

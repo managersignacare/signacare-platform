@@ -115,7 +115,6 @@ const BASE_NAV_GROUPS: NavGroup[] = [
   {
     group: 'Workspace',
     items: [
-      { label: 'Appointments', path: 'appointments', icon: <CalendarMonthIcon /> },
       { label: 'My Calendar', path: 'calendar', icon: <CalendarMonthIcon /> },
       { label: 'Bed Board', path: 'bed-board', icon: <MedicationIcon /> },
       { label: 'Reception', path: 'receptionist', icon: <PersonAddIcon /> },

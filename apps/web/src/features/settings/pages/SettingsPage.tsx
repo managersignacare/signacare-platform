@@ -12,7 +12,10 @@ import PhoneAndroidIcon from '@mui/icons-material/PhoneAndroid'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 // ClinicProfilePanel moved to Org Settings
 import { EditStaffCredentialsDialog } from '../../staff-settings/components/EditStaffCredentialsDialog'
-import { SidebarCustomisationPanel } from '../components/SettingsNavPanels'
+import {
+  DashboardOptionsPanel,
+  SidebarCustomisationPanel,
+} from '../components/SettingsNavPanels'
 import { AsyncAiJobsSettingsPanel } from '../components/AsyncAiJobsSettingsPanel'
 // ThresholdsPanel moved to Org Settings; IntegrationStatusPanel, CmiPanel,
 // AiTrainingModule, WorkflowBuilder, Clinical Policies, Access Control,
@@ -123,6 +126,7 @@ export const SettingsPage: React.FC = () => {
         {canViewMyProfileTab && <Tab label="My Profile" value="my-profile" />}
         <Tab label="Account Security" value="security" />
         <Tab label="Appearance" value="appearance" />
+        <Tab label="Alternative Dashboard" value="dashboard-options" />
         <Tab label="Digital Signature" value="signature" />
         <Tab label="Sidebar Customisation" value="sidebar" />
         <Tab label="Async AI Jobs" value="async-ai-jobs" />
@@ -136,6 +140,7 @@ export const SettingsPage: React.FC = () => {
       {tab === 'my-profile' && canViewMyProfileTab && <EditStaffCredentialsDialog open inline onClose={() => {}} />}
       {tab === 'security' && <MfaSecurityPanel />}
       {tab === 'appearance' && <AppearancePanel />}
+      {tab === 'dashboard-options' && <DashboardOptionsPanel />}
       {tab === 'signature' && <SignatureSetupPanel />}
       {tab === 'sidebar' && <SidebarCustomisationPanel />}
       {tab === 'async-ai-jobs' && <AsyncAiJobsSettingsPanel patientId={searchParams.get('patientId')} />}

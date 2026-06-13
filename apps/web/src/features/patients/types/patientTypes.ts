@@ -130,13 +130,22 @@ export interface PatientTabGroup {
   tabs: KnownPatientTabId[];
 }
 
+export const DEFAULT_HIDDEN_PATIENT_TABS: readonly KnownPatientTabId[] = [
+  'problems',
+  'tracking',
+  'billing',
+  'inpatient-care',
+  'ect',
+  'tms',
+];
+
 export const PATIENT_TAB_GROUPS: PatientTabGroup[] = [
   // Snapshot is the at-a-glance, always-visible surface — common to
   // every specialty. Medications, Pathology, Physical Health and
   // Tracking sit here so the safety-critical reads (vitals, labs,
   // active meds, longitudinal observations) are one click away on
   // every chart, regardless of specialty enrolment.
-  { label: 'Snapshot',            tabs: ['summary', 'problems', 'alerts-plans', 'medications', 'medication-history', 'pathology', 'physical-health', 'tracking'] },
+  { label: 'Snapshot',            tabs: ['summary', 'alerts-plans', 'medications', 'medication-history', 'pathology', 'physical-health'] },
   { label: 'Internal Medicine',   tabs: ['chronic-diseases', 'gim-exchange'] },
   // Endocrinology keeps only the flowsheet — the insulin regimen now
   // lives as a sub-tab inside the Medications tab so all medication
@@ -154,12 +163,12 @@ export const PATIENT_TAB_GROUPS: PatientTabGroup[] = [
   // Mental Health owns its psychiatric workflow tabs plus its own
   // nested Information Exchange wrapper (mh-exchange) which itself
   // contains Referrals / Correspondence / Documents as inner sub-tabs.
-  { label: 'Mental Health',       tabs: ['episodes', 'documentation', 'assessments', 'outcome-measures', '91day-review', 'pathways', 'lived-experience', 'inpatient-care', 'ect', 'tms', 'mh-exchange'] },
+  { label: 'Mental Health',       tabs: ['documentation', 'assessments', 'outcome-measures', '91day-review', 'pathways', 'lived-experience', 'mh-exchange'] },
   // Viva is the patient-facing app — available to every specialty,
   // not psychiatry-specific.
   { label: 'Patient App',          tabs: ['viva'] },
   { label: 'Governance',          tabs: ['legal'] },
-  { label: 'Admin',               tabs: ['overview', 'appointments', 'billing'] },
+  { label: 'Admin',               tabs: ['overview', 'episodes', 'appointments', 'billing', 'problems', 'tracking', 'inpatient-care', 'ect', 'tms'] },
 ];
 
 export function calculateAge(dob: string): number {

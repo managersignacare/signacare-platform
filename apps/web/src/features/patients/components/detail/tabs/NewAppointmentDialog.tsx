@@ -35,8 +35,13 @@ interface EpisodeSummary {
 }
 
 interface EditableAppointment {
+  // Appointments do not carry a user-editable title — the display title
+  // shown on cells is derived from APPT_TYPE_LABELS[type] (see
+  // AppointmentsTab.tsx:147). The dialog body intentionally does not
+  // expose a Title input; the dialog-contract test in
+  // NewAppointmentDialog.dialogContract.test.ts pins this absence so
+  // the legacy interface bloat never sneaks back in.
   id: string;
-  title: string;
   date: string;
   startTime: string;
   endTime: string;

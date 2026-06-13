@@ -13,10 +13,6 @@ import {
   Button,
   Chip,
   CircularProgress,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
   Divider,
   FormControl,
   IconButton,
@@ -25,7 +21,6 @@ import {
   MenuItem,
   Select,
   TextField,
-  Tooltip,
   Typography,
 } from '@mui/material';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -61,7 +56,10 @@ import {
 } from '../../queryKeys';
 import { useModuleVisibility } from '../../../../shared/hooks/useModuleVisibility';
 import { getAllowedDutyRelationshipTypes } from '@signacare/shared';
-import { PATIENT_TABS, PATIENT_TAB_GROUPS, type PatientTabId, calculateAge } from '../../types/patientTypes';
+import {
+  type PatientTabId,
+  calculateAge,
+} from '../../types/patientTypes';
 import {
   canAccessPatientTab,
   canAccessPermission,
@@ -69,6 +67,12 @@ import {
 } from '../../../../shared/utils/frontendAccessPolicy';
 import { GENDER_LABELS, getInitials } from './patientDetailLayoutHelpers';
 import { TAB_COMPONENTS } from './patientDetailTabRegistry';
+import {
+  WorkbenchHeaderControls,
+  WorkbenchNavigationOverlays,
+  WorkbenchNavigatorPanel,
+  usePatientWorkbenchNavigation,
+} from './PatientWorkbenchNavigation';
 
 type WorkbenchMode = 'focus' | 'balanced' | 'review';
 type BannerRiskAlert = {
@@ -124,7 +128,6 @@ export const PatientDetailLayout: React.FC = () => {
   const [quickMenuAnchor, setQuickMenuAnchor] = useState<null | HTMLElement>(null);
   const [dutyDialogOpen, setDutyDialogOpen] = useState(false);
   const [workbenchMode, setWorkbenchMode] = useState<WorkbenchMode>('balanced');
-  const [navigatorOpen, setNavigatorOpen] = useState(true);
   const [summaryOpen, setSummaryOpen] = useState(true);
   const { data: flags } = usePatientFlags(patientId);
   const { data: legalOrders } = useQuery({
@@ -191,9 +194,32 @@ export const PatientDetailLayout: React.FC = () => {
     setNavigatorOpen(true);
   }, [workbenchMode]);
 
+  useEffect(() => {
+    saveHiddenWorkbenchTabs(hiddenWorkbenchTabs);
+  }, [hiddenWorkbenchTabs]);
+
   const toggleWorkbenchMode = (nextMode: Exclude<WorkbenchMode, 'balanced'>) => {
     setWorkbenchMode((currentMode) => (currentMode === nextMode ? 'balanced' : nextMode));
   };
+  const {
+    accessibleWorkbenchGroups,
+    filteredQuickWorkbenchTabs,
+    hiddenWorkbenchTabs,
+    navigatorOpen,
+    openWorkbenchContextMenu,
+    resetWorkbenchTabs,
+    setNavigatorOpen,
+    setWorkbenchContextMenu,
+    setWorkbenchCustomizeOpen,
+    toggleWorkbenchTabVisibility,
+    visibleWorkbenchGroups,
+    workbenchContextMenu,
+    workbenchCustomizeOpen,
+  } = usePatientWorkbenchNavigation({
+    activeTab,
+    activateTab,
+    canRenderPatientTab,
+  });
 
   if (isLoading) {
     return (
@@ -241,18 +267,6 @@ export const PatientDetailLayout: React.FC = () => {
   );
   const allergyRows = allergies ?? [];
   const activeAllergies = getActiveAllergies(allergyRows);
-  const quickWorkbenchTabs: PatientTabId[] = [
-    'summary',
-    'episodes',
-    'documentation',
-    'medications',
-    'appointments',
-    'correspondence',
-    'documents',
-    '91day-review',
-    'pathways',
-  ];
-  const navWidth = navigatorOpen ? 220 : 44;
   const railWidth = summaryOpen ? (workbenchMode === 'review' ? 360 : 320) : 36;
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', bgcolor: '#F8F9FA' }}>
@@ -379,159 +393,27 @@ export const PatientDetailLayout: React.FC = () => {
           {activeEpisodes.length === 0 && <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10 }}>No active episodes</Typography>}
         </Box>
 
-        <Box sx={{ px: 2, pb: 1.2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, flexWrap: 'wrap' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
-            <Typography variant="caption" sx={{ color: '#6B7280', fontWeight: 700, letterSpacing: '0.06em' }}>
-              WORKBENCH
-            </Typography>
-            <Chip
-              size="small"
-              label="Focus"
-              color={workbenchMode === 'focus' ? 'primary' : 'default'}
-              variant={workbenchMode === 'focus' ? 'filled' : 'outlined'}
-              onClick={() => toggleWorkbenchMode('focus')}
-            />
-            <Chip
-              size="small"
-              label="Review"
-              color={workbenchMode === 'review' ? 'primary' : 'default'}
-              variant={workbenchMode === 'review' ? 'filled' : 'outlined'}
-              onClick={() => toggleWorkbenchMode('review')}
-            />
-          </Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
-            {quickWorkbenchTabs.filter((tabId) => canRenderPatientTab(tabId)).map((tabId) => {
-              const tab = PATIENT_TABS.find((t) => t.id === tabId);
-              if (!tab) return null;
-              return (
-                <Chip
-                  key={tabId}
-                  size="small"
-                  label={tab.label}
-                  onClick={() => activateTab(tabId)}
-                  sx={{
-                    height: 22,
-                    fontSize: 10,
-                    border: activeTab === tabId ? '1px solid #2563EB' : '1px solid #D1D5DB',
-                    bgcolor: activeTab === tabId ? '#EFF6FF' : '#fff',
-                    color: activeTab === tabId ? '#1D4ED8' : '#374151',
-                    fontWeight: activeTab === tabId ? 700 : 500,
-                  }}
-                />
-              );
-            })}
-          </Box>
-        </Box>
+        <WorkbenchHeaderControls
+          activeTab={activeTab}
+          filteredQuickWorkbenchTabs={filteredQuickWorkbenchTabs}
+          onActivateTab={activateTab}
+          onOpenWorkbenchContextMenu={openWorkbenchContextMenu}
+          onOpenCustomize={() => setWorkbenchCustomizeOpen(true)}
+          onToggleWorkbenchMode={toggleWorkbenchMode}
+          workbenchMode={workbenchMode}
+        />
       </Box>
 
       <Box sx={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        <Box
-          sx={{
-            width: { xs: 0, md: navWidth },
-            flexShrink: 0,
-            bgcolor: '#fff',
-            borderRight: { xs: 'none', md: '1px solid #E8E8E8' },
-            overflow: 'hidden',
-            display: { xs: 'none', md: 'flex' },
-            flexDirection: 'column',
-            transition: 'width 0.2s ease',
-          }}
-        >
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: navigatorOpen ? 'space-between' : 'center', px: 0.75, py: 0.75, borderBottom: '1px solid #F0F2F4' }}>
-            {navigatorOpen && (
-              <Typography variant="caption" sx={{ fontWeight: 700, color: '#6B7280', letterSpacing: '0.06em' }}>
-                FILE EXPLORER
-              </Typography>
-            )}
-            <IconButton
-              size="small"
-              onClick={() => setNavigatorOpen((prev) => !prev)}
-              aria-label={navigatorOpen ? 'Collapse file explorer' : 'Expand file explorer'}
-              sx={{ width: 24, height: 24 }}
-            >
-              <Typography sx={{ fontSize: 11, color: '#6B7280' }}>{navigatorOpen ? '◀' : '▶'}</Typography>
-            </IconButton>
-          </Box>
-
-          {navigatorOpen ? (
-            <Box sx={{ overflowY: 'auto' }}>
-              {PATIENT_TAB_GROUPS.map(group => {
-                const visibleTabs = group.tabs.filter((tid) => canRenderPatientTab(tid as PatientTabId));
-                if (visibleTabs.length === 0) return null;
-                return (
-                  <Box key={group.label} sx={{ mb: 0.5 }}>
-                    <Typography variant="caption" sx={{ px: 1.5, pt: 1.5, pb: 0.5, display: 'block', color: '#9CA3AF', fontWeight: 700, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                      {group.label}
-                    </Typography>
-                    {visibleTabs.map(tid => {
-                      const tab = PATIENT_TABS.find(t => t.id === tid);
-                      if (!tab) return null;
-                      const isActive = activeTab === tid;
-                      const activate = () => activateTab(tid);
-                      return (
-                        <Box
-                          key={tid}
-                          role="button"
-                          tabIndex={0}
-                          aria-current={isActive ? 'page' : undefined}
-                          aria-label={`Open ${tab.label} tab`}
-                          onClick={activate}
-                          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(); } }}
-                          sx={{ px: 1.5, py: 0.7, cursor: 'pointer', fontSize: 12, fontFamily: 'Albert Sans, sans-serif', fontWeight: isActive ? 700 : 500,
-                            color: isActive ? '#1D4ED8' : '#374151', bgcolor: isActive ? '#EFF6FF' : 'transparent',
-                            borderLeft: isActive ? '3px solid #2563EB' : '3px solid transparent',
-                            '&:hover': { bgcolor: isActive ? '#EFF6FF' : '#F8FAFC' },
-                            '&:focus-visible': { outline: '2px solid #2563EB', outlineOffset: -2 },
-                            transition: 'all 0.1s' }}>
-                          {tab.label}
-                        </Box>
-                      );
-                    })}
-                  </Box>
-                );
-              })}
-            </Box>
-          ) : (
-            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 1, gap: 0.6, overflowY: 'auto' }}>
-              {quickWorkbenchTabs.filter((tabId) => canRenderPatientTab(tabId)).map((tabId) => {
-                const tab = PATIENT_TABS.find((t) => t.id === tabId);
-                if (!tab) return null;
-                const selected = activeTab === tabId;
-                return (
-                  <Tooltip key={tabId} title={tab.label} placement="right">
-                    <Box
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => activateTab(tabId)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          activateTab(tabId);
-                        }
-                      }}
-                      sx={{
-                        width: 28,
-                        height: 28,
-                        borderRadius: 1,
-                        border: selected ? '1px solid #2563EB' : '1px solid #D1D5DB',
-                        bgcolor: selected ? '#EFF6FF' : '#fff',
-                        color: selected ? '#1D4ED8' : '#4B5563',
-                        fontSize: 10,
-                        fontWeight: 700,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      {tab.label.slice(0, 2).toUpperCase()}
-                    </Box>
-                  </Tooltip>
-                );
-              })}
-            </Box>
-          )}
-        </Box>
+        <WorkbenchNavigatorPanel
+          activeTab={activeTab}
+          filteredQuickWorkbenchTabs={filteredQuickWorkbenchTabs}
+          navigatorOpen={navigatorOpen}
+          onActivateTab={activateTab}
+          onOpenWorkbenchContextMenu={openWorkbenchContextMenu}
+          onToggleNavigatorOpen={() => setNavigatorOpen((previousValue) => !previousValue)}
+          visibleWorkbenchGroups={visibleWorkbenchGroups}
+        />
 
         <Box sx={{ flex: 1, overflowY: 'auto', minWidth: 0 }}>
           <Box sx={{ px: { xs: 1.5, sm: 2.5 }, py: { xs: 1.5, sm: 2 }, maxWidth: '100%' }}>
@@ -607,6 +489,17 @@ export const PatientDetailLayout: React.FC = () => {
         open={dutyDialogOpen}
         patientId={patientId}
         onClose={() => setDutyDialogOpen(false)}
+      />
+      <WorkbenchNavigationOverlays
+        accessibleWorkbenchGroups={accessibleWorkbenchGroups}
+        hiddenWorkbenchTabs={hiddenWorkbenchTabs}
+        onCloseContextMenu={() => setWorkbenchContextMenu(null)}
+        onCloseCustomize={() => setWorkbenchCustomizeOpen(false)}
+        onOpenCustomize={() => setWorkbenchCustomizeOpen(true)}
+        onResetWorkbenchTabs={resetWorkbenchTabs}
+        onToggleWorkbenchTabVisibility={toggleWorkbenchTabVisibility}
+        workbenchContextMenu={workbenchContextMenu}
+        workbenchCustomizeOpen={workbenchCustomizeOpen}
       />
     </Box>
   );

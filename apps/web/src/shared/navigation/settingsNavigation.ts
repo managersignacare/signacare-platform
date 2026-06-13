@@ -2,6 +2,7 @@ export const SETTINGS_TAB_IDS = [
   'my-profile',
   'security',
   'appearance',
+  'dashboard-options',
   'signature',
   'sidebar',
   'async-ai-jobs',
@@ -10,7 +11,7 @@ export const SETTINGS_TAB_IDS = [
 export type SettingsTabId = (typeof SETTINGS_TAB_IDS)[number];
 
 export const SETTINGS_ASYNC_AI_JOBS_PATH = '/settings?tab=async-ai-jobs';
-export const SETTINGS_DASHBOARD_OPTIONS_PATH = '/settings?tab=sidebar';
+export const SETTINGS_DASHBOARD_OPTIONS_PATH = '/settings?tab=dashboard-options';
 
 const SETTINGS_TAB_ID_SET = new Set<string>(SETTINGS_TAB_IDS);
 
