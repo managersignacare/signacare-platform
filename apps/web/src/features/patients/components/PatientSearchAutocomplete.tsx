@@ -2,7 +2,7 @@
 //
 // Shared patient typeahead used across appointment-creation surfaces.
 // Replaces the prior hand-rolled `<Paper>` + `<Box onClick>` popups in
-// AppointmentsPage.tsx + AppointmentsTab.tsx (3 sites) with a canonical
+// the former top-level appointments route + AppointmentsTab.tsx (3 sites) with a canonical
 // MUI <Autocomplete> per BUG-447 child 8/15 + L5 cycle-1 advisory:
 // the §2.5 decision tree (docs/quality/bug-447-child-template.md)
 // directs typeahead patterns to Shape C (MUI native primitive) — this

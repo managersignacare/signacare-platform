@@ -5,11 +5,10 @@ import { describe, expect, it } from 'vitest';
 /**
  * Source-level guardrails for the in-patient-detail NewAppointmentDialog.
  *
- * Mirrors the existing AppointmentsPage.dialogContract.test.ts (which
- * guards the top-level /appointments page dialog) for the dialog used
- * inside the patient workbench — so neither dialog regresses on the
- * "title is not a user-input field" + "mode pinned to the four-option
- * enum" contract.
+ * Mirrors the scheduling-dialog contract for the dialog used inside the
+ * patient workbench — so neither appointment entry surface regresses on
+ * the "title is not a user-input field" + "mode pinned to the
+ * four-option enum" contract.
  *
  * The dialog body deliberately does not render a Title input; the
  * display title shown on calendar cells is derived from

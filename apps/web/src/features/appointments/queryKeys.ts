@@ -13,8 +13,8 @@ export const appointmentKeys = {
   clinic: (patientIdFilter: string) =>
     [...appointmentKeys.all, 'clinic', patientIdFilter] as const,
   detail: (id: string) => [...appointmentKeys.all, 'detail', id] as const,
-  // Cross-feature helpers — used by the scheduling wizard inside
-  // AppointmentsPage. Namespace prefixes preserved so broad invalidations
+  // Cross-feature helpers — used by the shared scheduling workspace and
+  // appointment dialogs. Namespace prefixes preserved so broad invalidations
   // on the parent feature still drop these caches (CLAUDE.md §4.1).
   staffLookup: () => ['staff', 'lookup'] as const,
   staffSettingsAppointmentModes: () =>

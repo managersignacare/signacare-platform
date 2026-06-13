@@ -7,6 +7,7 @@ interface Props {
   appointments: Appointment[];
   month: Date;
   onSelectAppointment?: (appointment: Appointment) => void;
+  onSelectDay?: (day: Date) => void;
 }
 
 const getMonthGrid = (month: Date): Date[] => {
@@ -29,6 +30,7 @@ export const AppointmentCalendar = ({
   appointments,
   month,
   onSelectAppointment,
+  onSelectDay,
 }: Props) => {
   const days = getMonthGrid(month);
 
@@ -66,9 +68,19 @@ export const AppointmentCalendar = ({
                   backgroundColor: isCurrentMonth ? '#FFFFFF' : '#FBF8F5',
                 }}
               >
-                <Typography variant="caption" sx={{ fontWeight: 700 }}>
-                  {day.getDate()}
-                </Typography>
+                <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1}>
+                  <Typography variant="caption" sx={{ fontWeight: 700 }}>
+                    {day.getDate()}
+                  </Typography>
+                  {isCurrentMonth && onSelectDay ? (
+                    <Chip
+                      size="small"
+                      variant="outlined"
+                      label="Add"
+                      onClick={() => onSelectDay(day)}
+                    />
+                  ) : null}
+                </Stack>
                 <Stack spacing={0.75} mt={1}>
                   {dayAppointments.slice(0, 3).map((appointment) => {
                     const meta = getAppointmentStatusMeta(appointment.status);

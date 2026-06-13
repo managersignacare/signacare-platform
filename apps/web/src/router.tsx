@@ -61,7 +61,6 @@ const PatientCommandBoardPage = React.lazy(() => import('./features/dashboard/pa
 const PatientsPage       = React.lazy(() => import('./features/patients/pages/PatientsPage'));
 const PatientDetailPage  = React.lazy(() => import('./features/patients/pages/PatientDetailPage'));
 const EpisodeDetailPage  = React.lazy(() => import('./features/episodes/pages/EpisodeDetailPage'));
-const AppointmentsPage   = React.lazy(() => import('./features/appointments/pages/AppointmentsPage'));
 const CalendarPage       = React.lazy(() => import('./features/calendar/pages/CalendarPage'));
 const ReferralsPage      = React.lazy(() => import('./features/referrals/pages/ReferralsPage'));
 const ReferralCoordinatorQueue = React.lazy(() => import('./features/referrals/pages/ReferralCoordinatorQueue'));
@@ -176,7 +175,7 @@ export const router = createBrowserRouter([
       { path: '/patients',       element: <PatientsPage /> },
       { path: '/patients/:id',   element: <PatientDetailPage /> },
       { path: '/episodes/:id',   element: <EpisodeDetailPage /> },
-      { path: '/appointments',   element: <AppointmentsPage /> },
+      { path: '/appointments',   element: <Navigate to="/calendar" replace /> },
       { path: '/calendar',       element: <CalendarPage /> },
       { path: '/referrals',      element: <ReferralsPage /> },
       { path: '/referrals/queue', element: <ReferralCoordinatorQueue /> },

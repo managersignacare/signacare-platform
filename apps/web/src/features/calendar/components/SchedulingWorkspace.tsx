@@ -41,6 +41,7 @@ import type { OrgUnit } from '../../org-settings/services/orgSettingsApi';
 import { staffSettingsApi } from '../../staff-settings/services/staffSettingsApi';
 import { staffSettingsKeys } from '../../staff-settings/queryKeys';
 import { SchedulingAppointmentDialog } from '../../appointments/components/SchedulingAppointmentDialog';
+import { AppointmentDetailsDrawer } from '../../appointments/components/AppointmentDetailsDrawer';
 import { appointmentKeys } from '../../appointments/queryKeys';
 import { appointmentApi } from '../../appointments/services/appointmentApi';
 import { AppointmentCalendar } from '../../appointments/components/AppointmentCalendar';
@@ -65,6 +66,12 @@ interface StaffLookupRow {
 
 interface SchedulingWorkspaceProps {
   routeLabel?: string;
+}
+
+interface AppointmentDraftSeed {
+  date?: string;
+  duration?: number;
+  startTime?: string;
 }
 
 interface AppointmentSummary {
@@ -175,11 +182,13 @@ function DayWeekGrid({
   appointments,
   dates,
   dayLabels,
+  onCreateSlot,
   onSelect,
 }: {
   appointments: AppointmentSummary[];
   dates: Date[];
   dayLabels: string[];
+  onCreateSlot: (date: string, startTime: string) => void;
   onSelect: (appointment: AppointmentResponse) => void;
 }) {
   return (
@@ -211,17 +220,34 @@ function DayWeekGrid({
               const iso = date.toISOString().slice(0, 10);
               const slotAppointments = appointments.filter((appointment) => appointment.date === iso && appointment.startHour === hour);
               return (
-                <Box key={`${iso}-${hour}`} sx={{ borderBottom: '1px solid', borderLeft: '1px solid', borderColor: 'divider', minHeight: 54, p: 0.25 }}>
+                <Box
+                  key={`${iso}-${hour}`}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Create appointment on ${iso} at ${String(hour).padStart(2, '0')}:00`}
+                  sx={{ borderBottom: '1px solid', borderLeft: '1px solid', borderColor: 'divider', minHeight: 54, p: 0.25, cursor: 'pointer' }}
+                  onClick={() => onCreateSlot(iso, `${String(hour).padStart(2, '0')}:00`)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      onCreateSlot(iso, `${String(hour).padStart(2, '0')}:00`);
+                    }
+                  }}
+                >
                   {slotAppointments.map((appointment) => (
                     <Tooltip key={appointment.raw.id} title={`${appointment.clinicianName} | ${appointment.modeLabel}`}>
                       <Box
                         role="button"
                         tabIndex={0}
                         sx={{ bgcolor: '#E3F2FD', borderLeft: '3px solid #2196F3', borderRadius: 0.5, p: 0.5, mb: 0.25, cursor: 'pointer' }}
-                        onClick={() => onSelect(appointment.raw)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onSelect(appointment.raw);
+                        }}
                         onKeyDown={(event) => {
                           if (event.key === 'Enter' || event.key === ' ') {
                             event.preventDefault();
+                            event.stopPropagation();
                             onSelect(appointment.raw);
                           }
                         }}
@@ -297,6 +323,13 @@ export function SchedulingWorkspace({
     staleTime: 5 * 60_000,
   });
   const flatUnits = React.useMemo(() => (tree ? flattenUnits(tree) : []), [tree]);
+  const staffNamesById = React.useMemo(
+    () =>
+      Object.fromEntries(
+        staffList.map((staff: StaffLookupRow) => [staff.id, `${staff.givenName} ${staff.familyName}`]),
+      ),
+    [staffList],
+  );
 
   const [view, setView] = React.useState<CalendarView>('workweek');
   const [currentDate, setCurrentDate] = React.useState(new Date());
@@ -306,7 +339,10 @@ export function SchedulingWorkspace({
   const [specialtyFilter, setSpecialtyFilter] = React.useState<SpecialtyType | ''>('');
   const [patientFilter, setPatientFilter] = React.useState<PatientOption | null>(null);
   const [dialogOpen, setDialogOpen] = React.useState(false);
+  const [dialogSeed, setDialogSeed] = React.useState<AppointmentDraftSeed | null>(null);
+  const [drawerOpen, setDrawerOpen] = React.useState(false);
   const [editingAppointment, setEditingAppointment] = React.useState<AppointmentResponse | null>(null);
+  const [selectedAppointment, setSelectedAppointment] = React.useState<AppointmentResponse | null>(null);
 
   const prefs = useCalendarPreferences();
   const updatePrefs = useUpdateCalendarPreferences();
@@ -398,12 +434,23 @@ export function SchedulingWorkspace({
     [currentDate, view],
   );
 
-  const handleOpenNew = () => {
+  const handleOpenNew = (seed?: AppointmentDraftSeed) => {
+    setDrawerOpen(false);
+    setSelectedAppointment(null);
     setEditingAppointment(null);
+    setDialogSeed(seed ?? null);
     setDialogOpen(true);
   };
 
   const handleSelectAppointment = (appointment: AppointmentResponse) => {
+    setSelectedAppointment(appointment);
+    setDrawerOpen(true);
+  };
+
+  const handleEditAppointment = (appointment: AppointmentResponse) => {
+    setDrawerOpen(false);
+    setSelectedAppointment(null);
+    setDialogSeed(null);
     setEditingAppointment(appointment);
     setDialogOpen(true);
   };
@@ -432,7 +479,7 @@ export function SchedulingWorkspace({
         <Button
           startIcon={<AddIcon />}
           variant="contained"
-          onClick={handleOpenNew}
+          onClick={() => handleOpenNew()}
           sx={{ bgcolor: '#b8621a', '&:hover': { bgcolor: '#d6741f' } }}
         >
           New Appointment
@@ -583,11 +630,28 @@ export function SchedulingWorkspace({
           ) : view === 'list' ? (
             <ListView appointments={filteredAppointments} onSelect={handleSelectAppointment} />
           ) : view === 'month' ? (
-            <AppointmentCalendar appointments={displayedRawAppointments} month={monthDate} onSelectAppointment={handleSelectAppointment} />
+            <AppointmentCalendar
+              appointments={displayedRawAppointments}
+              month={monthDate}
+              onSelectAppointment={handleSelectAppointment}
+              onSelectDay={(day) => handleOpenNew({ date: day.toISOString().slice(0, 10) })}
+            />
           ) : view === 'day' ? (
-            <DayWeekGrid appointments={filteredAppointments} dates={[currentDate]} dayLabels={[currentDate.toLocaleDateString('en-AU', { weekday: 'short' })]} onSelect={handleSelectAppointment} />
+            <DayWeekGrid
+              appointments={filteredAppointments}
+              dates={[currentDate]}
+              dayLabels={[currentDate.toLocaleDateString('en-AU', { weekday: 'short' })]}
+              onCreateSlot={(date, startTime) => handleOpenNew({ date, startTime })}
+              onSelect={handleSelectAppointment}
+            />
           ) : (
-            <DayWeekGrid appointments={filteredAppointments} dates={weekDates} dayLabels={view === 'week' ? ALLDAYS : WEEKDAYS} onSelect={handleSelectAppointment} />
+            <DayWeekGrid
+              appointments={filteredAppointments}
+              dates={weekDates}
+              dayLabels={view === 'week' ? ALLDAYS : WEEKDAYS}
+              onCreateSlot={(date, startTime) => handleOpenNew({ date, startTime })}
+              onSelect={handleSelectAppointment}
+            />
           )}
 
           {prefs.data && blocks.data ? (
@@ -614,10 +678,22 @@ export function SchedulingWorkspace({
         onClose={() => {
           setDialogOpen(false);
           setEditingAppointment(null);
+          setDialogSeed(null);
         }}
         editing={editingAppointment}
         flatUnits={flatUnits}
+        initialDraft={dialogSeed}
         staffList={staffList}
+      />
+      <AppointmentDetailsDrawer
+        appointment={selectedAppointment}
+        open={drawerOpen}
+        onClose={() => {
+          setDrawerOpen(false);
+          setSelectedAppointment(null);
+        }}
+        onEdit={handleEditAppointment}
+        staffNamesById={staffNamesById}
       />
     </Container>
   );

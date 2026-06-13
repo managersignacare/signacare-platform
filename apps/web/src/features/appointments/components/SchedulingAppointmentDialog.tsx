@@ -64,6 +64,11 @@ interface AppointmentDraft {
 interface SchedulingAppointmentDialogProps {
   editing?: AppointmentDraft | null;
   flatUnits: { id: string; name: string }[];
+  initialDraft?: {
+    date?: string;
+    duration?: number;
+    startTime?: string;
+  } | null;
   onClose: () => void;
   open: boolean;
   staffList: StaffLookupRow[];
@@ -172,6 +177,7 @@ function EpisodeSelector({
 export function SchedulingAppointmentDialog({
   editing,
   flatUnits,
+  initialDraft,
   onClose,
   open,
   staffList,
@@ -228,10 +234,17 @@ export function SchedulingAppointmentDialog({
     }
 
     setSelectedPatient(null);
-    setDate(new Date().toISOString().split('T')[0]);
-    setStartTime('09:00');
-    setDuration(30);
-    setEndTime('09:30');
+    const nextDate = initialDraft?.date ?? new Date().toISOString().split('T')[0];
+    const nextStartTime = initialDraft?.startTime ?? '09:00';
+    const nextDuration = initialDraft?.duration ?? 30;
+    const [hours, minutes] = nextStartTime.split(':').map(Number);
+    const totalMinutes = hours * 60 + minutes + nextDuration;
+    setDate(nextDate);
+    setStartTime(nextStartTime);
+    setDuration(nextDuration);
+    setEndTime(
+      `${String(Math.floor(totalMinutes / 60)).padStart(2, '0')}:${String(totalMinutes % 60).padStart(2, '0')}`,
+    );
     setClinician('');
     setTeam('');
     setSpecialty('');
@@ -242,7 +255,7 @@ export function SchedulingAppointmentDialog({
     setAdditionalClinicianIds([]);
     setNotes('');
     setSaveError('');
-  }, [editing, open]);
+  }, [editing, initialDraft, open]);
 
   React.useEffect(() => {
     const [hours, minutes] = startTime.split(':').map(Number);

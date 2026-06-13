@@ -29,4 +29,10 @@ describe('SchedulingWorkspace source contract', () => {
     expect(source).toContain('value="team"');
     expect(source).toContain('value="clinic"');
   });
+
+  it('supports slot creation and appointment details from the same workspace', () => {
+    expect(source).toContain('<AppointmentDetailsDrawer');
+    expect(source).toContain('onCreateSlot');
+    expect(source).toContain('handleOpenNew({ date, startTime })');
+  });
 });
