@@ -3,7 +3,10 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 describe('AppointmentsPage dialog contract', () => {
-  const source = readFileSync(resolve(__dirname, './AppointmentsPage.tsx'), 'utf8');
+  const source = readFileSync(
+    resolve(__dirname, '../components/SchedulingAppointmentDialog.tsx'),
+    'utf8',
+  );
 
   it('does not render a standalone title field in the new appointment dialog', () => {
     expect(source).not.toContain('label="Title"');

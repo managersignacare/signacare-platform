@@ -317,7 +317,7 @@ Include: risk to self (suicidal ideation, self-harm, overdose), risk to others (
                     <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1 }}>Select an option to book:</Typography>
                     {apptOptions.map((opt, i) => (
                       <Button key={i} variant="outlined" fullWidth sx={{ mb: 1, justifyContent: 'flex-start', textTransform: 'none', borderColor: '#327C8D', color: '#327C8D' }}
-                        onClick={() => { navigate('/appointments'); onClose(); }}>
+                        onClick={() => { navigate('/calendar'); onClose(); }}>
                         Option {i + 1}: {opt.time} — {opt.type} ({opt.mode})
                       </Button>
                     ))}

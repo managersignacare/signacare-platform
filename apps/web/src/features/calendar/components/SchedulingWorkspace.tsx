@@ -1,0 +1,624 @@
+import AddIcon from '@mui/icons-material/Add';
+import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import TodayIcon from '@mui/icons-material/Today';
+import ViewDayIcon from '@mui/icons-material/ViewDay';
+import ViewListIcon from '@mui/icons-material/ViewList';
+import ViewWeekIcon from '@mui/icons-material/ViewWeek';
+import {
+  Alert,
+  Box,
+  Button,
+  CircularProgress,
+  Container,
+  FormControl,
+  InputLabel,
+  MenuItem,
+  Paper,
+  Select,
+  Stack,
+  TextField,
+  ToggleButton,
+  ToggleButtonGroup,
+  Tooltip,
+  Typography,
+} from '@mui/material';
+import { useQuery } from '@tanstack/react-query';
+import {
+  ALL_SPECIALTIES,
+  SPECIALTY_DISPLAY,
+  type AppointmentMode,
+  type AppointmentResponse,
+  type SpecialtyType,
+} from '@signacare/shared';
+import React from 'react';
+import { useCurrentUser } from '../../auth/hooks/useCurrentUser';
+import { apiClient } from '../../../shared/services/apiClient';
+import { PatientSearchAutocomplete, type PatientOption } from '../../patients/components/PatientSearchAutocomplete';
+import { useOrgTree } from '../../org-settings/hooks/useOrgSettings';
+import type { OrgUnit } from '../../org-settings/services/orgSettingsApi';
+import { staffSettingsApi } from '../../staff-settings/services/staffSettingsApi';
+import { staffSettingsKeys } from '../../staff-settings/queryKeys';
+import { SchedulingAppointmentDialog } from '../../appointments/components/SchedulingAppointmentDialog';
+import { appointmentKeys } from '../../appointments/queryKeys';
+import { appointmentApi } from '../../appointments/services/appointmentApi';
+import { AppointmentCalendar } from '../../appointments/components/AppointmentCalendar';
+import {
+  useCalendarPreferences,
+  useUpdateCalendarPreferences,
+} from '../hooks/useCalendarPreferences';
+import { useCalendarBlocks } from '../hooks/useCalendarBlocks';
+import { useTodayView } from '../hooks/useTodayView';
+import { AvailabilityGridEditor } from './AvailabilityGridEditor';
+import { ICalSubscribeCard } from './ICalSubscribeCard';
+import { TodayContactsView } from './TodayContactsView';
+
+type CalendarScope = 'mine' | 'team' | 'clinic';
+type CalendarView = 'month' | 'day' | 'workweek' | 'week' | 'list';
+
+interface StaffLookupRow {
+  id: string;
+  givenName: string;
+  familyName: string;
+}
+
+interface SchedulingWorkspaceProps {
+  routeLabel?: string;
+}
+
+interface AppointmentSummary {
+  clinicianId: string;
+  clinicianName: string;
+  date: string;
+  endTimeLabel: string;
+  modeLabel: string;
+  raw: AppointmentResponse;
+  startHour: number;
+  startTimeLabel: string;
+  teamId: string | null;
+  teamName: string;
+  title: string;
+}
+
+const SLOT_OPTIONS = [15, 20, 30, 45, 60] as const;
+const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+const ALLDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const HOURS = Array.from({ length: 12 }, (_, index) => index + 7);
+
+const APPOINTMENT_TYPE_LABELS: Record<string, string> = {
+  assessment: 'Assessment',
+  clinical_review: 'Psychiatrist Review',
+  follow_up: 'Follow-up',
+  group: 'Group Session',
+  initial: 'Initial Assessment',
+  telehealth: 'Telehealth',
+};
+
+function flattenUnits(nodes: OrgUnit[]): { id: string; name: string }[] {
+  const rows: { id: string; name: string }[] = [];
+
+  function walk(branches: OrgUnit[], depth: number) {
+    for (const branch of branches) {
+      rows.push({
+        id: branch.id,
+        name: '\u00A0'.repeat(depth * 2) + branch.name,
+      });
+      if (branch.children?.length) {
+        walk(branch.children, depth + 1);
+      }
+    }
+  }
+
+  walk(nodes, 0);
+  return rows;
+}
+
+function appointmentModeLabel(mode?: AppointmentMode | null, telehealthLink?: string | null): string {
+  switch (mode) {
+    case 'direct':
+      return 'Direct';
+    case 'telehealth':
+      return 'Telehealth';
+    case 'videoconference':
+      return 'Videoconference';
+    case 'other':
+      return 'Other';
+    default:
+      return telehealthLink ? 'Videoconference' : 'Direct';
+  }
+}
+
+function monthBounds(isoDate: string): { from: string; monthDate: Date; to: string } {
+  const monthDate = new Date(`${isoDate}T00:00:00`);
+  const first = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
+  const last = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0);
+  const toIso = (value: Date) => value.toISOString().slice(0, 10);
+  return { from: toIso(first), to: toIso(last), monthDate };
+}
+
+function rangeBounds(view: CalendarView, currentDate: Date): { from: string; monthDate: Date; to: string } {
+  if (view === 'month') {
+    return monthBounds(currentDate.toISOString().slice(0, 10));
+  }
+
+  if (view === 'day' || view === 'list') {
+    const iso = currentDate.toISOString().slice(0, 10);
+    return { from: iso, to: iso, monthDate: new Date(currentDate.getFullYear(), currentDate.getMonth(), 1) };
+  }
+
+  const dates = getWeekDates(currentDate, view === 'week');
+  return {
+    from: dates[0].toISOString().slice(0, 10),
+    to: dates[dates.length - 1].toISOString().slice(0, 10),
+    monthDate: new Date(currentDate.getFullYear(), currentDate.getMonth(), 1),
+  };
+}
+
+function getWeekDates(date: Date, includeWeekend: boolean): Date[] {
+  const value = new Date(date);
+  const day = value.getDay();
+  const diff = value.getDate() - day + (day === 0 ? -6 : 1);
+  const monday = new Date(value.setDate(diff));
+  return Array.from({ length: includeWeekend ? 7 : 5 }, (_, index) => {
+    const next = new Date(monday);
+    next.setDate(monday.getDate() + index);
+    return next;
+  });
+}
+
+function formatRangeDate(date: Date): string {
+  return date.toLocaleDateString('en-AU', { day: '2-digit', month: 'short' });
+}
+
+function DayWeekGrid({
+  appointments,
+  dates,
+  dayLabels,
+  onSelect,
+}: {
+  appointments: AppointmentSummary[];
+  dates: Date[];
+  dayLabels: string[];
+  onSelect: (appointment: AppointmentResponse) => void;
+}) {
+  return (
+    <Paper variant="outlined" sx={{ overflow: 'auto' }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: `60px repeat(${dates.length}, 1fr)`, minWidth: dates.length > 5 ? 920 : 720 }}>
+        <Box sx={{ borderBottom: '1px solid', borderColor: 'divider', p: 0.5, bgcolor: '#FBF8F5' }} />
+        {dates.map((date, index) => {
+          const isToday = date.toDateString() === new Date().toDateString();
+          return (
+            <Box key={date.toISOString()} sx={{ borderBottom: '1px solid', borderLeft: '1px solid', borderColor: 'divider', p: 0.5, textAlign: 'center', bgcolor: isToday ? '#FFF3E0' : '#FBF8F5' }}>
+              <Typography variant="caption" fontWeight={600} sx={{ color: isToday ? '#b8621a' : '#3D484B' }}>
+                {dayLabels[index]}
+              </Typography>
+              <Typography variant="caption" display="block" sx={{ color: isToday ? '#b8621a' : 'text.secondary' }}>
+                {date.getDate()}
+              </Typography>
+            </Box>
+          );
+        })}
+
+        {HOURS.map((hour) => (
+          <React.Fragment key={hour}>
+            <Box sx={{ borderBottom: '1px solid', borderColor: 'divider', p: 0.5, textAlign: 'right', pr: 1 }}>
+              <Typography variant="caption" color="text.secondary">
+                {`${hour}:00`}
+              </Typography>
+            </Box>
+            {dates.map((date) => {
+              const iso = date.toISOString().slice(0, 10);
+              const slotAppointments = appointments.filter((appointment) => appointment.date === iso && appointment.startHour === hour);
+              return (
+                <Box key={`${iso}-${hour}`} sx={{ borderBottom: '1px solid', borderLeft: '1px solid', borderColor: 'divider', minHeight: 54, p: 0.25 }}>
+                  {slotAppointments.map((appointment) => (
+                    <Tooltip key={appointment.raw.id} title={`${appointment.clinicianName} | ${appointment.modeLabel}`}>
+                      <Box
+                        role="button"
+                        tabIndex={0}
+                        sx={{ bgcolor: '#E3F2FD', borderLeft: '3px solid #2196F3', borderRadius: 0.5, p: 0.5, mb: 0.25, cursor: 'pointer' }}
+                        onClick={() => onSelect(appointment.raw)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            onSelect(appointment.raw);
+                          }
+                        }}
+                      >
+                        <Typography variant="caption" fontWeight={600} sx={{ fontSize: 10, display: 'block', lineHeight: 1.2 }}>
+                          {appointment.title}
+                        </Typography>
+                        <Typography variant="caption" sx={{ fontSize: 9, color: 'text.secondary' }}>
+                          {appointment.startTimeLabel}–{appointment.endTimeLabel}
+                        </Typography>
+                      </Box>
+                    </Tooltip>
+                  ))}
+                </Box>
+              );
+            })}
+          </React.Fragment>
+        ))}
+      </Box>
+    </Paper>
+  );
+}
+
+function ListView({
+  appointments,
+  onSelect,
+}: {
+  appointments: AppointmentSummary[];
+  onSelect: (appointment: AppointmentResponse) => void;
+}) {
+  const sorted = [...appointments].sort((left, right) =>
+    `${left.raw.startTime}`.localeCompare(`${right.raw.startTime}`),
+  );
+  if (!sorted.length) {
+    return (
+      <Paper variant="outlined" sx={{ p: 4, textAlign: 'center' }}>
+        <Typography color="text.secondary">No appointments to display.</Typography>
+      </Paper>
+    );
+  }
+
+  return (
+    <Stack spacing={1}>
+      {sorted.map((appointment) => (
+        <Paper
+          key={appointment.raw.id}
+          variant="outlined"
+          component="button"
+          type="button"
+          sx={{ p: 1.5, cursor: 'pointer', '&:hover': { borderColor: '#b8621a' }, textAlign: 'left', width: '100%', background: '#fff' }}
+          onClick={() => onSelect(appointment.raw)}
+        >
+          <Typography variant="body2" fontWeight={600}>
+            {appointment.title}
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            {new Date(appointment.raw.startTime).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })} | {appointment.startTimeLabel}–{appointment.endTimeLabel} | {appointment.clinicianName} | {appointment.teamName} | {appointment.modeLabel}
+          </Typography>
+        </Paper>
+      ))}
+    </Stack>
+  );
+}
+
+export function SchedulingWorkspace({
+  routeLabel = 'My Calendar',
+}: SchedulingWorkspaceProps) {
+  const { data: me, isLoading: meLoading } = useCurrentUser();
+  const { data: tree } = useOrgTree();
+  const { data: staffList = [] } = useQuery({
+    queryKey: appointmentKeys.staffLookup(),
+    queryFn: () => apiClient.get<StaffLookupRow[]>('staff/lookup'),
+    staleTime: 5 * 60_000,
+  });
+  const flatUnits = React.useMemo(() => (tree ? flattenUnits(tree) : []), [tree]);
+
+  const [view, setView] = React.useState<CalendarView>('workweek');
+  const [currentDate, setCurrentDate] = React.useState(new Date());
+  const [scope, setScope] = React.useState<CalendarScope>('mine');
+  const [teamFilter, setTeamFilter] = React.useState('');
+  const [clinicianFilter, setClinicianFilter] = React.useState('');
+  const [specialtyFilter, setSpecialtyFilter] = React.useState<SpecialtyType | ''>('');
+  const [patientFilter, setPatientFilter] = React.useState<PatientOption | null>(null);
+  const [dialogOpen, setDialogOpen] = React.useState(false);
+  const [editingAppointment, setEditingAppointment] = React.useState<AppointmentResponse | null>(null);
+
+  const prefs = useCalendarPreferences();
+  const updatePrefs = useUpdateCalendarPreferences();
+  const blocks = useCalendarBlocks();
+  const today = useTodayView({ date: currentDate.toISOString().slice(0, 10) });
+  const { from, monthDate, to } = React.useMemo(() => rangeBounds(view, currentDate), [currentDate, view]);
+
+  const teamAssignments = useQuery({
+    queryKey: staffSettingsKeys.teamAssignments(me?.id),
+    queryFn: () => staffSettingsApi.getTeamAssignments(me?.id),
+    enabled: Boolean(me?.id),
+    staleTime: 60_000,
+  });
+  const activeTeams = React.useMemo(
+    () => (teamAssignments.data ?? []).filter((assignment) => assignment.isActive),
+    [teamAssignments.data],
+  );
+
+  const appointmentsQuery = useQuery({
+    queryKey: appointmentKeys.list({ from, limit: '300', patientId: patientFilter?.id ?? '', to }),
+    queryFn: () =>
+      appointmentApi.list({
+        from: `${from}T00:00:00.000Z`,
+        limit: '300',
+        patientId: patientFilter?.id ?? undefined,
+        to: `${to}T23:59:59.999Z`,
+      }),
+    enabled: Boolean(me?.id),
+    staleTime: 30_000,
+  });
+
+  const scopeTeamId = teamFilter || activeTeams[0]?.orgUnitId || '';
+
+  const summaries = React.useMemo<AppointmentSummary[]>(() => {
+    return (appointmentsQuery.data ?? []).map((appointment) => {
+      const start = new Date(appointment.startTime);
+      const end = new Date(appointment.endTime);
+      const clinician = staffList.find((staff: StaffLookupRow) => staff.id === appointment.clinicianId);
+      return {
+        clinicianId: appointment.clinicianId,
+        clinicianName: clinician ? `${clinician.givenName} ${clinician.familyName}` : appointment.clinicianId,
+        date: appointment.startTime.slice(0, 10),
+        endTimeLabel: end.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', hour12: false }),
+        modeLabel: appointmentModeLabel(appointment.mode, appointment.telehealthLink),
+        raw: appointment,
+        startHour: start.getHours(),
+        startTimeLabel: start.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', hour12: false }),
+        teamId: appointment.teamId ?? null,
+        teamName: appointment.teamName ?? '',
+        title: APPOINTMENT_TYPE_LABELS[appointment.type] ?? appointment.type,
+      };
+    });
+  }, [appointmentsQuery.data, staffList]);
+
+  const filteredAppointments = React.useMemo(() => {
+    return summaries.filter((appointment) => {
+      if (!me?.id) return false;
+
+      if (scope === 'mine') {
+        const attendeeIds = appointment.raw.attendeeStaffIds ?? [];
+        if (appointment.clinicianId !== me.id && !attendeeIds.includes(me.id)) {
+          return false;
+        }
+      }
+
+      if (scope === 'team' && scopeTeamId && appointment.teamId !== scopeTeamId) {
+        return false;
+      }
+
+      if (clinicianFilter && appointment.clinicianId !== clinicianFilter) {
+        return false;
+      }
+
+      if (specialtyFilter && appointment.raw.specialtyCode !== specialtyFilter) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [clinicianFilter, me?.id, scope, scopeTeamId, specialtyFilter, summaries]);
+
+  const displayedRawAppointments = React.useMemo(
+    () => filteredAppointments.map((appointment) => appointment.raw),
+    [filteredAppointments],
+  );
+
+  const weekDates = React.useMemo(
+    () => getWeekDates(currentDate, view === 'week'),
+    [currentDate, view],
+  );
+
+  const handleOpenNew = () => {
+    setEditingAppointment(null);
+    setDialogOpen(true);
+  };
+
+  const handleSelectAppointment = (appointment: AppointmentResponse) => {
+    setEditingAppointment(appointment);
+    setDialogOpen(true);
+  };
+
+  const slotMinutes = prefs.data?.slotMinutes ?? 30;
+
+  if (meLoading || !me) {
+    return (
+      <Box display="flex" justifyContent="center" mt={6}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  return (
+    <Container maxWidth="xl" sx={{ py: 3 }}>
+      <Stack direction={{ xs: 'column', md: 'row' }} alignItems={{ xs: 'flex-start', md: 'center' }} spacing={2} mb={2}>
+        <Box sx={{ flex: 1 }}>
+          <Typography variant="h5" sx={{ fontWeight: 700 }}>
+            {routeLabel}
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            One scheduling surface for clinician, team, and clinic appointments, plus time blocking and external calendar sync.
+          </Typography>
+        </Box>
+        <Button
+          startIcon={<AddIcon />}
+          variant="contained"
+          onClick={handleOpenNew}
+          sx={{ bgcolor: '#b8621a', '&:hover': { bgcolor: '#d6741f' } }}
+        >
+          New Appointment
+        </Button>
+      </Stack>
+
+      {(appointmentsQuery.error || blocks.error || prefs.error || today.error) ? (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          Failed to load calendar data. Try refreshing.
+        </Alert>
+      ) : null}
+
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', xl: '2fr 1fr' }, gap: 3 }}>
+        <Stack spacing={2.5}>
+          <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
+            <Stack spacing={2}>
+              <Stack direction={{ xs: 'column', lg: 'row' }} spacing={1.5} alignItems={{ xs: 'flex-start', lg: 'center' }}>
+                <Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: 'wrap' }}>
+                  <Button size="small" variant="outlined" onClick={() => setCurrentDate(new Date())} startIcon={<TodayIcon />} sx={{ textTransform: 'none' }}>
+                    Today
+                  </Button>
+                  <Button size="small" variant="text" onClick={() => setCurrentDate((current) => {
+                    const next = new Date(current);
+                    next.setDate(next.getDate() - (view === 'day' ? 1 : view === 'month' ? 30 : 7));
+                    return next;
+                  })}>
+                    <ChevronLeftIcon fontSize="small" />
+                  </Button>
+                  <Button size="small" variant="text" onClick={() => setCurrentDate((current) => {
+                    const next = new Date(current);
+                    next.setDate(next.getDate() + (view === 'day' ? 1 : view === 'month' ? 30 : 7));
+                    return next;
+                  })}>
+                    <ChevronRightIcon fontSize="small" />
+                  </Button>
+                  <Typography variant="subtitle1" fontWeight={600}>
+                    {view === 'day'
+                      ? currentDate.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+                      : view === 'month'
+                        ? monthDate.toLocaleDateString('en-AU', { month: 'long', year: 'numeric' })
+                        : `${formatRangeDate(weekDates[0])} — ${formatRangeDate(weekDates[weekDates.length - 1])} ${weekDates[0].getFullYear()}`}
+                  </Typography>
+                </Stack>
+
+                <Box sx={{ flex: 1 }} />
+
+                <FormControl size="small" sx={{ minWidth: 140 }}>
+                  <InputLabel>Slot length</InputLabel>
+                  <Select
+                    value={slotMinutes}
+                    label="Slot length"
+                    onChange={(event) => updatePrefs.mutate({ slotMinutes: Number(event.target.value) as 15 | 20 | 30 | 45 | 60 })}
+                  >
+                    {SLOT_OPTIONS.map((option) => (
+                      <MenuItem key={option} value={option}>
+                        {option} min
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+                <TextField
+                  type="date"
+                  size="small"
+                  value={currentDate.toISOString().slice(0, 10)}
+                  onChange={(event: React.ChangeEvent<HTMLInputElement>) => setCurrentDate(new Date(`${event.target.value}T00:00:00`))}
+                  inputProps={{ 'aria-label': 'Selected date' }}
+                />
+              </Stack>
+
+              <Stack direction={{ xs: 'column', lg: 'row' }} spacing={1.5} alignItems={{ xs: 'flex-start', lg: 'center' }}>
+                <ToggleButtonGroup
+                  size="small"
+                  exclusive
+                  value={view}
+                  onChange={(_, value: CalendarView | null) => {
+                    if (value) setView(value);
+                  }}
+                >
+                  <ToggleButton value="month"><Tooltip title="Month"><CalendarMonthIcon fontSize="small" /></Tooltip></ToggleButton>
+                  <ToggleButton value="day"><Tooltip title="Day"><ViewDayIcon fontSize="small" /></Tooltip></ToggleButton>
+                  <ToggleButton value="workweek"><Tooltip title="Work Week"><CalendarMonthIcon fontSize="small" /></Tooltip></ToggleButton>
+                  <ToggleButton value="week"><Tooltip title="Full Week"><ViewWeekIcon fontSize="small" /></Tooltip></ToggleButton>
+                  <ToggleButton value="list"><Tooltip title="List"><ViewListIcon fontSize="small" /></Tooltip></ToggleButton>
+                </ToggleButtonGroup>
+
+                <ToggleButtonGroup
+                  size="small"
+                  exclusive
+                  value={scope}
+                  onChange={(_, value: CalendarScope | null) => {
+                    if (value) setScope(value);
+                  }}
+                >
+                  <ToggleButton value="mine">My appointments</ToggleButton>
+                  <ToggleButton value="team">Team view</ToggleButton>
+                  <ToggleButton value="clinic">Clinic view</ToggleButton>
+                </ToggleButtonGroup>
+              </Stack>
+
+              <Stack direction={{ xs: 'column', lg: 'row' }} spacing={1.5}>
+                <PatientSearchAutocomplete
+                  value={patientFilter}
+                  onChange={setPatientFilter}
+                  placeholder="Search patient…"
+                  sx={{ minWidth: 220 }}
+                />
+                <FormControl size="small" sx={{ minWidth: 180 }}>
+                  <InputLabel>Clinician</InputLabel>
+                  <Select value={clinicianFilter} onChange={(event) => setClinicianFilter(event.target.value)} label="Clinician">
+                    <MenuItem value="">All clinicians</MenuItem>
+                    {staffList.map((staff: StaffLookupRow) => (
+                      <MenuItem key={staff.id} value={staff.id}>
+                        {staff.givenName} {staff.familyName}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+                <FormControl size="small" sx={{ minWidth: 180 }}>
+                  <InputLabel>Team</InputLabel>
+                  <Select value={teamFilter} onChange={(event) => setTeamFilter(event.target.value)} label="Team">
+                    <MenuItem value="">All teams</MenuItem>
+                    {(scope === 'team' ? activeTeams.map((assignment) => ({ id: assignment.orgUnitId, name: assignment.orgUnitName })) : flatUnits).map((unit) => (
+                      <MenuItem key={unit.id} value={unit.id}>
+                        {unit.name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+                <FormControl size="small" sx={{ minWidth: 180 }}>
+                  <InputLabel>Specialty</InputLabel>
+                  <Select value={specialtyFilter} onChange={(event) => setSpecialtyFilter(event.target.value as SpecialtyType | '')} label="Specialty">
+                    <MenuItem value="">All specialties</MenuItem>
+                    {ALL_SPECIALTIES.map((code) => (
+                      <MenuItem key={code} value={code}>
+                        {SPECIALTY_DISPLAY[code]}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Stack>
+            </Stack>
+          </Paper>
+
+          {appointmentsQuery.isLoading ? (
+            <Box display="flex" justifyContent="center" py={6}>
+              <CircularProgress />
+            </Box>
+          ) : view === 'list' ? (
+            <ListView appointments={filteredAppointments} onSelect={handleSelectAppointment} />
+          ) : view === 'month' ? (
+            <AppointmentCalendar appointments={displayedRawAppointments} month={monthDate} onSelectAppointment={handleSelectAppointment} />
+          ) : view === 'day' ? (
+            <DayWeekGrid appointments={filteredAppointments} dates={[currentDate]} dayLabels={[currentDate.toLocaleDateString('en-AU', { weekday: 'short' })]} onSelect={handleSelectAppointment} />
+          ) : (
+            <DayWeekGrid appointments={filteredAppointments} dates={weekDates} dayLabels={view === 'week' ? ALLDAYS : WEEKDAYS} onSelect={handleSelectAppointment} />
+          )}
+
+          {prefs.data && blocks.data ? (
+            <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 2 }}>
+              <Stack spacing={1.5}>
+                <Typography variant="h6">Time blocking</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Availability and protected time live on the same scheduling page so clinicians can adjust workload and booked appointments together.
+                </Typography>
+                <AvailabilityGridEditor blocks={blocks.data} preferences={prefs.data} />
+              </Stack>
+            </Paper>
+          ) : null}
+        </Stack>
+
+        <Stack spacing={2.5}>
+          {today.data ? <TodayContactsView data={today.data} /> : <Box display="flex" justifyContent="center" py={6}><CircularProgress /></Box>}
+          <ICalSubscribeCard />
+        </Stack>
+      </Box>
+
+      <SchedulingAppointmentDialog
+        open={dialogOpen}
+        onClose={() => {
+          setDialogOpen(false);
+          setEditingAppointment(null);
+        }}
+        editing={editingAppointment}
+        flatUnits={flatUnits}
+        staffList={staffList}
+      />
+    </Container>
+  );
+}

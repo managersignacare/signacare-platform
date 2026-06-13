@@ -7,7 +7,7 @@ import { apiClient } from '../../services/apiClient';
 import { sharedBreadcrumbsKeys } from '../../queryKeys';
 
 const ROUTE_LABELS: Record<string, string> = {
-  dashboard: 'Dashboard', patients: 'Patients', appointments: 'Appointments',
+  dashboard: 'Dashboard', patients: 'Patients', appointments: 'My Calendar', calendar: 'My Calendar',
   referrals: 'Intake', settings: 'Settings', templates: 'Templates',
   'org-settings': 'Org Settings', 'staff-assignments': 'Staff', billing: 'Billing',
   tasks: 'Tasks', reports: 'Admin Reports', audit: 'Audit Log',

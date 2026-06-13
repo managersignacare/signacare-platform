@@ -13,6 +13,10 @@ import {
   Button,
   Chip,
   CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Divider,
   FormControl,
   IconButton,
@@ -21,6 +25,7 @@ import {
   MenuItem,
   Select,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -193,10 +198,6 @@ export const PatientDetailLayout: React.FC = () => {
     }
     setNavigatorOpen(true);
   }, [workbenchMode]);
-
-  useEffect(() => {
-    saveHiddenWorkbenchTabs(hiddenWorkbenchTabs);
-  }, [hiddenWorkbenchTabs]);
 
   const toggleWorkbenchMode = (nextMode: Exclude<WorkbenchMode, 'balanced'>) => {
     setWorkbenchMode((currentMode) => (currentMode === nextMode ? 'balanced' : nextMode));

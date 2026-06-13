@@ -184,7 +184,7 @@ export function KpiRow({
           value={String(appointments)}
           target={20}
           sparkData={spark(appointments)}
-          link="/appointments"
+          link="/calendar"
           previous={Math.round(appointments * 0.9)}
         />
       </Grid>

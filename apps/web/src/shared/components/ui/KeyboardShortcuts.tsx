@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 const SHORTCUTS: { key: string; label: string; action: string }[] = [
   { key: 'g d', label: 'Go to Dashboard', action: '/dashboard' },
   { key: 'g p', label: 'Go to Patients', action: '/patients' },
-  { key: 'g a', label: 'Go to Appointments', action: '/appointments' },
+  { key: 'g a', label: 'Go to My Calendar', action: '/calendar' },
   { key: 'g i', label: 'Go to Intake', action: '/referrals' },
   { key: 'g s', label: 'Go to Settings', action: '/settings' },
   { key: 'g t', label: 'Go to Tasks', action: '/tasks' },

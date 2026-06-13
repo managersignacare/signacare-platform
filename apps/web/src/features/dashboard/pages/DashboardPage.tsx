@@ -393,7 +393,7 @@ export default function DashboardPage(): React.ReactElement {
       icon: <LocalHospitalIcon sx={{ fontSize: 18, color: '#327C8D' }} />,
       content: renderSignalTiles([
         { label: 'My Patients', value: myPatientCount, color: '#327C8D', link: '/patients' },
-        { label: 'Upcoming Appointments', value: upcomingAppointments.length, color: '#2E7D32', link: '/appointments' },
+        { label: 'Upcoming Appointments', value: upcomingAppointments.length, color: '#2E7D32', link: '/calendar' },
         { label: 'Open Tasks', value: openTaskCount, color: '#D32F2F', link: '/tasks' },
         { label: 'New Messages', value: unreadMessages, color: '#1565C0', link: '/messages' },
       ]),
@@ -405,7 +405,7 @@ export default function DashboardPage(): React.ReactElement {
       size: 'lg',
       icon: <WarningAmberIcon sx={{ fontSize: 18, color: '#b8621a' }} />,
       content: renderSignalTiles([
-        { label: 'Did Not Attend', value: alertCounts.missedAppointments ?? 0, color: '#D32F2F', link: '/appointments' },
+        { label: 'Did Not Attend', value: alertCounts.missedAppointments ?? 0, color: '#D32F2F', link: '/calendar' },
         { label: 'Overdue LAI', value: alertCounts.laiOverdue ?? 0, color: '#D32F2F', link: '/list/lai' },
         { label: 'Upcoming LAI', value: alertCounts.laiUpcoming ?? 0, color: '#b8621a', link: '/list/lai' },
         { label: 'Overdue MHA', value: alertCounts.legalExpired ?? 0, color: '#D32F2F', link: '/list/mha' },
@@ -468,7 +468,7 @@ export default function DashboardPage(): React.ReactElement {
       id: 'clinician-signals', title: 'Clinician Signals', size: 'lg',
       icon: <TrendingUpIcon sx={{ fontSize: 18, color: '#327C8D' }} />,
       content: renderSignalTiles([
-        { label: 'Did Not Attend', value: alertCounts.missedAppointments ?? 0, color: '#D32F2F', link: '/appointments' },
+        { label: 'Did Not Attend', value: alertCounts.missedAppointments ?? 0, color: '#D32F2F', link: '/calendar' },
         { label: 'New Messages', value: unreadMessages, color: '#1565C0', link: '/messages' },
         { label: 'Overdue LAI', value: alertCounts.laiOverdue ?? 0, color: '#D32F2F', link: '/list/lai' },
         { label: 'Upcoming LAI', value: alertCounts.laiUpcoming ?? 0, color: '#b8621a', link: '/list/lai' },
@@ -503,7 +503,7 @@ export default function DashboardPage(): React.ReactElement {
       id: `${activeView}-signals`, title: 'Clinical Signals', size: 'lg',
       icon: <TrendingUpIcon sx={{ fontSize: 18, color: '#327C8D' }} />,
       content: renderSignalTiles([
-        { label: 'Did Not Attend', value: alertCounts.missedAppointments ?? 0, color: '#D32F2F', link: '/appointments' },
+        { label: 'Did Not Attend', value: alertCounts.missedAppointments ?? 0, color: '#D32F2F', link: '/calendar' },
         { label: 'New Messages', value: unreadMessages, color: '#1565C0', link: '/messages' },
         { label: 'Overdue LAI', value: alertCounts.laiOverdue ?? 0, color: '#D32F2F', link: '/list/lai' },
         { label: 'Upcoming LAI', value: alertCounts.laiUpcoming ?? 0, color: '#b8621a', link: '/list/lai' },
@@ -574,7 +574,7 @@ export default function DashboardPage(): React.ReactElement {
     const clinicianRows = teamDashboard?.clinicianBreakdown ?? [];
     const scopeLabel = teamDashboard?.scope.scopeLabel ?? selectedTeamScope?.label ?? 'Team scope';
     const signals = [
-      { label: 'Did Not Attend', value: totals?.didNotAttendAppointments ?? 0, color: '#D32F2F', link: '/appointments' },
+      { label: 'Did Not Attend', value: totals?.didNotAttendAppointments ?? 0, color: '#D32F2F', link: '/calendar' },
       { label: 'New Messages', value: totals?.unreadMessages ?? 0, color: '#1565C0', link: '/messages' },
       { label: 'Overdue LAI', value: totals?.overdueLai ?? 0, color: '#D32F2F', link: '/list/lai' },
       { label: 'Upcoming LAI', value: totals?.upcomingLai ?? 0, color: '#b8621a', link: '/list/lai' },
@@ -669,7 +669,7 @@ export default function DashboardPage(): React.ReactElement {
       size: 'lg',
       icon: <WarningAmberIcon sx={{ fontSize: 18, color: '#327C8D' }} />,
       content: renderSignalTiles([
-        { label: 'Did Not Attend', value: alertCounts.missedAppointments ?? 0, color: '#D32F2F', link: '/appointments' },
+        { label: 'Did Not Attend', value: alertCounts.missedAppointments ?? 0, color: '#D32F2F', link: '/calendar' },
         { label: 'New Messages', value: alertCounts.unreadMessages ?? 0, color: '#1565C0', link: '/messages' },
         { label: 'Overdue LAI', value: alertCounts.laiOverdue ?? 0, color: '#D32F2F', link: '/list/lai' },
         { label: 'Upcoming LAI', value: alertCounts.laiUpcoming ?? 0, color: '#b8621a', link: '/list/lai' },
