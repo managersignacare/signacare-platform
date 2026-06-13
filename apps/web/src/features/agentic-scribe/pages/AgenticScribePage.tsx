@@ -27,6 +27,7 @@ import type {
 import { AiGeneratedNoteSaveDialog } from '../../../shared/components/ui/AiGeneratedNoteSaveDialog';
 import { apiClient } from '../../../shared/services/apiClient';
 import { PatientSearchAutocomplete, type PatientOption } from '../../patients/components/PatientSearchAutocomplete';
+import { AmbientAiRecorder } from '../../patients/components/notes/AmbientAiRecorder';
 
 type DraftSelectionState = {
   labs: Record<string, boolean>;
@@ -237,7 +238,7 @@ export default function AgenticScribePage() {
                 Consultation Context
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Paste transcript content and generate structured drafts in one step.
+                Record with Medical Scribe or paste transcript content, then generate structured drafts in one step.
               </Typography>
 
               <Typography variant="caption" color="text.secondary">Patient (optional)</Typography>
@@ -247,6 +248,27 @@ export default function AgenticScribePage() {
                   onChange={(patient) => setSelectedPatient(patient)}
                 />
               </Box>
+
+              {selectedPatient ? (
+                <Box sx={{ mb: 2 }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.75 }}>
+                    Medical Scribe
+                  </Typography>
+                  <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2, bgcolor: '#FCFBF9' }}>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+                      Start an ambient recording here to populate the transcript automatically, then generate agentic drafts without copy-paste.
+                    </Typography>
+                    <AmbientAiRecorder
+                      patientId={selectedPatient.id}
+                      onTranscriptReady={(nextTranscript) => setTranscript(nextTranscript)}
+                    />
+                  </Paper>
+                </Box>
+              ) : (
+                <Alert severity="info" sx={{ mb: 2 }}>
+                  Select a patient to start Medical Scribe from this page, or paste a transcript manually below.
+                </Alert>
+              )}
 
               <TextField
                 label="Consultation Transcript"
