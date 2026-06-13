@@ -254,6 +254,24 @@ jobs:
         if: ${{ steps.meta.outputs.env_name != 'prod' }}
         run: az acr login --name "${{ steps.meta.outputs.acr_name }}"
 
+      - name: Reclaim runner disk headroom before image builds
+        if: ${{ steps.meta.outputs.env_name != 'prod' }}
+        run: |
+          set -euo pipefail
+          echo "Disk usage before cleanup:"
+          df -h
+
+          # GitHub-hosted runners include large language/runtime bundles we do
+          # not use in this workflow. Reclaiming them up front gives the
+          # Docker-heavy AI image stage enough headroom to complete reliably.
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+
+          echo "Disk usage after cleanup:"
+          df -h
+
       - name: Build + push apps/api image
         if: ${{ steps.meta.outputs.env_name != 'prod' }}
         id: build_api
@@ -289,6 +307,17 @@ jobs:
             --push .
           DIGEST="$(docker buildx imagetools inspect "$IMAGE" --format '{{.Manifest.Digest}}')"
           echo "web_image=$REPO@$DIGEST" >> "$GITHUB_OUTPUT"
+
+      - name: Prune Docker cache before AI runtime builds
+        if: ${{ steps.meta.outputs.env_name != 'prod' && steps.meta.outputs.ai_runtime_enabled == 'true' }}
+        run: |
+          set -euo pipefail
+          echo "Disk usage before Docker prune:"
+          df -h
+          docker buildx prune --all --force || true
+          docker system prune --all --force --volumes || true
+          echo "Disk usage after Docker prune:"
+          df -h
 
       - name: Build + push AI runtime images (separate services)
         if: ${{ steps.meta.outputs.env_name != 'prod' }}

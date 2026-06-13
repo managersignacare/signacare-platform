@@ -48,6 +48,20 @@ This means the safe operator flow is:
 - `npm run repo-split:sync-targets:local`
   runs sync without upstream fetch validation; use only when remote access is unavailable and local branch state has already been reviewed
 
+## Supported remote URLs
+
+The repo-split verifier accepts these `origin` forms for each target:
+
+- preferred machine-local SSH alias:
+  - `git@github-managersignacare:managersignacare/signacare-platform.git`
+  - `git@github-managersignacare:managersignacare/signacare-sara.git`
+  - `git@github-managersignacare:managersignacare/signacare-viva.git`
+- canonical alternatives:
+  - `git@github.com:managersignacare/<repo>.git`
+  - `https://github.com/managersignacare/<repo>.git`
+
+This allows the split repos to use a dedicated SSH identity without breaking the verifier.
+
 ## Sync guarantees
 
 `repo-split:sync-targets` now enforces:
@@ -56,7 +70,7 @@ This means the safe operator flow is:
 - target repos must be clean
 - target repos must be on `main`
 - target repos must track `origin/main`
-- target repo `origin` URLs must match the expected GitHub remotes
+- target repo `origin` URLs must match one of the approved GitHub remote forms
 - target repos are fetched before sync and must not be ahead/behind upstream
 - each target working tree is backed up before overwrite
 - post-sync directory verification must pass

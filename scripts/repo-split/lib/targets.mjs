@@ -9,21 +9,47 @@ export const TARGET_REPOS = {
     dir: path.resolve(REPO_ROOT, '..', 'signacare-platform'),
     expectedBranch: 'main',
     expectedUpstream: 'origin/main',
-    expectedOrigin: 'https://github.com/managersignacare/signacareplatform.git',
+    expectedOrigins: [
+      'git@github-managersignacare:managersignacare/signacare-platform.git',
+      'git@github.com:managersignacare/signacare-platform.git',
+      'https://github.com/managersignacare/signacare-platform.git',
+    ],
   },
   'signacare-sara': {
     dir: path.resolve(REPO_ROOT, '..', 'signacare-sara'),
     expectedBranch: 'main',
     expectedUpstream: 'origin/main',
-    expectedOrigin: 'https://github.com/managersignacare/Sara.git',
+    expectedOrigins: [
+      'git@github-managersignacare:managersignacare/signacare-sara.git',
+      'git@github.com:managersignacare/signacare-sara.git',
+      'https://github.com/managersignacare/signacare-sara.git',
+    ],
   },
   'signacare-viva': {
     dir: path.resolve(REPO_ROOT, '..', 'signacare-viva'),
     expectedBranch: 'main',
     expectedUpstream: 'origin/main',
-    expectedOrigin: 'https://github.com/managersignacare/viva.git',
+    expectedOrigins: [
+      'git@github-managersignacare:managersignacare/signacare-viva.git',
+      'git@github.com:managersignacare/signacare-viva.git',
+      'https://github.com/managersignacare/signacare-viva.git',
+    ],
   },
 };
+
+const EPHEMERAL_PATH_EXCLUDES = [
+  '.git',
+  '.DS_Store',
+  'node_modules',
+  '.vite',
+  'dist',
+  'coverage',
+  '.turbo',
+];
+
+function formatExpectedOrigins(origins) {
+  return origins.map((origin) => `'${origin}'`).join(', ');
+}
 
 function runGit(repoDir, args, options = {}) {
   return execFileSync('git', args, {
@@ -95,13 +121,13 @@ export function backupRepoWorkingTree(repoDir, backupRoot) {
 }
 
 export function syncMaterializedRepo(sourceDir, targetDir) {
+  const excludes = EPHEMERAL_PATH_EXCLUDES.flatMap((pattern) => ['--exclude', `${pattern}/`]);
   execFileSync(
     'rsync',
     [
       '-a',
       '--delete',
-      '--exclude', '.git/',
-      '--exclude', '.DS_Store',
+      ...excludes,
       `${sourceDir}/`,
       `${targetDir}/`,
     ],
@@ -111,9 +137,10 @@ export function syncMaterializedRepo(sourceDir, targetDir) {
 
 export function compareMaterializedRepo(sourceDir, targetDir) {
   try {
+    const excludes = EPHEMERAL_PATH_EXCLUDES.flatMap((pattern) => ['-x', pattern]);
     execFileSync(
       'diff',
-      ['-qr', '-x', '.git', '-x', '.DS_Store', sourceDir, targetDir],
+      ['-qr', ...excludes, sourceDir, targetDir],
       { stdio: 'pipe' },
     );
     return '';
@@ -193,8 +220,10 @@ export function validateTargetRepo(manifest, { fetch = true } = {}) {
   if (initial.upstream !== target.expectedUpstream) {
     throw new Error(`${target.dir} tracks '${initial.upstream || '(none)'}', expected '${target.expectedUpstream}'`);
   }
-  if (initial.origin !== target.expectedOrigin) {
-    throw new Error(`${target.dir} origin is '${initial.origin}', expected '${target.expectedOrigin}'`);
+  if (!target.expectedOrigins.includes(initial.origin)) {
+    throw new Error(
+      `${target.dir} origin is '${initial.origin}', expected one of ${formatExpectedOrigins(target.expectedOrigins)}`,
+    );
   }
 
   if (fetch) {
