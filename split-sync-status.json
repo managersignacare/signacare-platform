@@ -1,12 +1,12 @@
 {
   "version": 1,
   "syncMode": "one-way-authoritative-copy",
-  "generatedAt": "2026-06-13T01:23:21.295Z",
+  "generatedAt": "2026-06-13T01:31:24.362Z",
   "source": {
     "repoRoot": "/Users/drprakashkamath/Projects/Signacare",
     "remote": "https://github.com/Signacare/Signacare.git",
     "branch": "main",
-    "commit": "f3b82096a2a513e67647439075cdc729f54a75e3"
+    "commit": "a26651d8ee0f4da6501b55ecae37524f9dc7957a"
   },
   "target": {
     "repoName": "signacare-platform",

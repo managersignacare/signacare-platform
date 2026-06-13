@@ -45,6 +45,7 @@ const EPHEMERAL_PATH_EXCLUDES = [
   'dist',
   'coverage',
   '.turbo',
+  'split-sync-status.json',
 ];
 
 function formatExpectedOrigins(origins) {
@@ -136,6 +137,13 @@ export function syncMaterializedRepo(sourceDir, targetDir) {
 }
 
 export function compareMaterializedRepo(sourceDir, targetDir) {
+  const sourceMetadataPath = path.join(sourceDir, 'split-sync-status.json');
+  const targetMetadataPath = path.join(targetDir, 'split-sync-status.json');
+
+  if (!compareSplitSyncMetadata(sourceMetadataPath, targetMetadataPath)) {
+    return `Files ${sourceMetadataPath} and ${targetMetadataPath} differ (excluding generatedAt).`;
+  }
+
   try {
     const excludes = EPHEMERAL_PATH_EXCLUDES.flatMap((pattern) => ['-x', pattern]);
     execFileSync(
@@ -147,6 +155,24 @@ export function compareMaterializedRepo(sourceDir, targetDir) {
   } catch (error) {
     return error.stdout?.toString() || error.stderr?.toString() || 'Directories differ.';
   }
+}
+
+function compareSplitSyncMetadata(sourcePath, targetPath) {
+  const sourceExists = fs.existsSync(sourcePath);
+  const targetExists = fs.existsSync(targetPath);
+  if (!sourceExists || !targetExists) {
+    return sourceExists === targetExists;
+  }
+
+  const normalize = (value) => {
+    const clone = JSON.parse(JSON.stringify(value));
+    delete clone.generatedAt;
+    return clone;
+  };
+
+  const source = normalize(JSON.parse(fs.readFileSync(sourcePath, 'utf8')));
+  const target = normalize(JSON.parse(fs.readFileSync(targetPath, 'utf8')));
+  return JSON.stringify(source) === JSON.stringify(target);
 }
 
 export function buildSyncMetadata(manifest, sourceContext) {
