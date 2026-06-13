@@ -1,6 +1,7 @@
+import MailOutlineIcon from '@mui/icons-material/MailOutline';
 import {
     Alert, Box, Button, Checkbox, Chip, CircularProgress, Collapse, Dialog, DialogActions, DialogContent,
-    DialogTitle, Divider, FormControl, FormControlLabel, Grid, InputLabel, MenuItem,
+    DialogTitle, Divider, FormControl, FormControlLabel, Grid, InputLabel, Menu, MenuItem,
     Select, Switch, TextField, Typography
 } from '@mui/material';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -38,6 +39,14 @@ import type {
   Template,
   TemplateField,
 } from './AddNoteDialogSupport';
+import { LetterGeneratorDialog } from './LetterGeneratorDialog';
+
+type LetterRecipientType = 'provider' | 'patient' | 'support_person';
+
+interface SaveNoteRequest {
+  letterRecipientType?: LetterRecipientType;
+  status: string;
+}
 
 export interface AddNoteDialogProps {
   open: boolean;
@@ -114,12 +123,24 @@ export function AddNoteDialog({ open, onClose, patientId, defaultEpisodeId, note
   const [contactFormOpen, setContactFormOpen] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [dutyDialogOpen, setDutyDialogOpen] = useState(false);
-  const [retryStatusAfterDutyRelationship, setRetryStatusAfterDutyRelationship] = useState<string | null>(null);
+  const [retrySaveAfterDutyRelationship, setRetrySaveAfterDutyRelationship] = useState<SaveNoteRequest | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [letterMenuAnchor, setLetterMenuAnchor] = useState<HTMLElement | null>(null);
+  const [postSaveLetterRecipientType, setPostSaveLetterRecipientType] = useState<LetterRecipientType | null>(null);
+  const [postSaveLetterSnapshot, setPostSaveLetterSnapshot] = useState<{
+    content: string;
+    episodeId: string;
+    title: string;
+  } | null>(null);
+  const [savedContactSeed, setSavedContactSeed] = useState<{
+    episodeId: string;
+    title: string;
+  } | null>(null);
 
   // ── MFA + Signature State ──
   const [mfaOpen, setMfaOpen] = useState(false);
   const [signDialogOpen, setSignDialogOpen] = useState(false);
+  const [queuedLetterRecipientType, setQueuedLetterRecipientType] = useState<LetterRecipientType | null>(null);
   const { signature: savedSignature } = useStaffSignature();
   const user = useAuthStore(s => s.user);
   const signerName = `${user?.givenName ?? ''} ${user?.familyName ?? ''}`.trim();
@@ -156,6 +177,7 @@ export function AddNoteDialog({ open, onClose, patientId, defaultEpisodeId, note
     patientId,
     noteType,
   });
+  const supportsLetterFollowOn = noteType !== 'letter' && noteType !== 'message';
 
   const handleSignWithMfa = () => {
     if (!ensureCanSignFirstVisitChartReview(setSaveError)) {
@@ -164,11 +186,27 @@ export function AddNoteDialog({ open, onClose, patientId, defaultEpisodeId, note
     if (!ensureCanSignRecentRiskAssessment(setSaveError)) {
       return;
     }
+    setQueuedLetterRecipientType(null);
     if (requiresMfa) {
       setMfaOpen(true);
     } else {
-      saveMut.mutate('signed');
+      saveMut.mutate({ status: 'signed' });
     }
+  };
+  const handleSaveAndGenerateLetter = (recipientType: LetterRecipientType) => {
+    setLetterMenuAnchor(null);
+    if (!ensureCanSignFirstVisitChartReview(setSaveError)) {
+      return;
+    }
+    if (!ensureCanSignRecentRiskAssessment(setSaveError)) {
+      return;
+    }
+    setQueuedLetterRecipientType(recipientType);
+    if (requiresMfa) {
+      setMfaOpen(true);
+      return;
+    }
+    saveMut.mutate({ status: 'signed', letterRecipientType: recipientType });
   };
   const handleMfaVerified = () => {
     setMfaOpen(false);
@@ -184,7 +222,10 @@ export function AddNoteDialog({ open, onClose, patientId, defaultEpisodeId, note
       return;
     }
     setSignDialogOpen(false);
-    saveMut.mutate('signed');
+    saveMut.mutate({
+      status: 'signed',
+      ...(queuedLetterRecipientType ? { letterRecipientType: queuedLetterRecipientType } : {}),
+    });
   };
 
   React.useEffect(() => {
@@ -202,7 +243,12 @@ export function AddNoteDialog({ open, onClose, patientId, defaultEpisodeId, note
     setSaveError('');
     setSaveSuccess(false);
     setDutyDialogOpen(false);
-    setRetryStatusAfterDutyRelationship(null);
+    setRetrySaveAfterDutyRelationship(null);
+    setLetterMenuAnchor(null);
+    setPostSaveLetterRecipientType(null);
+    setPostSaveLetterSnapshot(null);
+    setQueuedLetterRecipientType(null);
+    setSavedContactSeed(null);
     setReviewedRecentLabs(false);
     setReviewedRecentImaging(false);
     setReviewedRecentMedications(false);
@@ -260,7 +306,7 @@ export function AddNoteDialog({ open, onClose, patientId, defaultEpisodeId, note
   }, [open, defaultTemplate, templateId, defaultContent]);
 
   const saveMut = useMutation({
-    mutationFn: (status: string) =>
+    mutationFn: ({ status }: SaveNoteRequest) =>
       apiClient.post(`patients/${patientId}/notes`, {
         episodeId: episodeId || undefined, templateId: templateId || undefined,
         title: title.trim(), noteType, content: content.trim(),
@@ -268,7 +314,7 @@ export function AddNoteDialog({ open, onClose, patientId, defaultEpisodeId, note
         status, didNotAttend,
         firstVisitChartReview: buildFirstVisitChartReviewPayload(status),
       }),
-    onSuccess: async () => {
+    onSuccess: async (_response, variables) => {
       // Force refetch (not just invalidate) so data is visible immediately
       await qc.refetchQueries({ queryKey: patientsKeys.notes(patientId) });
       qc.invalidateQueries({ queryKey: patientsKeys.notesPhysical(patientId) });
@@ -278,20 +324,33 @@ export function AddNoteDialog({ open, onClose, patientId, defaultEpisodeId, note
       qc.invalidateQueries({ queryKey: outcomeMeasuresKeys.byPatient(patientId) });
       setSaveError('');
       setDutyDialogOpen(false);
-      setRetryStatusAfterDutyRelationship(null);
+      setRetrySaveAfterDutyRelationship(null);
       setSaveSuccess(true);
+      setSavedContactSeed({
+        episodeId,
+        title: title.trim(),
+      });
+      if (variables.letterRecipientType) {
+        setPostSaveLetterSnapshot({
+          content: content.trim(),
+          episodeId,
+          title: title.trim(),
+        });
+        setPostSaveLetterRecipientType(variables.letterRecipientType);
+      } else {
+        setContactFormOpen(true);
+      }
+      setQueuedLetterRecipientType(null);
       // Reset form fields for next note
       setTitle(''); setContent(''); setTemplateId(''); setFoiContent(''); setFoiExempt(false); setDidNotAttend(false);
       resetFirstVisitChartReview();
-      // Show contact form after saving (for clinical encounters)
-      setContactFormOpen(true);
     },
-    onError: (err: unknown, status) => {
+    onError: (err: unknown, variables) => {
       if (err instanceof SignacareApiError && err.code === 'NO_PATIENT_RELATIONSHIP') {
         setDutyDialogOpen(true);
-        setRetryStatusAfterDutyRelationship(status);
+        setRetrySaveAfterDutyRelationship(variables);
       } else {
-        setRetryStatusAfterDutyRelationship(null);
+        setRetrySaveAfterDutyRelationship(null);
       }
       setSaveError(getErrorMessage(err, 'Failed to save note. Please try again.'));
     },
@@ -532,7 +591,7 @@ export function AddNoteDialog({ open, onClose, patientId, defaultEpisodeId, note
               setSaveError('');
               setDutyDialogOpen(false);
             }}
-            action={retryStatusAfterDutyRelationship ? (
+            action={retrySaveAfterDutyRelationship ? (
               <Button color="inherit" size="small" onClick={() => setDutyDialogOpen(true)}>
                 Add duty relationship
               </Button>
@@ -551,10 +610,38 @@ export function AddNoteDialog({ open, onClose, patientId, defaultEpisodeId, note
       <DialogActions sx={{ px: 3, py: 2, justifyContent: 'space-between' }}>
         <Button onClick={onClose} sx={{ color: 'text.secondary' }}>Cancel</Button>
         <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-          <Button variant="outlined" onClick={() => saveMut.mutate('draft')} disabled={!title.trim() || saveMut.isPending}
+          <Button variant="outlined" onClick={() => saveMut.mutate({ status: 'draft' })} disabled={!title.trim() || saveMut.isPending}
             sx={{ borderColor: '#327C8D', color: '#327C8D' }}>
             {saveMut.isPending ? <CircularProgress role="progressbar" aria-label="Loading" size={16} /> : 'Save as Draft'}
           </Button>
+          {supportsLetterFollowOn && (
+            <>
+              <Button
+                variant="outlined"
+                startIcon={<MailOutlineIcon />}
+                onClick={(event) => setLetterMenuAnchor(event.currentTarget)}
+                disabled={!title.trim() || saveMut.isPending || !canSignFirstVisitChartReview || !canSignRecentRiskAssessment || isCheckingRecentRiskAssessment}
+                sx={{ borderColor: '#7B1FA2', color: '#7B1FA2' }}
+              >
+                Save & Generate Letter
+              </Button>
+              <Menu
+                anchorEl={letterMenuAnchor}
+                open={Boolean(letterMenuAnchor)}
+                onClose={() => setLetterMenuAnchor(null)}
+              >
+                <MenuItem onClick={() => handleSaveAndGenerateLetter('provider')}>
+                  Provider letter
+                </MenuItem>
+                <MenuItem onClick={() => handleSaveAndGenerateLetter('patient')}>
+                  Patient letter
+                </MenuItem>
+                <MenuItem onClick={() => handleSaveAndGenerateLetter('support_person')}>
+                  Support person letter
+                </MenuItem>
+              </Menu>
+            </>
+          )}
           <Button variant="contained" onClick={handleSignWithMfa}
             disabled={!title.trim() || saveMut.isPending || !canSignFirstVisitChartReview || !canSignRecentRiskAssessment || isCheckingRecentRiskAssessment}
             sx={{ bgcolor: '#b8621a', '&:hover': { bgcolor: '#d6741f' } }}>
@@ -565,11 +652,22 @@ export function AddNoteDialog({ open, onClose, patientId, defaultEpisodeId, note
     </Dialog>
 
     {/* MFA Challenge — before signing */}
-    <MfaChallengeDialog open={mfaOpen} onClose={() => setMfaOpen(false)} onVerified={handleMfaVerified}
+    <MfaChallengeDialog
+      open={mfaOpen}
+      onClose={() => {
+        setMfaOpen(false);
+        setQueuedLetterRecipientType(null);
+      }}
+      onVerified={handleMfaVerified}
       title="Verify Identity to Sign" description="Signing a clinical document requires verification." />
 
     {/* Digital Signature — after MFA */}
-    <DigitalSignatureDialog open={signDialogOpen} onClose={() => setSignDialogOpen(false)}
+    <DigitalSignatureDialog
+      open={signDialogOpen}
+      onClose={() => {
+        setSignDialogOpen(false);
+        setQueuedLetterRecipientType(null);
+      }}
       onSign={handleSignatureConfirmed} signerName={signerName} documentTitle={title}
       savedSignature={savedSignature} />
 
@@ -579,6 +677,7 @@ export function AddNoteDialog({ open, onClose, patientId, defaultEpisodeId, note
       patientId={patientId}
       onClose={async () => {
         setContactFormOpen(false);
+        setSavedContactSeed(null);
         await qc.refetchQueries({ queryKey: patientsKeys.notes(patientId) });
         qc.invalidateQueries({ queryKey: patientsKeys.notesPhysical(patientId) });
         onSaved?.();
@@ -586,26 +685,47 @@ export function AddNoteDialog({ open, onClose, patientId, defaultEpisodeId, note
       }}
       onSaved={async () => {
         setContactFormOpen(false);
+        setSavedContactSeed(null);
         await qc.refetchQueries({ queryKey: patientsKeys.notes(patientId) });
         qc.invalidateQueries({ queryKey: patientReferralsKeys.unifiedContacts(patientId) });
         onSaved?.();
         onClose();
       }}
       initialNoteType={noteType}
-      initialNoteTitle={title.trim() || noteType}
-      initialEpisodeId={episodeId}
+      initialNoteTitle={savedContactSeed?.title || title.trim() || noteType}
+      initialEpisodeId={savedContactSeed?.episodeId || episodeId}
     />
+    {postSaveLetterRecipientType && postSaveLetterSnapshot && (
+      <LetterGeneratorDialog
+        open={true}
+        onClose={() => {
+          setPostSaveLetterRecipientType(null);
+          setPostSaveLetterSnapshot(null);
+          setContactFormOpen(true);
+        }}
+        patientId={patientId}
+        noteContent={postSaveLetterSnapshot.content}
+        noteTitle={postSaveLetterSnapshot.title}
+        recipientType={postSaveLetterRecipientType}
+        episodeId={postSaveLetterSnapshot.episodeId}
+        onSaved={() => {
+          setPostSaveLetterRecipientType(null);
+          setPostSaveLetterSnapshot(null);
+        setContactFormOpen(true);
+      }}
+    />
+    )}
     <DutyRelationshipDialog
       open={dutyDialogOpen}
       patientId={patientId}
       onClose={() => setDutyDialogOpen(false)}
       onCreated={() => {
         setSaveError('');
-        const retryStatus = retryStatusAfterDutyRelationship;
-        setRetryStatusAfterDutyRelationship(null);
+        const retrySave = retrySaveAfterDutyRelationship;
+        setRetrySaveAfterDutyRelationship(null);
         setDutyDialogOpen(false);
-        if (retryStatus) {
-          saveMut.mutate(retryStatus);
+        if (retrySave) {
+          saveMut.mutate(retrySave);
         }
       }}
     />
