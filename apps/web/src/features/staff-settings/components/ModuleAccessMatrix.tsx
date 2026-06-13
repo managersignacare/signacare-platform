@@ -79,8 +79,8 @@ const MODULE_LABELS: Record<string, string> = {
   // New (enforced) modules
   imports: 'Bulk imports',
   'patient-allocations': 'Patient re-allocations',
-  'medical-scribe': 'Medical scribe',
-  'agentic-ai-scribe': 'Agentic AI scribe (next-gen)',
+  'medical-scribe': 'Medical scribe (ambient)',
+  'agentic-ai-scribe': 'Medical scribe drafting',
   ai: 'AI (suggestions, summaries)',
   'ai-agent': 'AI agent (autonomous)',
   pathways: 'Pathways',

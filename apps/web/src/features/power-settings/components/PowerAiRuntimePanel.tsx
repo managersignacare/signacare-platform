@@ -173,8 +173,8 @@ export function PowerAiRuntimePanel() {
                 fullWidth
                 helperText="This controls the clinic’s preferred scribe surface. Whisper Sync remains the transcription backend either way."
               >
-                <MenuItem value="standard">Regular Scribe</MenuItem>
-                <MenuItem value="agentic">Agentic Scribe</MenuItem>
+                <MenuItem value="standard">Medical Scribe</MenuItem>
+                <MenuItem value="agentic">Medical Scribe + Drafting</MenuItem>
               </TextField>
 
               <TextField

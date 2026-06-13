@@ -31,14 +31,14 @@ describe('BUG-PATHWAYS-MODULE-TOGGLE-CATALOG', () => {
   it('includes agentic-ai-scribe in Power Settings and onboarding catalogs', () => {
     const found = ALL_MODULES.find((m) => m.key === 'agentic-ai-scribe');
     expect(found).toBeTruthy();
-    expect(found?.label).toContain('Agentic AI Scribe');
-    expect(onboardingWizardSource).toContain("{ key: 'agentic-ai-scribe', label: 'Agentic AI Scribe (Next-Gen)' }");
+    expect(found?.label).toContain('Medical Scribe Drafting');
+    expect(onboardingWizardSource).toContain("{ key: 'agentic-ai-scribe', label: 'Medical Scribe Drafting' }");
   });
 
   it('uses canonical module keys for ambient scribe and AI agent in catalogs', () => {
     expect(ALL_MODULES.find((m) => m.key === 'medical-scribe')).toBeTruthy();
     expect(ALL_MODULES.find((m) => m.key === 'ai-agent')).toBeTruthy();
-    expect(onboardingWizardSource).toContain("{ key: 'medical-scribe', label: 'AI Scribe' }");
+    expect(onboardingWizardSource).toContain("{ key: 'medical-scribe', label: 'Medical Scribe (Ambient)' }");
     expect(onboardingWizardSource).toContain("{ key: 'ai-agent', label: 'AI Agent' }");
     expect(onboardingWizardSource).not.toContain("key: 'ai_scribe'");
     expect(onboardingWizardSource).not.toContain("key: 'ai_agent'");

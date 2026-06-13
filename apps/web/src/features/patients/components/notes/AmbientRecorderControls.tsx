@@ -106,11 +106,11 @@ export function AmbientRecorderControls({
             {processing ? 'Processing...' : recording ? `Stop (${formatDuration(duration)})` : 'Medical Scribe'}
           </Button>
 
-          {/* Agentic AI entry point — visible alongside Medical Scribe so a
-              clinician finishing a recording can open the Agentic Scribe
+          {/* Drafting entry point — visible alongside Medical Scribe so a
+              clinician finishing a recording can open the downstream drafting
               workflow without backtracking to the sidebar / AI Assistant. */}
           {!recording && !processing && (
-            <Tooltip title="Open Agentic AI — multi-step clinical drafts from transcript">
+            <Tooltip title="Open Medical Scribe Drafting — generate follow-up drafts from the captured transcript">
               <Button
                 size="small"
                 variant="outlined"
@@ -126,7 +126,7 @@ export function AmbientRecorderControls({
                   fontWeight: 600,
                 }}
               >
-                Agentic AI
+                Draft Actions
               </Button>
             </Tooltip>
           )}
