@@ -218,10 +218,10 @@ export default function AgenticScribePage() {
           <AutoAwesomeIcon sx={{ color: '#005b96' }} />
           <Box>
             <Typography variant="h6" fontWeight={700}>
-              Agentic AI Scribe (Next-Gen)
+              Medical Scribe
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              In-visit draft generation for lab orders, referrals, and follow-up appointments.
+              Ambient recording with optional draft generation for lab orders, referrals, and follow-up appointments.
             </Typography>
           </Box>
         </Stack>
@@ -256,7 +256,7 @@ export default function AgenticScribePage() {
                   </Typography>
                   <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2, bgcolor: '#FCFBF9' }}>
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-                      Start an ambient recording here to populate the transcript automatically, then generate agentic drafts without copy-paste.
+                      Start an ambient recording here to populate the transcript automatically, then generate downstream AI drafts without copy-paste.
                     </Typography>
                     <AmbientAiRecorder
                       patientId={selectedPatient.id}

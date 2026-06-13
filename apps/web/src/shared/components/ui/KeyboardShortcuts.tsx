@@ -10,7 +10,7 @@ const SHORTCUTS: { key: string; label: string; action: string }[] = [
   { key: 'g s', label: 'Go to Settings', action: '/settings' },
   { key: 'g t', label: 'Go to Tasks', action: '/tasks' },
   { key: 'g x', label: 'Go to AI Assistant', action: '/ai-agent' },
-  { key: 'g y', label: 'Go to Agentic Scribe', action: '/agentic-scribe' },
+  { key: 'g y', label: 'Go to Medical Scribe', action: '/agentic-scribe' },
   { key: 'g e', label: 'Go to Exports', action: '/exports' },
   { key: '/', label: 'Focus search', action: 'focus-search' },
   { key: '?', label: 'Show shortcuts', action: 'show-help' },

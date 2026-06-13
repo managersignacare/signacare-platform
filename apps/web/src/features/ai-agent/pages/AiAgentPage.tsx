@@ -77,7 +77,7 @@ export default function AiAgentPage() {
         <Tabs aria-label="Navigation tabs" value={topTab} onChange={(_, v) => setTopTab(v)} sx={{ mt: 1, '& .MuiTab-root': { textTransform: 'none', fontFamily: 'Albert Sans, sans-serif', color: 'rgba(255,255,255,0.7)', '&.Mui-selected': { color: '#fff' } }, '& .MuiTabs-indicator': { bgcolor: '#fff' } }}>
           <Tab icon={<AutoAwesomeIcon sx={{ fontSize: 16 }} />} iconPosition="start" label="Clinical AI Tools" value="clinical" />
           <Tab icon={<ChatIcon sx={{ fontSize: 16 }} />} iconPosition="start" label="AI Agent Chat" value="agent" />
-          <Tab icon={<AutoAwesomeIcon sx={{ fontSize: 16 }} />} iconPosition="start" label="Agentic AI" value="agentic" />
+          <Tab icon={<AutoAwesomeIcon sx={{ fontSize: 16 }} />} iconPosition="start" label="Medical Scribe" value="agentic" />
         </Tabs>
       </Box>
 
@@ -91,10 +91,10 @@ export default function AiAgentPage() {
 }
 
 /**
- * In-page launcher for the Agentic Scribe (Agentic AI) surface.
+ * In-page launcher for the Medical Scribe surface.
  *
- * AI Assistant keeps an in-page launcher for the Agentic Scribe
- * surface even though Medical Scribe is also exposed directly in the
+ * AI Assistant keeps an in-page launcher for Medical Scribe even
+ * though the same surface is also exposed directly in the
  * sidebar. This preserves a cohesive AI workspace while still giving
  * clinicians a faster direct navigation path when they already know
  * they want scribe tooling.
@@ -113,28 +113,28 @@ function AgenticAiLauncherPanel({ onOpen }: { onOpen: () => void }) {
           </Box>
           <Box>
             <Typography variant="h6" fontWeight={700} fontFamily="Albert Sans, sans-serif">
-              Agentic AI
+              Medical Scribe
             </Typography>
             <Typography variant="caption" color="text.secondary">
-              Multi-step clinical task drafts from your session transcript
+              Ambient recording with optional agentic follow-through drafts
             </Typography>
           </Box>
         </Box>
         <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
-          Agentic AI proposes structured drafts (referrals, follow-up tasks, escalations)
-          from an ambient or pasted clinical transcript and lets you accept or reject
-          each draft individually. It is governed by the same on-prem LLM as the rest
-          of the AI Assistant.
+          Start an ambient clinical recording, review the transcript, then optionally
+          generate structured drafts for referrals, follow-up tasks, and escalations
+          without leaving the AI Assistant workspace. It is governed by the same
+          on-prem LLM as the rest of the AI Assistant.
         </Typography>
         <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
           <Button
             variant="contained"
             startIcon={<AutoAwesomeIcon />}
             onClick={onOpen}
-            data-testid="aiagent-open-agentic-scribe"
+            data-testid="aiagent-open-medical-scribe"
             sx={{ bgcolor: '#b8621a', '&:hover': { bgcolor: '#a05418' }, textTransform: 'none', fontWeight: 600 }}
           >
-            Open Agentic Scribe
+            Open Medical Scribe
           </Button>
           <Typography variant="caption" color="text.secondary">
             Cmd-K shortcut: <Chip label="g y" size="small" sx={{ ml: 0.5, height: 20, fontSize: 10 }} />

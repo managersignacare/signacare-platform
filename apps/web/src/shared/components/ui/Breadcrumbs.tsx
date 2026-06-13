@@ -12,7 +12,7 @@ const ROUTE_LABELS: Record<string, string> = {
   'org-settings': 'Org Settings', 'staff-assignments': 'Staff', billing: 'Billing',
   tasks: 'Tasks', reports: 'Admin Reports', audit: 'Audit Log',
   'ai-agent': 'AI Assistant', exports: 'Data Exports', subscription: 'Subscription',
-  'agentic-scribe': 'Agentic Scribe',
+  'agentic-scribe': 'Medical Scribe',
   'power-settings': 'Power Settings', list: 'Lists', episodes: 'Episodes',
   medications: 'Medications',
 };

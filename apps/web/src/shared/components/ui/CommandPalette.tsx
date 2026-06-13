@@ -66,7 +66,7 @@ export function CommandPalette() {
     { id: 'nav-referrals', label: 'Referral Management', icon: <SwapHorizIcon sx={{ fontSize: 18 }} />, action: () => navigate('/referrals'), category: 'navigation' },
     { id: 'nav-calendar', label: 'My Calendar', icon: <CalendarMonthIcon sx={{ fontSize: 18 }} />, action: () => navigate('/calendar'), category: 'navigation' },
     { id: 'nav-ai', label: 'AI Assistant', icon: <AutoAwesomeIcon sx={{ fontSize: 18 }} />, action: () => navigate('/ai-agent'), category: 'navigation' },
-    { id: 'nav-agentic-scribe', label: 'Agentic Scribe', icon: <AutoAwesomeIcon sx={{ fontSize: 18 }} />, action: () => navigate('/agentic-scribe'), category: 'navigation' },
+    { id: 'nav-medical-scribe', label: 'Medical Scribe', icon: <AutoAwesomeIcon sx={{ fontSize: 18 }} />, action: () => navigate('/agentic-scribe'), category: 'navigation' },
     { id: 'nav-drafts', label: 'Drafts', icon: <NoteAddIcon sx={{ fontSize: 18 }} />, action: () => navigate('/drafts'), category: 'navigation' },
   ], [navigate]);
 
