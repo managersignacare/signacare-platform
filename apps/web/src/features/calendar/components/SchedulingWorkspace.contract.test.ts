@@ -35,4 +35,11 @@ describe('SchedulingWorkspace source contract', () => {
     expect(source).toContain('onCreateSlot');
     expect(source).toContain('handleOpenNew({ date, startTime })');
   });
+
+  it('supports calendar search, status filtering, and drag-drop rescheduling', () => {
+    expect(source).toContain('label="Status"');
+    expect(source).toContain('label="Search"');
+    expect(source).toContain('handleDropAppointment');
+    expect(source).toContain('draggable');
+  });
 });

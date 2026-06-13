@@ -40,7 +40,7 @@ export const appointmentApi = {
     status: AppointmentStatus,
     checkInNotes?: string,
   ): Promise<Appointment> => {
-    return apiClient.patch<Appointment>(`appointments/${id}/status`, {
+    return apiClient.post<Appointment>(`appointments/${id}/status`, {
       status,
       checkInNotes,
     });

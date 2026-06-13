@@ -6,6 +6,7 @@ import { getAppointmentStatusMeta } from '../types/appointmentTypes';
 interface Props {
   appointments: Appointment[];
   month: Date;
+  onDropAppointment?: (appointment: Appointment, day: Date) => void;
   onSelectAppointment?: (appointment: Appointment) => void;
   onSelectDay?: (day: Date) => void;
 }
@@ -29,6 +30,7 @@ const isSameDay = (left: Date, right: Date): boolean =>
 export const AppointmentCalendar = ({
   appointments,
   month,
+  onDropAppointment,
   onSelectAppointment,
   onSelectDay,
 }: Props) => {
@@ -61,6 +63,20 @@ export const AppointmentCalendar = ({
             <Grid size={12 / 7} key={day.toISOString()}>
               <Paper
                 variant="outlined"
+                onDragOver={(event) => {
+                  if (onDropAppointment) {
+                    event.preventDefault();
+                  }
+                }}
+                onDrop={(event) => {
+                  if (!onDropAppointment) return;
+                  event.preventDefault();
+                  const appointmentId = event.dataTransfer.getData('text/appointment-id');
+                  const appointment = appointments.find((row) => row.id === appointmentId);
+                  if (appointment) {
+                    onDropAppointment(appointment, day);
+                  }
+                }}
                 sx={{
                   minHeight: 132,
                   p: 1,
@@ -87,12 +103,17 @@ export const AppointmentCalendar = ({
                     return (
                       <Chip
                         key={appointment.id}
+                        draggable
                         size="small"
                         label={`${new Date(appointment.startTime).toLocaleTimeString([], {
                           hour: '2-digit',
                           minute: '2-digit',
                         })} ${appointment.type}`}
                         color={meta.color}
+                        onDragStart={(event) => {
+                          event.dataTransfer.setData('text/appointment-id', appointment.id);
+                          event.dataTransfer.effectAllowed = 'move';
+                        }}
                         onClick={() => onSelectAppointment?.(appointment)}
                         sx={{ justifyContent: 'flex-start' }}
                       />

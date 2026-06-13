@@ -24,11 +24,12 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ALL_SPECIALTIES,
   SPECIALTY_DISPLAY,
   type AppointmentMode,
+  type AppointmentStatus,
   type AppointmentResponse,
   type SpecialtyType,
 } from '@signacare/shared';
@@ -45,6 +46,7 @@ import { AppointmentDetailsDrawer } from '../../appointments/components/Appointm
 import { appointmentKeys } from '../../appointments/queryKeys';
 import { appointmentApi } from '../../appointments/services/appointmentApi';
 import { AppointmentCalendar } from '../../appointments/components/AppointmentCalendar';
+import { calendarKeys } from '../queryKeys';
 import {
   useCalendarPreferences,
   useUpdateCalendarPreferences,
@@ -53,10 +55,15 @@ import { useCalendarBlocks } from '../hooks/useCalendarBlocks';
 import { useTodayView } from '../hooks/useTodayView';
 import { AvailabilityGridEditor } from './AvailabilityGridEditor';
 import { ICalSubscribeCard } from './ICalSubscribeCard';
+import {
+  buildRescheduledTimes,
+  matchesSchedulingSearch,
+} from './schedulingWorkspaceSupport';
 import { TodayContactsView } from './TodayContactsView';
 
 type CalendarScope = 'mine' | 'team' | 'clinic';
 type CalendarView = 'month' | 'day' | 'workweek' | 'week' | 'list';
+type DragSlot = `${string}|${string}`;
 
 interface StaffLookupRow {
   id: string;
@@ -92,6 +99,16 @@ const SLOT_OPTIONS = [15, 20, 30, 45, 60] as const;
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
 const ALLDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const HOURS = Array.from({ length: 12 }, (_, index) => index + 7);
+const APPOINTMENT_STATUS_OPTIONS: AppointmentStatus[] = [
+  'scheduled',
+  'confirmed',
+  'arrived',
+  'in_session',
+  'completed',
+  'cancelled',
+  'no_show',
+  'rescheduled',
+];
 
 const APPOINTMENT_TYPE_LABELS: Record<string, string> = {
   assessment: 'Assessment',
@@ -182,12 +199,24 @@ function DayWeekGrid({
   appointments,
   dates,
   dayLabels,
+  draggingAppointmentId,
+  dropTargetSlot,
+  onDragHoverSlot,
+  onDragEndAppointment,
+  onDragStartAppointment,
+  onDropAppointment,
   onCreateSlot,
   onSelect,
 }: {
   appointments: AppointmentSummary[];
   dates: Date[];
   dayLabels: string[];
+  draggingAppointmentId: string | null;
+  dropTargetSlot: DragSlot | null;
+  onDragHoverSlot: (slot: DragSlot | null) => void;
+  onDragEndAppointment: () => void;
+  onDragStartAppointment: (appointment: AppointmentResponse) => void;
+  onDropAppointment: (appointment: AppointmentResponse, date: string, startTime: string) => void;
   onCreateSlot: (date: string, startTime: string) => void;
   onSelect: (appointment: AppointmentResponse) => void;
 }) {
@@ -219,14 +248,43 @@ function DayWeekGrid({
             {dates.map((date) => {
               const iso = date.toISOString().slice(0, 10);
               const slotAppointments = appointments.filter((appointment) => appointment.date === iso && appointment.startHour === hour);
+              const slotKey = `${iso}|${String(hour).padStart(2, '0')}:00` as DragSlot;
               return (
                 <Box
                   key={`${iso}-${hour}`}
                   role="button"
                   tabIndex={0}
                   aria-label={`Create appointment on ${iso} at ${String(hour).padStart(2, '0')}:00`}
-                  sx={{ borderBottom: '1px solid', borderLeft: '1px solid', borderColor: 'divider', minHeight: 54, p: 0.25, cursor: 'pointer' }}
+                  sx={{
+                    borderBottom: '1px solid',
+                    borderLeft: '1px solid',
+                    borderColor: 'divider',
+                    minHeight: 54,
+                    p: 0.25,
+                    cursor: 'pointer',
+                    bgcolor: dropTargetSlot === slotKey ? '#FFF3E0' : undefined,
+                  }}
                   onClick={() => onCreateSlot(iso, `${String(hour).padStart(2, '0')}:00`)}
+                  onDragOver={(event) => {
+                    if (draggingAppointmentId) {
+                      event.preventDefault();
+                      onDragHoverSlot(slotKey);
+                    }
+                  }}
+                  onDrop={(event) => {
+                    if (!draggingAppointmentId) return;
+                    event.preventDefault();
+                    const appointmentId = event.dataTransfer.getData('text/appointment-id');
+                    const appointment = appointments.find((row) => row.raw.id === appointmentId);
+                    if (appointment) {
+                      onDropAppointment(
+                        appointment.raw,
+                        iso,
+                        `${String(hour).padStart(2, '0')}:00`,
+                      );
+                    }
+                    onDragHoverSlot(null);
+                  }}
                   onKeyDown={(event) => {
                     if (event.key === 'Enter' || event.key === ' ') {
                       event.preventDefault();
@@ -237,9 +295,24 @@ function DayWeekGrid({
                   {slotAppointments.map((appointment) => (
                     <Tooltip key={appointment.raw.id} title={`${appointment.clinicianName} | ${appointment.modeLabel}`}>
                       <Box
+                        draggable
                         role="button"
                         tabIndex={0}
-                        sx={{ bgcolor: '#E3F2FD', borderLeft: '3px solid #2196F3', borderRadius: 0.5, p: 0.5, mb: 0.25, cursor: 'pointer' }}
+                        sx={{
+                          bgcolor: '#E3F2FD',
+                          borderLeft: '3px solid #2196F3',
+                          borderRadius: 0.5,
+                          p: 0.5,
+                          mb: 0.25,
+                          cursor: 'pointer',
+                          opacity: draggingAppointmentId === appointment.raw.id ? 0.55 : 1,
+                        }}
+                        onDragEnd={onDragEndAppointment}
+                        onDragStart={(event) => {
+                          event.dataTransfer.setData('text/appointment-id', appointment.raw.id);
+                          event.dataTransfer.effectAllowed = 'move';
+                          onDragStartAppointment(appointment.raw);
+                        }}
                         onClick={(event) => {
                           event.stopPropagation();
                           onSelect(appointment.raw);
@@ -315,6 +388,7 @@ function ListView({
 export function SchedulingWorkspace({
   routeLabel = 'My Calendar',
 }: SchedulingWorkspaceProps) {
+  const queryClient = useQueryClient();
   const { data: me, isLoading: meLoading } = useCurrentUser();
   const { data: tree } = useOrgTree();
   const { data: staffList = [] } = useQuery({
@@ -337,12 +411,18 @@ export function SchedulingWorkspace({
   const [teamFilter, setTeamFilter] = React.useState('');
   const [clinicianFilter, setClinicianFilter] = React.useState('');
   const [specialtyFilter, setSpecialtyFilter] = React.useState<SpecialtyType | ''>('');
+  const [statusFilter, setStatusFilter] = React.useState<AppointmentStatus | ''>('');
+  const [searchTerm, setSearchTerm] = React.useState('');
   const [patientFilter, setPatientFilter] = React.useState<PatientOption | null>(null);
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [dialogSeed, setDialogSeed] = React.useState<AppointmentDraftSeed | null>(null);
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const [editingAppointment, setEditingAppointment] = React.useState<AppointmentResponse | null>(null);
   const [selectedAppointment, setSelectedAppointment] = React.useState<AppointmentResponse | null>(null);
+  const [draggingAppointmentId, setDraggingAppointmentId] = React.useState<string | null>(null);
+  const [dropTargetSlot, setDropTargetSlot] = React.useState<DragSlot | null>(null);
+  const [rescheduleError, setRescheduleError] = React.useState('');
+  const [reschedulingAppointmentId, setReschedulingAppointmentId] = React.useState<string | null>(null);
 
   const prefs = useCalendarPreferences();
   const updatePrefs = useUpdateCalendarPreferences();
@@ -420,9 +500,25 @@ export function SchedulingWorkspace({
         return false;
       }
 
+      if (statusFilter && appointment.raw.status !== statusFilter) {
+        return false;
+      }
+
+      if (!matchesSchedulingSearch({
+        title: appointment.title,
+        clinicianName: appointment.clinicianName,
+        teamName: appointment.teamName,
+        modeLabel: appointment.modeLabel,
+        status: appointment.raw.status,
+        patientId: appointment.raw.patientId,
+        attendeeStaffNames: appointment.raw.attendeeStaffNames,
+      }, searchTerm)) {
+        return false;
+      }
+
       return true;
     });
-  }, [clinicianFilter, me?.id, scope, scopeTeamId, specialtyFilter, summaries]);
+  }, [clinicianFilter, me?.id, scope, scopeTeamId, searchTerm, specialtyFilter, statusFilter, summaries]);
 
   const displayedRawAppointments = React.useMemo(
     () => filteredAppointments.map((appointment) => appointment.raw),
@@ -443,6 +539,7 @@ export function SchedulingWorkspace({
   };
 
   const handleSelectAppointment = (appointment: AppointmentResponse) => {
+    setRescheduleError('');
     setSelectedAppointment(appointment);
     setDrawerOpen(true);
   };
@@ -453,6 +550,59 @@ export function SchedulingWorkspace({
     setDialogSeed(null);
     setEditingAppointment(appointment);
     setDialogOpen(true);
+  };
+
+  const invalidateSchedulingQueries = async (patientId: string) => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: appointmentKeys.all }),
+      queryClient.invalidateQueries({ queryKey: calendarKeys.all }),
+      queryClient.invalidateQueries({ queryKey: ['patient-appointments', patientId] }),
+      queryClient.invalidateQueries({ queryKey: ['appointments', patientId] }),
+    ]);
+  };
+
+  const handleDragStartAppointment = (appointment: AppointmentResponse) => {
+    setRescheduleError('');
+    setDraggingAppointmentId(appointment.id);
+  };
+
+  const handleDragEndAppointment = () => {
+    setDraggingAppointmentId(null);
+    setDropTargetSlot(null);
+  };
+
+  const handleDropAppointment = async (
+    appointment: AppointmentResponse,
+    date: string,
+    startTime?: string,
+  ) => {
+    const nextTimes = buildRescheduledTimes(appointment, date, startTime);
+    if (
+      nextTimes.startTime === appointment.startTime &&
+      nextTimes.endTime === appointment.endTime
+    ) {
+      handleDragEndAppointment();
+      return;
+    }
+
+    setRescheduleError('');
+    setReschedulingAppointmentId(appointment.id);
+    setDropTargetSlot(startTime ? `${date}|${startTime}` as DragSlot : null);
+
+    try {
+      const updated = await appointmentApi.update(appointment.id, nextTimes);
+      await invalidateSchedulingQueries(appointment.patientId);
+      setSelectedAppointment((current) => (current?.id === updated.id ? updated : current));
+    } catch (error) {
+      setRescheduleError(
+        error instanceof Error
+          ? error.message
+          : 'Failed to reschedule the appointment.',
+      );
+    } finally {
+      setReschedulingAppointmentId(null);
+      handleDragEndAppointment();
+    }
   };
 
   const slotMinutes = prefs.data?.slotMinutes ?? 30;
@@ -619,9 +769,44 @@ export function SchedulingWorkspace({
                     ))}
                   </Select>
                 </FormControl>
+                <FormControl size="small" sx={{ minWidth: 180 }}>
+                  <InputLabel>Status</InputLabel>
+                  <Select
+                    value={statusFilter}
+                    onChange={(event) =>
+                      setStatusFilter(event.target.value as AppointmentStatus | '')
+                    }
+                    label="Status"
+                  >
+                    <MenuItem value="">All statuses</MenuItem>
+                    {APPOINTMENT_STATUS_OPTIONS.map((status) => (
+                      <MenuItem key={status} value={status}>
+                        {status.replace(/_/g, ' ')}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+                <TextField
+                  size="small"
+                  label="Search"
+                  placeholder="Title, clinician, patient, attendee…"
+                  value={searchTerm}
+                  onChange={(event) => setSearchTerm(event.target.value)}
+                  sx={{ minWidth: 240 }}
+                />
               </Stack>
             </Stack>
           </Paper>
+
+          {rescheduleError ? (
+            <Alert severity="error">{rescheduleError}</Alert>
+          ) : null}
+
+          {reschedulingAppointmentId ? (
+            <Alert severity="info">
+              Rescheduling appointment…
+            </Alert>
+          ) : null}
 
           {appointmentsQuery.isLoading ? (
             <Box display="flex" justifyContent="center" py={6}>
@@ -633,6 +818,9 @@ export function SchedulingWorkspace({
             <AppointmentCalendar
               appointments={displayedRawAppointments}
               month={monthDate}
+              onDropAppointment={(appointment, day) =>
+                handleDropAppointment(appointment, day.toISOString().slice(0, 10))
+              }
               onSelectAppointment={handleSelectAppointment}
               onSelectDay={(day) => handleOpenNew({ date: day.toISOString().slice(0, 10) })}
             />
@@ -641,7 +829,13 @@ export function SchedulingWorkspace({
               appointments={filteredAppointments}
               dates={[currentDate]}
               dayLabels={[currentDate.toLocaleDateString('en-AU', { weekday: 'short' })]}
+              draggingAppointmentId={draggingAppointmentId}
+              dropTargetSlot={dropTargetSlot}
               onCreateSlot={(date, startTime) => handleOpenNew({ date, startTime })}
+              onDragHoverSlot={setDropTargetSlot}
+              onDragEndAppointment={handleDragEndAppointment}
+              onDragStartAppointment={handleDragStartAppointment}
+              onDropAppointment={handleDropAppointment}
               onSelect={handleSelectAppointment}
             />
           ) : (
@@ -649,7 +843,13 @@ export function SchedulingWorkspace({
               appointments={filteredAppointments}
               dates={weekDates}
               dayLabels={view === 'week' ? ALLDAYS : WEEKDAYS}
+              draggingAppointmentId={draggingAppointmentId}
+              dropTargetSlot={dropTargetSlot}
               onCreateSlot={(date, startTime) => handleOpenNew({ date, startTime })}
+              onDragHoverSlot={setDropTargetSlot}
+              onDragEndAppointment={handleDragEndAppointment}
+              onDragStartAppointment={handleDragStartAppointment}
+              onDropAppointment={handleDropAppointment}
               onSelect={handleSelectAppointment}
             />
           )}
