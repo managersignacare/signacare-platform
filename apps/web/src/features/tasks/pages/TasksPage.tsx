@@ -1,6 +1,8 @@
 import AddIcon from '@mui/icons-material/Add';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
+import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import {
   Alert,
@@ -9,6 +11,7 @@ import {
   Card,
   CardContent,
   Chip,
+  Collapse,
   Dialog,
   DialogActions,
   DialogContent,
@@ -28,7 +31,7 @@ import {
   Typography,
 } from '@mui/material';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type {
   TaskMonitoringSummary,
   TaskOwnershipFilter,
@@ -53,6 +56,12 @@ import {
   workbenchBucketToQuery,
   type TaskWorkbenchBucket,
 } from '../taskMonitoringSupport';
+import {
+  parseTaskMonitoringCollapseState,
+  serializeTaskMonitoringCollapseState,
+  TASK_MONITORING_COLLAPSE_KEY,
+  type TaskMonitoringCollapseState,
+} from '../taskMonitoringPreferences';
 
 function flattenUnits(nodes: OrgUnit[]): { id: string; name: string }[] {
   const out: { id: string; name: string }[] = [];
@@ -78,6 +87,14 @@ interface TaskMutationErrorLike {
 type ScopeMode = 'my' | 'team';
 type LayoutMode = 'list' | 'board';
 type BucketMode = 'all' | TaskWorkbenchBucket;
+
+function loadTaskMonitoringCollapseState(): TaskMonitoringCollapseState {
+  if (typeof window === 'undefined') {
+    return parseTaskMonitoringCollapseState(null);
+  }
+
+  return parseTaskMonitoringCollapseState(window.localStorage.getItem(TASK_MONITORING_COLLAPSE_KEY));
+}
 
 const STATUS_OPTIONS: Array<{ value: '' | TaskStatus; label: string }> = [
   { value: '', label: 'All statuses' },
@@ -259,6 +276,8 @@ function TaskRow(props: {
 }
 
 function MonitoringPanel(props: {
+  collapsed: boolean;
+  onToggleCollapsed: () => void;
   summary?: TaskMonitoringSummary;
   title: string;
   subtitle: string;
@@ -267,46 +286,61 @@ function MonitoringPanel(props: {
   const cards = buildMonitoringCards(props.summary);
   return (
     <Paper variant="outlined" sx={{ p: 2.25, borderRadius: 3 }}>
-      <Typography variant="h6" fontWeight={800}>{props.title}</Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        {props.subtitle}
-      </Typography>
-      <Grid container spacing={1.5} sx={{ mb: 2 }}>
-        {cards.map((card) => (
-          <Grid key={card.id} size={{ xs: 6, md: 4 }}>
-            <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2, bgcolor: '#FCFBF9' }}>
-              <Typography variant="caption" color="text.secondary">{card.label}</Typography>
-              <Typography variant="h6" fontWeight={800}>{card.value}</Typography>
-            </Paper>
-          </Grid>
-        ))}
-      </Grid>
-      <Typography variant="subtitle2" fontWeight={800} sx={{ mb: 1 }}>
-        Ownership radar
-      </Typography>
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-        {props.summary.assigneeBreakdown.slice(0, 6).map((row) => (
-          <Box
-            key={row.staffId ?? 'unassigned'}
-            sx={{
-              display: 'grid',
-              gridTemplateColumns: '1.4fr repeat(5, minmax(0, 72px))',
-              gap: 1,
-              alignItems: 'center',
-              py: 0.75,
-              borderBottom: '1px solid',
-              borderColor: 'divider',
-            }}
-          >
-            <Typography variant="body2" fontWeight={700}>{row.displayName}</Typography>
-            <Typography variant="caption" color="text.secondary">Open {row.openCount}</Typography>
-            <Typography variant="caption" color={row.overdueCount > 0 ? 'error.main' : 'text.secondary'}>OD {row.overdueCount}</Typography>
-            <Typography variant="caption" color={row.dueTodayCount > 0 ? 'warning.main' : 'text.secondary'}>Today {row.dueTodayCount}</Typography>
-            <Typography variant="caption" color={row.blockedCount > 0 ? 'error.main' : 'text.secondary'}>Blocked {row.blockedCount}</Typography>
-            <Typography variant="caption" color={row.waitingExternalCount > 0 ? 'warning.main' : 'text.secondary'}>Waiting {row.waitingExternalCount}</Typography>
-          </Box>
-        ))}
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1.5 }}>
+        <Box>
+          <Typography variant="h6" fontWeight={800}>{props.title}</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+            {props.subtitle}
+          </Typography>
+        </Box>
+        <Button
+          size="small"
+          variant="text"
+          onClick={props.onToggleCollapsed}
+          endIcon={props.collapsed ? <ExpandMoreIcon /> : <ExpandLessIcon />}
+          sx={{ textTransform: 'none', whiteSpace: 'nowrap' }}
+        >
+          {props.collapsed ? 'Expand' : 'Minimise'}
+        </Button>
       </Box>
+      <Collapse in={!props.collapsed}>
+        <Grid container spacing={1.5} sx={{ mb: 2, mt: 0.5 }}>
+          {cards.map((card) => (
+            <Grid key={card.id} size={{ xs: 6, md: 4 }}>
+              <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2, bgcolor: '#FCFBF9' }}>
+                <Typography variant="caption" color="text.secondary">{card.label}</Typography>
+                <Typography variant="h6" fontWeight={800}>{card.value}</Typography>
+              </Paper>
+            </Grid>
+          ))}
+        </Grid>
+        <Typography variant="subtitle2" fontWeight={800} sx={{ mb: 1 }}>
+          Ownership radar
+        </Typography>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+          {props.summary.assigneeBreakdown.slice(0, 6).map((row) => (
+            <Box
+              key={row.staffId ?? 'unassigned'}
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: '1.4fr repeat(5, minmax(0, 72px))',
+                gap: 1,
+                alignItems: 'center',
+                py: 0.75,
+                borderBottom: '1px solid',
+                borderColor: 'divider',
+              }}
+            >
+              <Typography variant="body2" fontWeight={700}>{row.displayName}</Typography>
+              <Typography variant="caption" color="text.secondary">Open {row.openCount}</Typography>
+              <Typography variant="caption" color={row.overdueCount > 0 ? 'error.main' : 'text.secondary'}>OD {row.overdueCount}</Typography>
+              <Typography variant="caption" color={row.dueTodayCount > 0 ? 'warning.main' : 'text.secondary'}>Today {row.dueTodayCount}</Typography>
+              <Typography variant="caption" color={row.blockedCount > 0 ? 'error.main' : 'text.secondary'}>Blocked {row.blockedCount}</Typography>
+              <Typography variant="caption" color={row.waitingExternalCount > 0 ? 'warning.main' : 'text.secondary'}>Waiting {row.waitingExternalCount}</Typography>
+            </Box>
+          ))}
+        </Box>
+      </Collapse>
     </Paper>
   );
 }
@@ -347,7 +381,19 @@ export default function TasksPage() {
   const [editStatus, setEditStatus] = useState<TaskStatus>('pending');
   const [showArchive, setShowArchive] = useState(false);
   const [signTask, setSignTask] = useState<Task | null>(null);
+  const [monitoringCollapsedByScope, setMonitoringCollapsedByScope] = useState<TaskMonitoringCollapseState>(loadTaskMonitoringCollapseState);
   const { signature: savedSignature } = useStaffSignature();
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    window.localStorage.setItem(
+      TASK_MONITORING_COLLAPSE_KEY,
+      serializeTaskMonitoringCollapseState(monitoringCollapsedByScope),
+    );
+  }, [monitoringCollapsedByScope]);
 
   const taskQuery = useMemo(() => buildScopeQuery({
     scope,
@@ -370,6 +416,13 @@ export default function TasksPage() {
     ...(scope === 'my' ? { assignedToId: user?.id } : teamFilter ? { teamId: teamFilter } : { teamScope: 'mine' as const }),
     ...(scope === 'team' && clinicianFilter ? { assignedToId: clinicianFilter } : {}),
   });
+
+  const toggleMonitoringCollapsed = () => {
+    setMonitoringCollapsedByScope((current) => ({
+      ...current,
+      [scope]: !current[scope],
+    }));
+  };
 
   const displayTasks = useMemo(
     () => openTasks.filter((task) => (
@@ -573,6 +626,8 @@ export default function TasksPage() {
         </Grid>
         <Grid size={{ xs: 12, lg: 4 }}>
           <MonitoringPanel
+            collapsed={monitoringCollapsedByScope[scope]}
+            onToggleCollapsed={toggleMonitoringCollapsed}
             summary={summary}
             title={scope === 'my' ? 'My monitoring snapshot' : 'Team monitoring snapshot'}
             subtitle={scope === 'my'
