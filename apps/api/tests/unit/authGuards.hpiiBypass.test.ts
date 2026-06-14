@@ -3,7 +3,8 @@ import type { AuthContext } from '@signacare/shared';
 
 const firstMock = vi.fn();
 const selectMock = vi.fn(() => ({ first: firstMock }));
-const whereMock = vi.fn(() => ({ select: selectMock }));
+const joinMock = vi.fn(() => ({ select: selectMock }));
+const whereMock = vi.fn(() => ({ join: joinMock }));
 const dbMock = vi.fn(() => ({ where: whereMock }));
 const validateHpiiFormatMock = vi.fn();
 
@@ -30,7 +31,13 @@ describe('requireValidHpii staging bypass', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    firstMock.mockResolvedValue({ hpii: null });
+    firstMock.mockResolvedValue({
+      clinic_name: 'Good Health Northern Mind Clinic',
+      email: 'prescriber@good-health.goodhealth.demo',
+      hpii: null,
+      prescriber_number: 'PBS0001',
+      provider_number: 'MED0001',
+    });
     validateHpiiFormatMock.mockReturnValue(false);
     delete process.env.SIGNACARE_RELEASE_ENV;
     delete process.env.ALLOW_INVALID_HPII_IN_STAGING;
@@ -59,12 +66,50 @@ describe('requireValidHpii staging bypass', () => {
     });
   });
 
-  it('allows invalid or missing HPI-I only when the explicit staging bypass flag is enabled', async () => {
+  it('allows invalid or missing HPI-I only for explicit staging demo prescribers', async () => {
     process.env.SIGNACARE_RELEASE_ENV = 'staging';
     process.env.ALLOW_INVALID_HPII_IN_STAGING = 'true';
 
     const { requireValidHpii } = await import('../../src/shared/authGuards');
 
     await expect(requireValidHpii(auth)).resolves.toBeUndefined();
+  });
+
+  it('keeps strict enforcement for non-demo staff even when the staging bypass flag is enabled', async () => {
+    process.env.SIGNACARE_RELEASE_ENV = 'staging';
+    process.env.ALLOW_INVALID_HPII_IN_STAGING = 'true';
+    firstMock.mockResolvedValue({
+      clinic_name: 'Real Clinic',
+      email: 'real.clinician@signacare.example',
+      hpii: null,
+      prescriber_number: '1234567',
+      provider_number: '2699958J',
+    });
+
+    const { requireValidHpii } = await import('../../src/shared/authGuards');
+
+    await expect(requireValidHpii(auth)).rejects.toMatchObject({
+      code: 'PRESCRIBER_HPII_INVALID',
+      status: 403,
+    });
+  });
+
+  it('keeps strict enforcement for non-demo clinics even with demo-shaped identifiers', async () => {
+    process.env.SIGNACARE_RELEASE_ENV = 'staging';
+    process.env.ALLOW_INVALID_HPII_IN_STAGING = 'true';
+    firstMock.mockResolvedValue({
+      clinic_name: 'Community Mental Health Service',
+      email: 'prescriber@northern.goodhealth.demo',
+      hpii: null,
+      prescriber_number: 'PBS0001',
+      provider_number: 'MED0001',
+    });
+
+    const { requireValidHpii } = await import('../../src/shared/authGuards');
+
+    await expect(requireValidHpii(auth)).rejects.toMatchObject({
+      code: 'PRESCRIBER_HPII_INVALID',
+      status: 403,
+    });
   });
 });

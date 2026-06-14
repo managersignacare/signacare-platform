@@ -65,6 +65,7 @@ export async function up(knex: Knex): Promise<void> {
   const duplicateInvoices = await knex.raw<{ rows?: Array<{ clinic_id: string; invoice_number: string; duplicate_count: number | string }> }>(`
     SELECT clinic_id, invoice_number, COUNT(*)::int AS duplicate_count
     FROM invoices
+    WHERE invoice_number IS NOT NULL
     GROUP BY clinic_id, invoice_number
     HAVING COUNT(*) > 1
     LIMIT 1

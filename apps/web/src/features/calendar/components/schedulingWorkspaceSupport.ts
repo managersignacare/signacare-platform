@@ -14,13 +14,31 @@ export interface SchedulingAvailabilitySummary {
   blockCount: number;
   dominantColour: AvailabilityColour | null;
   labels: string[];
+  primaryLabel: string | null;
 }
 
 export interface SchedulingAvailabilitySlotSummary {
   dominantColour: AvailabilityColour | null;
   labels: string[];
   notes: string[];
+  primaryLabel: string | null;
+  primaryNote: string | null;
   primaryText: string | null;
+}
+
+function sortBlocksByPriority(
+  blocks: readonly AvailabilityBlock[],
+): AvailabilityBlock[] {
+  const priority = new Map<AvailabilityColour, number>([
+    ['red', 0],
+    ['yellow', 1],
+    ['green', 2],
+  ]);
+  return [...blocks].sort((left, right) => {
+    const leftRank = priority.get(left.colour) ?? Number.MAX_SAFE_INTEGER;
+    const rightRank = priority.get(right.colour) ?? Number.MAX_SAFE_INTEGER;
+    return leftRank - rightRank;
+  });
 }
 
 export function buildRescheduledTimes(
@@ -113,12 +131,17 @@ export function getAvailabilitySummaryForDate(
 ): SchedulingAvailabilitySummary {
   const active = listAvailabilityBlocksForDate(blocks, isoDate);
   if (active.length === 0) {
-    return { blockCount: 0, dominantColour: null, labels: [] };
+    return { blockCount: 0, dominantColour: null, labels: [], primaryLabel: null };
   }
 
   const priority: AvailabilityColour[] = ['red', 'yellow', 'green'];
   const dominantColour =
     priority.find((colour) => active.some((block) => block.colour === colour)) ?? null;
+  const prioritized = sortBlocksByPriority(active);
+  const primaryLabel =
+    prioritized
+      .map((block) => block.label?.trim() ?? '')
+      .find((label) => label.length > 0) ?? null;
 
   return {
     blockCount: active.length,
@@ -126,6 +149,7 @@ export function getAvailabilitySummaryForDate(
     labels: active
       .map((block) => block.label?.trim())
       .filter((label): label is string => Boolean(label)),
+    primaryLabel,
   };
 }
 
@@ -160,6 +184,7 @@ export function summarizeAvailabilityForSlot(
     slotStartMinutes,
     slotDurationMinutes,
   );
+  const prioritized = sortBlocksByPriority(active);
 
   const labels = active
     .map((block) => block.label?.trim() ?? '')
@@ -167,8 +192,15 @@ export function summarizeAvailabilityForSlot(
   const notes = active
     .map((block) => block.notes?.trim() ?? '')
     .filter((value): value is string => value.length > 0);
-
-  const primaryText = labels[0] ?? notes[0] ?? null;
+  const primaryLabel =
+    prioritized
+      .map((block) => block.label?.trim() ?? '')
+      .find((value) => value.length > 0) ?? null;
+  const primaryNote =
+    prioritized
+      .map((block) => block.notes?.trim() ?? '')
+      .find((value) => value.length > 0) ?? null;
+  const primaryText = primaryLabel ?? primaryNote;
 
   return {
     dominantColour: getAvailabilityColourForSlot(
@@ -179,6 +211,8 @@ export function summarizeAvailabilityForSlot(
     ),
     labels,
     notes,
+    primaryLabel,
+    primaryNote,
     primaryText,
   };
 }

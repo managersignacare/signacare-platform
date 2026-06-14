@@ -11,6 +11,7 @@ interface Props {
     blockCount: number;
     dominantColour: AvailabilityColour | null;
     labels?: string[];
+    primaryLabel?: string | null;
   };
   onDropAppointment?: (appointment: Appointment, day: Date) => void;
   onSelectAppointment?: (appointment: Appointment) => void;
@@ -70,8 +71,8 @@ export const AppointmentCalendar = ({
             dominantColour: null,
             labels: [],
           };
-          const availabilityLabel = availability.labels?.length
-            ? availability.labels[0]
+          const availabilityLabel = availability.primaryLabel
+            ? availability.primaryLabel
             : availability.dominantColour === 'red'
               ? 'Blocked'
               : availability.dominantColour === 'yellow'

@@ -94,6 +94,7 @@ describe('schedulingWorkspaceSupport', () => {
       blockCount: 3,
       dominantColour: 'red',
       labels: ['Clinic hours', 'Tentative MDT', 'Leave'],
+      primaryLabel: 'Leave',
     });
   });
 
@@ -143,7 +144,9 @@ describe('schedulingWorkspaceSupport', () => {
       dominantColour: 'yellow',
       labels: ['Bookable clinic hours', 'Protected MDT window'],
       notes: ['Reception can fill these slots.', 'Book only if released by admin.'],
-      primaryText: 'Bookable clinic hours',
+      primaryLabel: 'Protected MDT window',
+      primaryNote: 'Book only if released by admin.',
+      primaryText: 'Protected MDT window',
     });
   });
 });

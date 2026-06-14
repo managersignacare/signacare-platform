@@ -70,12 +70,12 @@ describe('SchedulingWorkspace source contract', () => {
   it('loads the calendar page appointments through the calendar module surface', () => {
     expect(source).toContain('calendarApi');
     expect(source).toContain('listAppointments');
-    expect(source).toContain("limit: '200'");
+    expect(source).toContain("limit: '300'");
     expect(source).not.toContain('appointmentApi.list({');
   });
 
   it('renders time block placeholder text directly inside the calendar cells', () => {
     expect(calendarViewsSource).toContain('slotSummary.primaryText');
-    expect(calendarViewsSource).toContain('slotSummary.notes[0]');
+    expect(calendarViewsSource).toContain('slotSummary.primaryNote');
   });
 });

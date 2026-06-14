@@ -567,10 +567,6 @@ jobs:
           ENV="${{ needs.build-and-push.outputs.env_name }}"
           SLOT_ARGS=()
           API_BASE_URL="https://${{ steps.sites.outputs.api_site }}.azurewebsites.net"
-          ALLOW_INVALID_HPII_IN_STAGING="false"
-          if [[ "$ENV" == "staging" ]]; then
-            ALLOW_INVALID_HPII_IN_STAGING="true"
-          fi
           if [[ -n "${{ steps.sites.outputs.slot }}" ]]; then
             SLOT_ARGS=(--slot "${{ steps.sites.outputs.slot }}")
             API_BASE_URL="https://${{ steps.sites.outputs.api_site }}-${{ steps.sites.outputs.slot }}.azurewebsites.net"
@@ -581,7 +577,6 @@ jobs:
             "${SLOT_ARGS[@]}" \
             --settings \
               API_BASE_URL="$API_BASE_URL" \
-              ALLOW_INVALID_HPII_IN_STAGING="$ALLOW_INVALID_HPII_IN_STAGING" \
               SIGNACARE_RELEASE_ENV="$ENV" \
               SIGNACARE_COMMIT_SHA="${{ needs.build-and-push.outputs.commit_sha }}" \
               SIGNACARE_PIPELINE_WORKFLOW="${{ needs.build-and-push.outputs.pipeline_workflow }}" \
@@ -605,6 +600,7 @@ jobs:
               SIGNACARE_WHISPER_MODEL="${{ env.WHISPER_MODEL_NAME }}" \
               SIGNACARE_WHISPER_MODEL_SHA256="${{ env.WHISPER_MODEL_SHA256 }}" \
               SIGNACARE_RUN_MIGRATIONS_ON_STARTUP="true" \
+              ALLOW_INVALID_HPII_IN_STAGING="false" \
               SIGNACARE_PROMOTION_SOURCE_ENV="${{ needs.build-and-push.outputs.promotion_source_env }}" \
               SIGNACARE_PROMOTION_SOURCE_ACR_NAME="${{ needs.build-and-push.outputs.promotion_source_acr_name }}" \
               SIGNACARE_PROMOTION_SOURCE_RELEASE_MANIFEST_SHA256="${{ needs.build-and-push.outputs.promotion_source_release_manifest_sha256 }}" \

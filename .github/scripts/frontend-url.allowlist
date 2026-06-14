@@ -62,10 +62,11 @@ DELETE staff-settings/role-types/:DYNAMIC
 # implement the handler or remove the delete button.
 DELETE backup/locations/:DYNAMIC
 
-# TODO — Patient-app admin surfaces in Viva still reference a set of
-# backend handlers that have not been ported into patientAppRoutes yet.
-# Keep these explicit until the digital-interventions / patient-app
-# backlog is implemented or the UI is retired.
+# Guard limitation — these patient-app admin routes are implemented in
+# patientAppRoutes.internal.ts and covered by integration tests, but the
+# static frontend/backend route matcher does not currently resolve that
+# internal mount shape. Keep the explicit allowlist until the guard learns
+# the internal patient-app router topology.
 POST patient-app/checklists/:DYNAMIC
 POST patient-app/thresholds/:DYNAMIC
 DELETE patient-app/thresholds/:DYNAMIC/:DYNAMIC

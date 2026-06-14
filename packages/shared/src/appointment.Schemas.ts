@@ -118,7 +118,7 @@ export const AppointmentSearchDTO = z.object({
   status: AppointmentStatusSchema.optional(),
   from: z.string().datetime().optional(),
   to: z.string().datetime().optional(),
-  limit: z.number().int().min(1).max(200).default(50),
+  limit: z.number().int().min(1).max(300).default(50),
   offset: z.number().int().min(0).default(0),
 });
 

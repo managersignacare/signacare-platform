@@ -221,7 +221,16 @@ export function SchedulingWorkspace({
   const prefs = useCalendarPreferences();
   const updatePrefs = useUpdateCalendarPreferences();
   const blocks = useCalendarBlocks();
-  const today = useTodayView({ date: currentDate.toISOString().slice(0, 10) });
+  const todayDate = currentDate.toISOString().slice(0, 10);
+  const todayScopeRequiresClinicianSelection = scope !== 'mine' && !clinicianFilter;
+  const todayClinicianId = scope === 'mine'
+    ? me?.id
+    : clinicianFilter || undefined;
+  const today = useTodayView({
+    clinicianId: todayClinicianId,
+    date: todayDate,
+    enabled: !todayScopeRequiresClinicianSelection,
+  });
   const { from, monthDate, to } = React.useMemo(() => rangeBounds(view, currentDate), [currentDate, view]);
 
   const teamAssignments = useQuery({
@@ -238,15 +247,15 @@ export function SchedulingWorkspace({
   const appointmentsQuery = useQuery({
     queryKey: calendarKeys.appointments({
       from,
-      limit: '200',
       patientId: patientFilter?.id ?? '',
       to,
+      limit: '300',
     }),
     queryFn: () =>
       calendarApi
         .listAppointments({
           from: `${from}T00:00:00.000Z`,
-          limit: '200',
+          limit: '300',
           patientId: patientFilter?.id ?? undefined,
           to: `${to}T23:59:59.999Z`,
         })
@@ -739,18 +748,26 @@ export function SchedulingWorkspace({
         </Stack>
 
         <Stack spacing={2.5}>
-          {todayViewLoadFailed ? (
+          {todayScopeRequiresClinicianSelection ? (
+        <Alert severity="info">
+          Select a clinician to review contacts and DNA while using team or clinic calendar scope.
+        </Alert>
+          ) : todayViewLoadFailed ? (
             <Alert severity="warning">
               Today&apos;s contacts and workload summary are temporarily unavailable. Your appointment calendar is still available.
             </Alert>
-          ) : today.data ? <TodayContactsView data={today.data} /> : <Box display="flex" justifyContent="center" py={6}><CircularProgress /></Box>}
+      ) : today.data ? <TodayContactsView data={today.data} /> : <Box display="flex" justifyContent="center" py={6}><CircularProgress /></Box>}
           <Box ref={syncCardRef}>
             <ICalSubscribeCard onRefreshCalendar={refreshCalendarWorkspace} />
           </Box>
         </Stack>
         </Box>
       ) : workspaceTab === 'contacts' ? (
-        todayViewLoadFailed ? (
+        todayScopeRequiresClinicianSelection ? (
+          <Alert severity="info">
+            Select a clinician to review contacts while using team or clinic calendar scope.
+          </Alert>
+        ) : todayViewLoadFailed ? (
           <Alert severity="warning">
             Today&apos;s contacts and workload summary are temporarily unavailable. Refresh to retry.
           </Alert>
@@ -771,6 +788,10 @@ export function SchedulingWorkspace({
             <CircularProgress />
           </Box>
         )
+      ) : todayScopeRequiresClinicianSelection ? (
+        <Alert severity="info">
+          Select a clinician to review DNA activity while using team or clinic calendar scope.
+        </Alert>
       ) : todayViewLoadFailed ? (
         <Alert severity="warning">
           DNA activity is temporarily unavailable. Refresh to retry.

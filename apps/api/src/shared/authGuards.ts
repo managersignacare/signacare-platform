@@ -151,17 +151,30 @@ export async function requirePrescribingDiscipline(auth: AuthContext): Promise<v
  * prescribing surface (medicationService.create, prescriptionService
  * .create, etc.).
  *
- * S0 hardening posture: prescriber HPI-I is now mandatory and strict
- * for every prescribing flow. There is no warn-mode and no role-based
- * bypass — malformed/missing HPI-I always blocks with 403.
+ * S0 hardening posture: prescriber HPI-I is mandatory and strict for
+ * every prescribing flow. The only escape hatch is an explicit
+ * staging-only demo-data bypass for seeded Good Health prescribers
+ * when ALLOW_INVALID_HPII_IN_STAGING=true. Production never auto-enables
+ * this path, and real staff records still fail closed.
  */
 export async function requireValidHpii(auth: AuthContext): Promise<void> {
   const row = await db('staff')
     .where({ id: auth.staffId })
-    .select('hpii')
+    .join('clinics', 'clinics.id', 'staff.clinic_id')
+    .select(
+      'staff.hpii',
+      'staff.email',
+      'staff.provider_number',
+      'staff.prescriber_number',
+      'clinics.name as clinic_name',
+    )
     .first();
 
   const hpii = (row?.hpii as string | null | undefined) ?? null;
+  const email = (row?.email as string | null | undefined)?.trim().toLowerCase() ?? '';
+  const providerNumber = (row?.provider_number as string | null | undefined)?.trim().toUpperCase() ?? '';
+  const prescriberNumber = (row?.prescriber_number as string | null | undefined)?.trim().toUpperCase() ?? '';
+  const clinicName = (row?.clinic_name as string | null | undefined)?.trim() ?? '';
 
   // Local import to avoid a circular dep against integrations/hiService.
   const { validateHpiiFormat } = await import('../integrations/hiService/hiServiceClient');
@@ -171,7 +184,11 @@ export async function requireValidHpii(auth: AuthContext): Promise<void> {
   const releaseEnv = (process.env.SIGNACARE_RELEASE_ENV ?? '').trim().toLowerCase();
   const stagingBypassEnabled =
     releaseEnv === 'staging'
-    && (process.env.ALLOW_INVALID_HPII_IN_STAGING ?? '').trim().toLowerCase() === 'true';
+    && (process.env.ALLOW_INVALID_HPII_IN_STAGING ?? '').trim().toLowerCase() === 'true'
+    && /^[^@\s]+@[a-z0-9-]+\.goodhealth\.demo$/i.test(email)
+    && clinicName.startsWith('Good Health ')
+    && /^MED\d{4}$/.test(providerNumber)
+    && /^PBS\d{4}$/.test(prescriberNumber);
   if (stagingBypassEnabled) {
     return;
   }

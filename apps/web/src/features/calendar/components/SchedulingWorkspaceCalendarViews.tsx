@@ -211,7 +211,7 @@ export function DayWeekGrid({
                         >
                           {slotSummary.primaryText}
                         </Typography>
-                        {slotSummary.notes[0] && slotSummary.notes[0] !== slotSummary.primaryText ? (
+                        {slotSummary.primaryNote && slotSummary.primaryNote !== slotSummary.primaryText ? (
                           <Typography
                             variant="caption"
                             sx={{
@@ -224,7 +224,7 @@ export function DayWeekGrid({
                               whiteSpace: 'nowrap',
                             }}
                           >
-                            {slotSummary.notes[0]}
+                            {slotSummary.primaryNote}
                           </Typography>
                         ) : null}
                       </Box>

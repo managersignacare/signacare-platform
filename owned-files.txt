@@ -10138,6 +10138,7 @@ apps/api/tests/unit/notificationService.channels.test.ts
 apps/api/tests/unit/numberGenerator.test.ts
 apps/api/tests/unit/ollamaProviderBoundary.test.ts
 apps/api/tests/unit/optimisticLock.test.ts
+apps/api/tests/unit/optionalSchema.test.ts
 apps/api/tests/unit/outlookCalendarSyncService.test.ts
 apps/api/tests/unit/outlookRoutes.webhook.test.ts
 apps/api/tests/unit/passwordBreachService.test.ts
