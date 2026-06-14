@@ -6,6 +6,7 @@ const templateServiceMock = vi.hoisted(() => ({
   createCategory: vi.fn(),
   updateCategory: vi.fn(),
   deleteCategory: vi.fn(),
+  list: vi.fn(),
 }));
 
 vi.mock('../../src/features/templates/template.service', () => ({
@@ -28,6 +29,7 @@ function createRequestMock(overrides?: Partial<Request>): Request {
   return {
     user: {
       clinicId: '11111111-1111-1111-1111-111111111111',
+      id: '99999999-9999-4999-8999-999999999999',
     },
     params: {},
     body: {},
@@ -139,5 +141,34 @@ describe('templateController category handlers', () => {
     expect(res.json).toHaveBeenCalledWith({
       category: expect.objectContaining({ sortOrder: 4, isActive: false }),
     });
+  });
+
+  it('list passes the actor id through so default clinical-note templates can be seeded safely', async () => {
+    const req = createRequestMock({
+      query: {
+        status: 'published',
+        category: 'Clinical Notes',
+        q: 'progress',
+      },
+    });
+    const res = createResponseMock();
+    templateServiceMock.list.mockResolvedValue([
+      { id: 'template-1', name: 'Progress Note (Mental Health)' },
+    ]);
+
+    await templateController.list(req, res, next);
+
+    expect(templateServiceMock.list).toHaveBeenCalledWith(
+      '11111111-1111-1111-1111-111111111111',
+      '99999999-9999-4999-8999-999999999999',
+      {
+        status: 'published',
+        category: 'Clinical Notes',
+        q: 'progress',
+      },
+    );
+    expect(res.json).toHaveBeenCalledWith([
+      { id: 'template-1', name: 'Progress Note (Mental Health)' },
+    ]);
   });
 });

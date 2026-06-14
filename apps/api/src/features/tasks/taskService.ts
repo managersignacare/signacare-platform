@@ -14,7 +14,7 @@
 import type { AuthContext } from '@signacare/shared';
 import * as taskRepo from './taskRepository';
 import { AppError } from '../../shared/errors';
-import { requirePatientRelationship } from '../../shared/authGuards';
+import { requirePatientReadAccess, requirePatientRelationship } from '../../shared/authGuards';
 import type {
   TaskCreateDTO,
   TaskMonitoringSummary,
@@ -126,7 +126,7 @@ export async function listTasks(
   // without a relationship check — the task list itself leaks only
   // task metadata that is visible by task assignment, not by patient.
   if (filters.patientId) {
-    await requirePatientRelationship(auth, filters.patientId);
+    await requirePatientReadAccess(auth, filters.patientId);
   }
   const scopedTeamIds = filters.teamScope === 'mine'
     ? await taskRepo.findActiveTeamIdsForStaff(auth.clinicId, auth.staffId)
@@ -139,7 +139,7 @@ export async function getTask(auth: AuthContext, taskId: string): Promise<TaskRe
   const row = await taskRepo.findById(auth.clinicId, taskId);
   if (!row) throw new AppError('Task not found', 404, 'TASK_NOT_FOUND');
   const patientId = (row as { patient_id?: string | null }).patient_id;
-  if (patientId) await requirePatientRelationship(auth, patientId);
+  if (patientId) await requirePatientReadAccess(auth, patientId);
   return mapTask(row);
 }
 
@@ -148,7 +148,7 @@ export async function getTaskMonitoringSummary(
   filters: TaskListQuery,
 ): Promise<TaskMonitoringSummary> {
   if (filters.patientId) {
-    await requirePatientRelationship(auth, filters.patientId);
+    await requirePatientReadAccess(auth, filters.patientId);
   }
   const scopedTeamIds = filters.teamScope === 'mine'
     ? await taskRepo.findActiveTeamIdsForStaff(auth.clinicId, auth.staffId)

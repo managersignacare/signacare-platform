@@ -5,6 +5,7 @@ import app from '../../src/server';
 import { dbAdmin } from '../../src/db/db';
 import { isIntegrationReady, loginAsClinician } from './_helpers';
 import type { Knex } from 'knex';
+import { CANONICAL_PASSWORD, CANONICAL_PERSONAS } from '../fixtures/canonical-personas';
 
 const READY = await isIntegrationReady();
 const TEST_TAG = `SARA-MAIN-E2E-${Date.now()}`;
@@ -24,6 +25,7 @@ let contactRecordId = '';
 let correspondenceLetterId = '';
 let clinicalNoteId = '';
 let originalHpii: string | null = null;
+let originalRole: string | null = null;
 
 function authHeaders(token: string): Record<string, string> {
   return {
@@ -77,13 +79,30 @@ beforeAll(async () => {
   await withClinicContext(async (trx) => {
     const staff = await trx('staff')
       .where({ id: session.userId, clinic_id: session.clinicId })
-      .select('hpii')
+      .select('hpii', 'role')
       .first();
     originalHpii = (staff?.hpii as string | null | undefined) ?? null;
+    originalRole = (staff?.role as string | null | undefined) ?? null;
     await trx('staff')
       .where({ id: session.userId, clinic_id: session.clinicId })
-      .update({ hpii: '8003611234567893' });
+      .update({
+        role: 'prescriber_consultant',
+        hpii: '8003611234567893',
+      });
   });
+
+  const relogin = await request(app)
+    .post('/api/v1/auth/login')
+    .set('X-CSRF-Token', 'test')
+    .set('X-Client', 'mobile')
+    .send({
+      email: CANONICAL_PERSONAS.clinician.email,
+      password: CANONICAL_PASSWORD,
+    });
+  if (relogin.status !== 200) {
+    throw new Error(`SARA integration prescriber relogin failed: ${relogin.status} ${JSON.stringify(relogin.body)}`);
+  }
+  session.token = String(relogin.body?.accessToken ?? '');
   await seedPatientAndEpisode();
 });
 
@@ -117,7 +136,10 @@ afterAll(async () => {
 
     await trx('staff')
       .where({ id: session.userId, clinic_id: session.clinicId })
-      .update({ hpii: originalHpii })
+      .update({
+        role: originalRole,
+        hpii: originalHpii,
+      })
       .catch(() => undefined);
   });
 });

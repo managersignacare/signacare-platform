@@ -65,7 +65,7 @@ export function AmbientAiRecorder({ onTranscriptReady, patientId, onResultReady 
 
   const [consented, setConsented] = useState(() => localStorage.getItem(CONSENT_KEY) === 'true');
   const [consentOpen, setConsentOpen] = useState(false);
-  const [format, setFormat] = useState<AmbientFormat>('soap');
+  const [format, setFormat] = useState<AmbientFormat>('progress');
   const [interpreterUsed, setInterpreterUsed] = useState(false);
   const [interpreterLanguage, setInterpreterLanguage] = useState('');
   const [diagLog, setDiagLog] = useState<string[]>([]);

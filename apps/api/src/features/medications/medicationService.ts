@@ -6,6 +6,7 @@ import { writeAuditLog } from '../../utils/audit';
 import { AppError } from '../../shared/errors';
 import {
   requireClinicalAccessRole,
+  requirePatientReadAccess,
   requirePatientRelationship,
   requirePermission,
   requirePrescribingDiscipline,
@@ -309,7 +310,7 @@ export const medicationService = {
   ): Promise<MedicationResponse[]> {
     requireClinicalAccessRole(auth);
     requirePermission(auth, 'medication:read');
-    await requirePatientRelationship(auth, patientId);
+    await requirePatientReadAccess(auth, patientId);
     const rows = await medicationRepository.findByPatient(auth.clinicId, patientId, statusFilter);
     await writeAuditLog({
       actorId: auth.staffId,
@@ -333,7 +334,7 @@ export const medicationService = {
     if (!row) {
       throw new AppError('Medication not found', 404, 'NOT_FOUND');
     }
-    await requirePatientRelationship(auth, row.patient_id);
+    await requirePatientReadAccess(auth, row.patient_id);
     await writeAuditLog({
       actorId: auth.staffId,
       clinicId: auth.clinicId,

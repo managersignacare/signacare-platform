@@ -9,6 +9,7 @@ import { db } from '../../db/db';
 import { AppError } from '../../shared/errors';
 import {
   requireClinicalAccessRole,
+  requirePatientReadAccess,
   requirePatientRelationship,
 } from '../../shared/authGuards';
 
@@ -165,7 +166,7 @@ export async function listPatientSummarySignoffs(
   patientId: string,
 ): Promise<PatientSummarySignoff[]> {
   requireClinicalAccessRole(auth);
-  await requirePatientRelationship(auth, patientId);
+  await requirePatientReadAccess(auth, patientId);
   return fetchSignoffs(auth.clinicId, patientId);
 }
 

@@ -20,9 +20,11 @@
  *   tsx scripts/guards/lib/retrofit-allowlist-expiry.ts --dry-run  # preview
  */
 import { readFileSync, writeFileSync, readdirSync } from 'fs';
-import { join } from 'path';
+import { dirname, join, resolve } from 'path';
+import { fileURLToPath } from 'url';
 
-const ALLOWLIST_DIR = '/Users/drprakashkamath/Projects/Signacare/scripts/guards';
+const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
+const ALLOWLIST_DIR = resolve(SCRIPT_DIR, '..');
 const DRY_RUN = process.argv.includes('--dry-run');
 
 // Umbrella BUG → target close-by date (or 'permanent' for preventive guards)

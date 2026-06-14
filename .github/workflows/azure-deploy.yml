@@ -11,7 +11,10 @@
 #   - Manual workflow_dispatch with an environment input (staging / prod).
 #     Prod deploys require the `prod-deploys` environment in GitHub settings,
 #     which gates on reviewer approval.
-#   - push to main → auto-deploy to staging.
+#   - push to main → auto-deploy to staging, but the workflow blocks on
+#     the matching `Signacare CI` result for the same SHA before any
+#     image build or rollout begins. This prevents CI-red commits from
+#     reaching staging while preserving path-based deploy triggers.
 #
 # Azure authentication:
 #   Preferred: GitHub OIDC with an Azure federated app registration.
@@ -129,17 +132,68 @@ jobs:
       release_promotable_to_prod: ${{ steps.promote_manifest.outputs.release_promotable_to_prod || steps.release_manifest.outputs.release_promotable_to_prod }}
       release_non_promotable_reason: ${{ steps.promote_manifest.outputs.release_non_promotable_reason || steps.release_manifest.outputs.release_non_promotable_reason }}
       built_at: ${{ steps.promote_manifest.outputs.built_at || steps.release_manifest.outputs.built_at }}
-      promotion_source_env: ${{ steps.promote_manifest.outputs.promotion_source_env }}
-      promotion_source_acr_name: ${{ steps.promote_manifest.outputs.promotion_source_acr_name }}
-      promotion_source_release_manifest_sha256: ${{ steps.promote_manifest.outputs.promotion_source_release_manifest_sha256 }}
-      promotion_source_pipeline_run_id: ${{ steps.promote_manifest.outputs.promotion_source_pipeline_run_id }}
-      promoted_at: ${{ steps.promote_manifest.outputs.promoted_at }}
+      promotion_source_env: ${{ steps.promote_manifest.outputs.promotion_source_env || 'unknown' }}
+      promotion_source_acr_name: ${{ steps.promote_manifest.outputs.promotion_source_acr_name || 'unknown' }}
+      promotion_source_release_manifest_sha256: ${{ steps.promote_manifest.outputs.promotion_source_release_manifest_sha256 || 'unknown' }}
+      promotion_source_pipeline_run_id: ${{ steps.promote_manifest.outputs.promotion_source_pipeline_run_id || 'unknown' }}
+      promoted_at: ${{ steps.promote_manifest.outputs.promoted_at || 'unknown' }}
       ai_model_promotion_alias: ${{ steps.model_promotion_gate.outputs.alias }}
       ai_model_promotion_record: ${{ steps.model_promotion_gate.outputs.record }}
       ai_model_promotion_record_sha256: ${{ steps.model_promotion_gate.outputs.record_sha256 }}
       ai_runtime_enabled: ${{ steps.meta.outputs.ai_runtime_enabled }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Wait for matching Signacare CI success on pushed SHA
+        if: ${{ github.event_name == 'push' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          deadline=$(( $(date +%s) + 3600 ))
+          while true; do
+            run_json="$(
+              gh run list \
+                --workflow "Signacare CI" \
+                --limit 20 \
+                --json databaseId,headSha,status,conclusion,createdAt \
+              | jq -c --arg sha "$TARGET_SHA" 'map(select(.headSha == $sha)) | sort_by(.databaseId) | last'
+            )"
+
+            if [[ "$run_json" == "null" || -z "$run_json" ]]; then
+              if [[ "$(date +%s)" -ge "$deadline" ]]; then
+                echo "Timed out waiting for Signacare CI run discovery for $TARGET_SHA." >&2
+                exit 1
+              fi
+              echo "Waiting for Signacare CI run discovery for $TARGET_SHA..."
+              sleep 15
+              continue
+            fi
+
+            status="$(jq -r '.status' <<<"$run_json")"
+            conclusion="$(jq -r '.conclusion // ""' <<<"$run_json")"
+            run_id="$(jq -r '.databaseId' <<<"$run_json")"
+
+            if [[ "$status" == "completed" && "$conclusion" == "success" ]]; then
+              echo "Signacare CI run $run_id passed for $TARGET_SHA."
+              break
+            fi
+
+            if [[ "$status" == "completed" && "$conclusion" != "success" ]]; then
+              echo "Signacare CI run $run_id finished with conclusion=$conclusion for $TARGET_SHA; blocking deploy." >&2
+              exit 1
+            fi
+
+            if [[ "$(date +%s)" -ge "$deadline" ]]; then
+              echo "Timed out waiting for Signacare CI completion for $TARGET_SHA (last status=$status)." >&2
+              exit 1
+            fi
+
+            echo "Waiting for Signacare CI completion for $TARGET_SHA (run $run_id, status=$status)..."
+            sleep 15
+          done
 
       - name: Compute metadata
         id: meta

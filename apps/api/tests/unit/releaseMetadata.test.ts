@@ -41,6 +41,13 @@ describe('readReleaseMetadata', () => {
       promotableToProd: true,
       nonPromotableReason: '',
     });
+    expect(metadata.promotion).toEqual({
+      sourceEnvironment: 'unknown',
+      sourceAcrName: 'unknown',
+      sourceReleaseManifestSha256: 'unknown',
+      sourcePipelineRunId: 'unknown',
+      promotedAt: 'unknown',
+    });
   });
 
   it('fails closed to unknown/non-promotable provenance when env vars are absent', () => {
@@ -51,5 +58,12 @@ describe('readReleaseMetadata', () => {
     expect(metadata.pipeline.origin).toBe('unknown');
     expect(metadata.pipeline.promotableToProd).toBe(false);
     expect(metadata.pipeline.nonPromotableReason).toBe('');
+    expect(metadata.promotion).toEqual({
+      sourceEnvironment: 'unknown',
+      sourceAcrName: 'unknown',
+      sourceReleaseManifestSha256: 'unknown',
+      sourcePipelineRunId: 'unknown',
+      promotedAt: 'unknown',
+    });
   });
 });

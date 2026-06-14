@@ -13,7 +13,7 @@ import { z } from 'zod';
 export const AvailabilityColourSchema = z.enum(['red', 'yellow', 'green']);
 export type AvailabilityColour = z.infer<typeof AvailabilityColourSchema>;
 
-export const RecurrenceSchema = z.enum(['none', 'weekly']);
+export const RecurrenceSchema = z.enum(['none', 'weekly', 'fortnightly']);
 export type Recurrence = z.infer<typeof RecurrenceSchema>;
 
 export const AvailabilityBlockSchema = z.object({
@@ -44,7 +44,7 @@ const AvailabilityBlockBaseSchema = AvailabilityBlockSchema.omit({
 export const AvailabilityBlockCreateSchema = AvailabilityBlockBaseSchema
   .refine(
     (v) =>
-      (v.recurrence === 'weekly' &&
+      ((v.recurrence === 'weekly' || v.recurrence === 'fortnightly') &&
         v.dayOfWeek !== null &&
         v.specificDate === null) ||
       (v.recurrence === 'none' &&
@@ -52,7 +52,7 @@ export const AvailabilityBlockCreateSchema = AvailabilityBlockBaseSchema
         v.specificDate !== null),
     {
       message:
-        "recurrence='weekly' requires dayOfWeek; recurrence='none' requires specificDate",
+        "recurrence='weekly'/'fortnightly' requires dayOfWeek; recurrence='none' requires specificDate",
     },
   )
   .refine((v) => v.endTime > v.startTime, {

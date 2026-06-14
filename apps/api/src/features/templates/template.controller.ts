@@ -82,11 +82,11 @@ export const templateController = {
 
   async list(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { clinicId } = req.user!;
+      const { clinicId, id: actorId } = req.user!;
       const status = typeof req.query.status === 'string' ? req.query.status : undefined;
       const category = typeof req.query.category === 'string' ? req.query.category : undefined;
       const q      = typeof req.query.q      === 'string' ? req.query.q      : undefined;
-      const templates = await templateService.list(clinicId, { status, category, q });
+      const templates = await templateService.list(clinicId, actorId, { status, category, q });
       res.json(templates);
     } catch (err) {
       next(err);

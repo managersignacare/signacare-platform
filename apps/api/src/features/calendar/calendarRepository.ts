@@ -26,7 +26,7 @@ import { db } from '../../db/db';
 import { hasOptionalTable } from '../../shared/optionalSchema';
 
 export type AvailabilityColour = 'red' | 'yellow' | 'green';
-export type Recurrence = 'none' | 'weekly';
+export type Recurrence = 'none' | 'weekly' | 'fortnightly';
 
 // Explicit column list for .returning() (Phase R3 / CLAUDE.md §1.7).
 // Verified: clinician_availability_blocks has these 17 columns matching
@@ -131,7 +131,7 @@ async function listAvailabilityBlocks(
     // Weekly rows are always in scope; one-off rows are filtered
     // by specific_date within [from, to].
     q.andWhere((builder) => {
-      builder.where('recurrence', 'weekly');
+      builder.whereIn('recurrence', ['weekly', 'fortnightly']);
       if (filters.from && filters.to) {
         builder.orWhere((b) =>
           b

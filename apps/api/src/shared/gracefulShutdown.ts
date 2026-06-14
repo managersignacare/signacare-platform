@@ -367,8 +367,10 @@ export async function runGracefulShutdown(signal: string): Promise<void> {
         '[gracefulShutdown] hook complete',
       );
     } catch (err) {
-      const durationMs = Date.now() - hookStartedAt;
       const timedOut = err instanceof HookTimeoutError;
+      const durationMs = timedOut
+        ? Math.max(Date.now() - hookStartedAt, hookTimeoutMs)
+        : Date.now() - hookStartedAt;
       runTelemetry.hooks.push({
         hookName: hook.name,
         priority: hook.priority,

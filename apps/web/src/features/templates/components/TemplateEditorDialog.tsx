@@ -49,6 +49,7 @@ import type {
 } from '../types/templateTypes';
 
 interface TemplateEditorDialogProps {
+  initialCategory?: string;
   open: boolean;
   template?: TemplateResponse | null;
   onClose: () => void;
@@ -77,6 +78,7 @@ function sectionsNeedRange(fieldType: SectionType): boolean {
 }
 
 export default function TemplateEditorDialog({
+  initialCategory,
   open,
   template,
   onClose,
@@ -94,11 +96,11 @@ export default function TemplateEditorDialog({
   useEffect(() => {
     if (!open) return;
     setName(template?.name ?? '');
-    setCategory(template?.category ?? '');
+    setCategory(template?.category ?? initialCategory ?? '');
     setDescription(template?.description ?? '');
     setSections(cloneSectionsForEdit(template));
     setErrorMessage(null);
-  }, [open, template]);
+  }, [initialCategory, open, template]);
 
   const isEditing = Boolean(template);
   const isPending = createMutation.isPending || updateMutation.isPending;

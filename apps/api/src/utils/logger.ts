@@ -29,6 +29,13 @@ export {
 
 const loggerDestination = pino.destination({ sync: false });
 
+// Column names that match the broad PHI drift regex but are explicitly
+// operational metadata rather than personal information. Keep this list
+// tiny and pair every entry with a rationale in the BUG-269 allowlist.
+const NON_PHI_SCHEMA_DRIFT_EXCEPTIONS = new Set<string>([
+  'email_sender_mode',
+]);
+
 export const logger = pino({
   level: process.env.LOG_LEVEL ?? 'info',
   timestamp: pino.stdTimeFunctions.isoTime,
@@ -131,7 +138,11 @@ function checkSchemaPhiDrift(): void {
     const phiRegex = /(?:phone|email|address|medicare|ihi\b|hpii|dva|ndis|prescriber|dob|given|family|preferred|nok|pbs|narrative|complaint|diagnosis|lookup|blind_?index)/i;
     const suspects: string[] = [];
     for (const col of columns) {
-      if (phiRegex.test(col) && !PHI_FIELDS.has(col)) {
+      if (
+        phiRegex.test(col)
+        && !PHI_FIELDS.has(col)
+        && !NON_PHI_SCHEMA_DRIFT_EXCEPTIONS.has(col)
+      ) {
         suspects.push(col);
       }
     }

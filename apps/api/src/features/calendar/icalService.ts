@@ -120,7 +120,7 @@ export function buildCalendarIcs(input: IcsBuildInput): string {
     const meta = COLOUR_META[block.colour];
     if (!meta) continue;
 
-    if (block.recurrence === 'weekly') {
+    if (block.recurrence === 'weekly' || block.recurrence === 'fortnightly') {
       // Weekly block — need a reference start date to anchor the
       // RRULE. Use `effective_from` so the first occurrence is
       // the first matching weekday on or after that date.
@@ -147,6 +147,7 @@ export function buildCalendarIcs(input: IcsBuildInput): string {
         categories: [{ name: meta.category }],
         repeating: {
           freq: ICalEventRepeatingFreq.WEEKLY,
+          interval: block.recurrence === 'fortnightly' ? 2 : 1,
           byDay: [weekday],
           until: block.effectiveUntil
             ? combineDateAndTime(block.effectiveUntil, '23:59:59')

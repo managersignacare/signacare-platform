@@ -20,6 +20,7 @@ import { idempotencyMiddleware } from '../../middleware/idempotencyMiddleware';
 import { uploadLimiter } from '../../middleware/rateLimiters';
 import {
   requireClinicalAccessRole,
+  requirePatientReadAccess,
   requirePatientRelationship,
   requirePermissionOrClinicalLeadershipOverride,
 } from '../../shared/authGuards';
@@ -166,13 +167,20 @@ const router = Router();
 router.use(authMiddleware, tenantMiddleware);
 router.use(requireModuleRead(MODULE_KEYS.PATIENTS));
 
-const requireClinicalPatientAccess = (permission: string) => {
+const requireClinicalPatientAccess = (
+  permission: string,
+  access: 'read' | 'write' = 'write',
+) => {
   return async (req: Request, _res: Response, next: NextFunction): Promise<void> => {
     try {
       const auth = buildAuthContext(req, req.params.id);
       requireClinicalAccessRole(auth);
       await requirePermissionOrClinicalLeadershipOverride(auth, permission);
-      await requirePatientRelationship(auth, req.params.id);
+      if (access === 'read') {
+        await requirePatientReadAccess(auth, req.params.id);
+      } else {
+        await requirePatientRelationship(auth, req.params.id);
+      }
       next();
     } catch (err) {
       next(err);
@@ -265,7 +273,7 @@ router.get('/review-status', async (req: Request, res: Response, next: NextFunct
   } catch (err) { next(err); }
 });
 
-router.get('/:id/clinical-intelligence-summary', requireClinicalPatientAccess('patient:read'), async (req: Request, res: Response, next: NextFunction) => {
+router.get('/:id/clinical-intelligence-summary', requireClinicalPatientAccess('patient:read', 'read'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const clinicId = req.clinicId;
     const patientId = req.params.id;
@@ -850,7 +858,7 @@ router.get('/:id/pathology', async (req: Request, res: Response, next: NextFunct
   } catch (err) { next(err); }
 });
 
-router.get('/:id/notes', requireClinicalPatientAccess('note:read'), async (req: Request, res: Response, next: NextFunction) => {
+router.get('/:id/notes', requireClinicalPatientAccess('note:read', 'read'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     // BUG-430: qualified-column clinic_id matches the JOIN style.
     const rows = await db('clinical_notes')

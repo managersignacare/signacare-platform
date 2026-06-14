@@ -42,7 +42,7 @@ export interface SiAfterHoursCandidateRow {
 export interface AvailabilityBlockRow {
   clinician_id: string;
   colour: 'red' | 'yellow' | 'green';
-  recurrence: 'none' | 'weekly';
+  recurrence: 'none' | 'weekly' | 'fortnightly';
   day_of_week: number | null;
   specific_date: string | null;
   start_time: string;
@@ -209,10 +209,34 @@ function blockMatchesLocalDate(
   if (block.recurrence === 'weekly') {
     return block.day_of_week === localDow;
   }
+  if (block.recurrence === 'fortnightly') {
+    if (block.day_of_week !== localDow || block.day_of_week === null) return false;
+    const anchor = firstOccurrenceOnOrAfter(block.effective_from, block.day_of_week);
+    return isFortnightBoundary(anchor, localDateYmd);
+  }
   if (block.recurrence === 'none') {
     return block.specific_date === localDateYmd;
   }
   return false;
+}
+
+function firstOccurrenceOnOrAfter(
+  isoDate: string,
+  targetDayOfWeek: number,
+): string {
+  const base = new Date(`${isoDate}T00:00:00Z`);
+  const current = base.getUTCDay();
+  const delta = (targetDayOfWeek - current + 7) % 7;
+  const out = new Date(base);
+  out.setUTCDate(base.getUTCDate() + delta);
+  return out.toISOString().slice(0, 10);
+}
+
+function isFortnightBoundary(anchorIsoDate: string, candidateIsoDate: string): boolean {
+  const anchor = new Date(`${anchorIsoDate}T00:00:00Z`);
+  const candidate = new Date(`${candidateIsoDate}T00:00:00Z`);
+  const diffDays = Math.floor((candidate.getTime() - anchor.getTime()) / 86_400_000);
+  return diffDays >= 0 && diffDays % 14 === 0;
 }
 
 export function matchingBlocksAt(

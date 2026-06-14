@@ -26,9 +26,12 @@
  */
 import { dbAdmin, appPoolRaw } from './db/db';
 import bcrypt from 'bcryptjs';
+import { withTenantContext } from './shared/tenantContext';
 
 const PRIMARY_CLINIC_ID = '11111111-1111-1111-1111-111111111111';
 const SECONDARY_CLINIC_ID = '22222222-0000-1111-2222-222222222222';
+const PRIMARY_CLINIC_HPIO = '8003621234567892';
+const SECONDARY_CLINIC_HPIO = '8003621234567892';
 const A11Y_PATIENT_ID = '77777777-7777-4777-8777-777777777777';
 const A11Y_EPISODE_ID = '88888888-8888-4888-8888-888888888888';
 const LEGACY_A11Y_PATIENT_ID = '77777777-7777-7777-7777-777777777777';
@@ -155,19 +158,29 @@ const A11Y_EPISODE: SeedEpisode = {
   primaryClinicianId: A11Y_RELATIONSHIP_CLINICIAN_ID,
 };
 
-async function upsertClinic(id: string, name: string, now: Date): Promise<void> {
+async function upsertClinic(id: string, name: string, hpio: string, now: Date): Promise<void> {
   const existing = await dbAdmin('clinics').where({ id }).first();
+  const payload = {
+    name,
+    legal_name: `${name} Pty Ltd`,
+    abn: '11 000 000 000',
+    hpio,
+    timezone: 'Australia/Melbourne',
+    time_zone: 'Australia/Melbourne',
+    session_idle_minutes: null,
+    is_active: true,
+    deleted_at: null,
+    updated_at: now,
+  };
+
   if (existing) {
-    await dbAdmin('clinics').where({ id }).update({
-      name, legal_name: `${name} Pty Ltd`, abn: '11 000 000 000',
-      time_zone: 'Australia/Melbourne', is_active: true, updated_at: now,
-    });
+    await dbAdmin('clinics').where({ id }).update(payload);
     console.log(`[seed-e2e] clinic ${id} updated`);
   } else {
     await dbAdmin('clinics').insert({
-      id, name, legal_name: `${name} Pty Ltd`, abn: '11 000 000 000',
-      time_zone: 'Australia/Melbourne', is_active: true,
-      created_at: now, updated_at: now,
+      id,
+      ...payload,
+      created_at: now,
     });
     console.log(`[seed-e2e] clinic ${id} inserted`);
   }
@@ -217,101 +230,107 @@ async function upsertReferralSource(
   source: SeedReferralSource,
   now: Date,
 ): Promise<void> {
-  const existing = await dbAdmin('referral_sources')
-    .where({
+  const action = await withTenantContext(clinicId, async () => {
+    const existing = await dbAdmin('referral_sources')
+      .where({
+        clinic_id: clinicId,
+        category: source.category,
+        name: source.name,
+      })
+      .first();
+
+    if (existing) {
+      await dbAdmin('referral_sources')
+        .where({ id: existing.id })
+        .update({
+          is_active: true,
+          sort_order: source.sortOrder,
+          updated_at: now,
+        });
+      return 'updated' as const;
+    }
+
+    await dbAdmin('referral_sources').insert({
       clinic_id: clinicId,
       category: source.category,
       name: source.name,
-    })
-    .first();
-
-  if (existing) {
-    await dbAdmin('referral_sources')
-      .where({ id: existing.id })
-      .update({
-        is_active: true,
-        sort_order: source.sortOrder,
-        updated_at: now,
-      });
-    console.log(`[seed-e2e] referral source ${source.category}/${source.name} updated`);
-    return;
-  }
-
-  await dbAdmin('referral_sources').insert({
-    clinic_id: clinicId,
-    category: source.category,
-    name: source.name,
-    is_active: true,
-    sort_order: source.sortOrder,
-    created_at: now,
-    updated_at: now,
+      is_active: true,
+      sort_order: source.sortOrder,
+      created_at: now,
+      updated_at: now,
+    });
+    return 'inserted' as const;
   });
-  console.log(`[seed-e2e] referral source ${source.category}/${source.name} inserted`);
+  console.log(`[seed-e2e] referral source ${source.category}/${source.name} ${action}`);
 }
 
 async function upsertPatient(patient: SeedPatient, now: Date): Promise<void> {
-  const existing = await dbAdmin('patients').where({ id: patient.id }).first();
-  if (existing) {
-    await dbAdmin('patients').where({ id: patient.id }).update({
+  const action = await withTenantContext(patient.clinicId, async () => {
+    const existing = await dbAdmin('patients').where({ id: patient.id }).first();
+    if (existing) {
+      await dbAdmin('patients').where({ id: patient.id }).update({
+        clinic_id: patient.clinicId,
+        given_name: patient.givenName,
+        family_name: patient.familyName,
+        date_of_birth: patient.dateOfBirth,
+        status: 'active',
+        consent_to_treatment: true,
+        updated_at: now,
+        deleted_at: null,
+      });
+      return 'updated' as const;
+    }
+
+    await dbAdmin('patients').insert({
+      id: patient.id,
       clinic_id: patient.clinicId,
       given_name: patient.givenName,
       family_name: patient.familyName,
       date_of_birth: patient.dateOfBirth,
       status: 'active',
       consent_to_treatment: true,
+      created_at: now,
       updated_at: now,
       deleted_at: null,
     });
-    console.log(`[seed-e2e] patient ${patient.familyName}, ${patient.givenName} updated`);
-    return;
-  }
-
-  await dbAdmin('patients').insert({
-    id: patient.id,
-    clinic_id: patient.clinicId,
-    given_name: patient.givenName,
-    family_name: patient.familyName,
-    date_of_birth: patient.dateOfBirth,
-    status: 'active',
-    consent_to_treatment: true,
-    created_at: now,
-    updated_at: now,
-    deleted_at: null,
+    return 'inserted' as const;
   });
-  console.log(`[seed-e2e] patient ${patient.familyName}, ${patient.givenName} inserted`);
+  console.log(`[seed-e2e] patient ${patient.familyName}, ${patient.givenName} ${action}`);
 }
 
 async function upsertEpisode(episode: SeedEpisode, now: Date): Promise<void> {
-  const existing = await dbAdmin('episodes').where({ id: episode.id }).first();
-  const basePatch = {
-    clinic_id: episode.clinicId,
-    patient_id: episode.patientId,
-    title: 'E2E accessibility relationship fixture',
-    episode_type: 'inpatient',
-    status: 'open',
-    start_date: now.toISOString().slice(0, 10),
-    specialty_code: 'mental_health',
-    primary_clinician_id: episode.primaryClinicianId,
-    // BUG-C2-fixture-lock-version: EpisodeResponseSchema requires a
-    // positive lockVersion when present. Seeding 0 made
-    // GET /episodes/patient/:id fail with 422 in UI probes.
-    lock_version: 1,
-    deleted_at: null,
-    updated_at: now,
-  };
+  const action = await withTenantContext(episode.clinicId, async () => {
+    const existing = await dbAdmin('episodes').where({ id: episode.id }).first();
+    const basePatch = {
+      clinic_id: episode.clinicId,
+      patient_id: episode.patientId,
+      title: 'E2E accessibility relationship fixture',
+      episode_type: 'inpatient',
+      status: 'open',
+      start_date: now.toISOString().slice(0, 10),
+      specialty_code: 'mental_health',
+      primary_clinician_id: episode.primaryClinicianId,
+      // BUG-C2-fixture-lock-version: EpisodeResponseSchema requires a
+      // positive lockVersion when present. Seeding 0 made
+      // GET /episodes/patient/:id fail with 422 in UI probes.
+      lock_version: 1,
+      deleted_at: null,
+      updated_at: now,
+    };
 
-  if (existing) {
-    await dbAdmin('episodes').where({ id: episode.id }).update(basePatch);
-    console.log('[seed-e2e] accessibility episode fixture updated');
-    return;
-  }
+    if (existing) {
+      await dbAdmin('episodes').where({ id: episode.id }).update(basePatch);
+      return 'updated' as const;
+    }
 
-  await dbAdmin('episodes').insert({
-    id: episode.id,
-    ...basePatch,
-    created_at: now,
+    await dbAdmin('episodes').insert({
+      id: episode.id,
+      ...basePatch,
+      created_at: now,
+    });
+    return 'inserted' as const;
   });
-  console.log('[seed-e2e] accessibility episode fixture inserted');
+  console.log(`[seed-e2e] accessibility episode fixture ${action}`);
 }
 
 async function cleanupLegacyA11yFixtures(): Promise<void> {
@@ -335,8 +354,8 @@ async function cleanupLegacyA11yFixtures(): Promise<void> {
 
 async function seedE2EFixtures(): Promise<void> {
   const now = new Date();
-  await upsertClinic(PRIMARY_CLINIC_ID, 'E2E Test Clinic', now);
-  await upsertClinic(SECONDARY_CLINIC_ID, 'E2E Secondary Clinic', now);
+  await upsertClinic(PRIMARY_CLINIC_ID, 'E2E Test Clinic', PRIMARY_CLINIC_HPIO, now);
+  await upsertClinic(SECONDARY_CLINIC_ID, 'E2E Secondary Clinic', SECONDARY_CLINIC_HPIO, now);
 
   const passwordHash = await bcrypt.hash(DEFAULT_PASSWORD, 10);
   for (const u of USERS) {

@@ -87,7 +87,7 @@ describe.skipIf(!READY)('BUG-331 ambient worker pickup relationship gate', () =>
       }),
     ).rejects.toMatchObject({
       status: 400,
-      code: 'AMBIENT_JOB_CONTEXT_INVALID',
+      code: 'AI_JOB_CONTEXT_INVALID',
     });
   });
 
@@ -113,7 +113,12 @@ describe.skipIf(!READY)('BUG-331 ambient worker pickup relationship gate', () =>
         staffId,
         clinicId,
       }),
-    ).resolves.toBeUndefined();
+    ).resolves.toMatchObject({
+      clinicId,
+      patientId: relatedPatientId,
+      role: 'clinician',
+      staffId,
+    });
   });
 
   it('BUG-331-4: deactivated staff is rejected even if relationship row exists', async () => {

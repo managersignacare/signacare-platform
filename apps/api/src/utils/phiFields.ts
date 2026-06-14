@@ -138,6 +138,7 @@ export const PHI_CATEGORY_EMAIL = [
   'outlook_email', 'outlookEmail',
   'recipient_email', 'recipientEmail',
   'referrer_email', 'referrerEmail',
+  'clinic_sender_email', 'clinicSenderEmail',
   // BUG-269 L2 guard findings — admin / staff emails logged during
   // provisioning. They're OAIC personal information same as patient
   // emails, so the logger redactor must censor them.

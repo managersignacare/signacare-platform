@@ -12,7 +12,11 @@
 //   await requirePatientRelationship(auth, dto.patientId);
 
 import type { AuthContext } from '@signacare/shared';
-import { getAllowedDutyRelationshipTypes, isPrescriberSystemRole } from '@signacare/shared';
+import {
+  expandRoleMembership,
+  getAllowedDutyRelationshipTypes,
+  isPrescriberSystemRole,
+} from '@signacare/shared';
 import type { Request } from 'express';
 import type { Knex } from 'knex';
 import { AppError, HttpError } from './errors';
@@ -43,9 +47,13 @@ export function requirePermission(auth: AuthContext, permission: string): void {
 
 const CLINICAL_LEADERSHIP_PERMISSION_OVERRIDES = new Set([
   'note:read',
-  'note:create',
-  'note:update',
 ]);
+
+type PatientAccessMode = 'read' | 'write';
+
+interface PatientRelationshipOptions {
+  access?: PatientAccessMode;
+}
 
 /**
  * Allows clinic-wide clinical leadership roles to read/write clinical notes
@@ -159,7 +167,7 @@ export async function requirePrescribingDiscipline(auth: AuthContext): Promise<v
  */
 export async function requireValidHpii(auth: AuthContext): Promise<void> {
   const row = await db('staff')
-    .where({ id: auth.staffId })
+    .where('staff.id', auth.staffId)
     .join('clinics', 'clinics.id', 'staff.clinic_id')
     .select(
       'staff.hpii',
@@ -240,12 +248,25 @@ export async function requireValidHpii(auth: AuthContext): Promise<void> {
 export async function requirePatientRelationship(
   auth: AuthContext,
   patientId: string,
+  options: PatientRelationshipOptions = {},
 ): Promise<void> {
+  const access = options.access ?? 'write';
   if (auth.breakGlassSessionId) return;
 
   const hasRelationship = await withRelationshipDbContext(
     auth.clinicId,
     async (relationshipDb) => {
+      if (access === 'read') {
+        const hasOrgWideReviewAccess =
+          await hasOrgWidePatientReviewAccess(
+            relationshipDb,
+            auth.clinicId,
+            auth.staffId,
+            auth.role,
+          );
+        if (hasOrgWideReviewAccess) return true;
+      }
+
       // Check 0 (Phase 0.5.B + BUG-351): clinic-scoped nominated/delegated
       // admin. Joins clinics on the patient's clinic_id (not auth.clinicId)
       // so the bypass can't leak across tenants — a nominated admin for
@@ -444,6 +465,13 @@ export async function requirePatientRelationship(
   );
 }
 
+export async function requirePatientReadAccess(
+  auth: AuthContext,
+  patientId: string,
+): Promise<void> {
+  await requirePatientRelationship(auth, patientId, { access: 'read' });
+}
+
 async function withRelationshipDbContext<T>(
   clinicId: string,
   work: (relationshipDb: Knex) => Promise<T>,
@@ -457,6 +485,37 @@ async function withRelationshipDbContext<T>(
     await trx.raw("SELECT set_config('app.clinic_id', ?, true)", [clinicId]);
     return work(trx as unknown as Knex);
   });
+}
+
+async function hasOrgWidePatientReviewAccess(
+  conn: Knex,
+  clinicId: string,
+  staffId: string,
+  role: string | null | undefined,
+): Promise<boolean> {
+  const inheritedRoles = expandRoleMembership(role);
+  const hasManagerRole =
+    inheritedRoles.has('manager')
+    && role !== 'admin'
+    && role !== 'superadmin';
+  if (hasManagerRole) {
+    return true;
+  }
+
+  const row = await conn('staff_role_assignments as sra')
+    .join('staff as s', 's.id', 'sra.staff_id')
+    .where('sra.clinic_id', clinicId)
+    .andWhere('sra.staff_id', staffId)
+    .andWhere('sra.is_active', true)
+    .andWhere('s.is_active', true)
+    .whereNull('s.deleted_at')
+    .whereIn('sra.role_type', ['team_leader', 'manager'])
+    .where(function activeDateWindow() {
+      this.whereNull('sra.end_date').orWhereRaw('sra.end_date >= CURRENT_DATE');
+    })
+    .first('sra.id');
+
+  return Boolean(row);
 }
 
 /**

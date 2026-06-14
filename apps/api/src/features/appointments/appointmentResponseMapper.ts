@@ -136,50 +136,53 @@ export async function enrichAppointmentRows(
 
   const attendeeTableAvailable = await hasOptionalTable('appointment_attendees');
 
-  const [teamRows, patientTeamRows, attendeeRows] = await Promise.all([
-    db('appointments as a')
-      .leftJoin('episodes as e', 'e.id', 'a.episode_id')
-      // @fk-join-exempt: optional episode-backed team decoration joins the parent org unit after resolving the episode row.
-      .leftJoin('org_units as ou', 'ou.id', 'e.team_id')
-      .where('a.clinic_id', clinicId)
-      .whereIn('a.id', appointmentIds)
+  // Request-scoped RLS wraps these reads in a single transaction client.
+  // Run them sequentially so pg never receives overlapping client.query()
+  // calls on the same connection.
+  const teamRows = await (db('appointments as a')
+    .leftJoin('episodes as e', 'e.id', 'a.episode_id')
+    // @fk-join-exempt: optional episode-backed team decoration joins the parent org unit after resolving the episode row.
+    .leftJoin('org_units as ou', 'ou.id', 'e.team_id')
+    .where('a.clinic_id', clinicId)
+    .whereIn('a.id', appointmentIds)
+    .select({
+      appointment_id: 'a.id',
+      patient_id: 'a.patient_id',
+      team_id: 'e.team_id',
+      team_name: 'ou.name',
+    }) as Promise<AppointmentTeamDecoratedRow[]>);
+
+  const patientTeamRows = await (db('patient_team_assignments as pta')
+    .join('patients as p', 'p.id', 'pta.patient_id')
+    .leftJoin('org_units as ou', 'ou.id', 'pta.org_unit_id')
+    .where('p.clinic_id', clinicId)
+    .whereNull('p.deleted_at')
+    .whereIn('pta.patient_id', patientIds)
+    .where('pta.is_active', true)
+    .orderBy([
+      { column: 'pta.updated_at', order: 'desc' },
+      { column: 'pta.created_at', order: 'desc' },
+    ])
+    .select({
+      patient_id: 'pta.patient_id',
+      org_unit_id: 'pta.org_unit_id',
+      org_unit_name: 'ou.name',
+    }) as Promise<PatientTeamDecoratedRow[]>);
+
+  const attendeeRows = attendeeTableAvailable
+    ? await (db('appointment_attendees as aa')
+      .leftJoin('staff as s', 's.id', 'aa.staff_id')
+      .where('aa.clinic_id', clinicId)
+      .whereIn('aa.appointment_id', appointmentIds)
+      .whereNot('aa.attendance_status', 'removed')
+      .orderBy('aa.invited_at', 'asc')
       .select({
-        appointment_id: 'a.id',
-        patient_id: 'a.patient_id',
-        team_id: 'e.team_id',
-        team_name: 'ou.name',
-      }) as Promise<AppointmentTeamDecoratedRow[]>,
-    db('patient_team_assignments as pta')
-      .join('patients as p', 'p.id', 'pta.patient_id')
-      .leftJoin('org_units as ou', 'ou.id', 'pta.org_unit_id')
-      .where('p.clinic_id', clinicId)
-      .whereNull('p.deleted_at')
-      .whereIn('pta.patient_id', patientIds)
-      .where('pta.is_active', true)
-      .orderBy([
-        { column: 'pta.updated_at', order: 'desc' },
-        { column: 'pta.created_at', order: 'desc' },
-      ])
-      .select({
-        patient_id: 'pta.patient_id',
-        org_unit_id: 'pta.org_unit_id',
-        org_unit_name: 'ou.name',
-      }) as Promise<PatientTeamDecoratedRow[]>,
-    attendeeTableAvailable
-      ? (db('appointment_attendees as aa')
-        .leftJoin('staff as s', 's.id', 'aa.staff_id')
-        .where('aa.clinic_id', clinicId)
-        .whereIn('aa.appointment_id', appointmentIds)
-        .whereNot('aa.attendance_status', 'removed')
-        .orderBy('aa.invited_at', 'asc')
-        .select({
-          appointment_id: 'aa.appointment_id',
-          staff_id: 'aa.staff_id',
-          given_name: 's.given_name',
-          family_name: 's.family_name',
-        }) as Promise<AppointmentAttendeeDecoratedRow[]>)
-      : Promise.resolve([] as AppointmentAttendeeDecoratedRow[]),
-  ]);
+        appointment_id: 'aa.appointment_id',
+        staff_id: 'aa.staff_id',
+        given_name: 's.given_name',
+        family_name: 's.family_name',
+      }) as Promise<AppointmentAttendeeDecoratedRow[]>)
+    : [];
 
   const teamByAppointment = new Map(
     teamRows.map((row) => [row.appointment_id, row] as const),

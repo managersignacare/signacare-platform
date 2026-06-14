@@ -17,7 +17,7 @@ import { appointmentRepository, type AppointmentStatus } from './appointmentRepo
 import { appointmentAttendeeRepository } from './appointmentAttendeeRepository';
 import { AppError } from '../../shared/errors';
 import { logger } from '../../utils/logger';
-import { requirePatientRelationship } from '../../shared/authGuards';
+import { requirePatientReadAccess, requirePatientRelationship } from '../../shared/authGuards';
 import {
   CreateAppointmentDTO,
   UpdateAppointmentDTO,
@@ -56,15 +56,14 @@ const allowedStatusTransitions: Record<AppointmentStatus, AppointmentStatus[]> =
 export const appointmentService = {
   /**
    * AuthContext-gated create. Used by every HTTP caller.
-   * requirePatientRelationship ensures the booking clinician has an
-   * active relationship with the patient (episode / team / existing
-   * appointment). Break-glass bypasses per the documented guard.
+   * Any in-clinic appointment writer may book for an in-clinic patient.
+   * Operational staff such as reception must be able to place bookings
+   * without first establishing a clinical relationship.
    */
   async create(
     auth: AuthContext,
     dto: CreateAppointmentDTOType,
   ): Promise<AppointmentResponseType> {
-    await requirePatientRelationship(auth, dto.patientId);
     return appointmentService.createInternal(auth.clinicId, auth.staffId, dto);
   },
 
@@ -79,6 +78,14 @@ export const appointmentService = {
     staffId: string,
     dto: CreateAppointmentDTOType,
   ): Promise<AppointmentResponseType> {
+    const patient = await db('patients')
+      .where({ id: dto.patientId, clinic_id: clinicId })
+      .whereNull('deleted_at')
+      .first('id');
+    if (!patient) {
+      throw new AppError('Patient not found', 404, 'PATIENT_NOT_FOUND');
+    }
+
     const start = new Date(dto.startTime);
     const end = new Date(dto.endTime);
     if (end <= start) {
@@ -238,7 +245,6 @@ export const appointmentService = {
       recurrenceTime?: string;     // HH:mm
     },
   ): Promise<AppointmentResponseType[]> {
-    await requirePatientRelationship(auth, dto.patientId);
     const { clinicId, staffId } = auth;
     const rule = dto.recurrenceRule ?? 'weekly';
     const endDate = dto.recurrenceEndDate ? new Date(dto.recurrenceEndDate) : (() => { const d = new Date(dto.startTime); d.setMonth(d.getMonth() + 3); return d; })();
@@ -621,7 +627,7 @@ export const appointmentService = {
   async getById(auth: AuthContext, id: string): Promise<AppointmentResponseType> {
     const existing = await appointmentRepository.findById(auth.clinicId, id);
     if (!existing) throw new AppError('Appointment not found', 404, 'NOT_FOUND');
-    await requirePatientRelationship(auth, existing.patient_id);
+    await requirePatientReadAccess(auth, existing.patient_id);
     const [enriched] = await enrichAppointmentRows(auth.clinicId, [
       existing as unknown as Record<string, unknown>,
     ]);
@@ -637,7 +643,7 @@ export const appointmentService = {
     // roster) remain valid without the check since they don't narrow
     // to a single patient.
     if (filters.patientId) {
-      await requirePatientRelationship(auth, filters.patientId);
+      await requirePatientReadAccess(auth, filters.patientId);
     }
     const rows = await appointmentRepository.list({
       clinicId: auth.clinicId,

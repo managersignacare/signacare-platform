@@ -22,6 +22,7 @@ import { AppError } from '../../shared/errors';
 import { parseRow } from '../../shared/coerceRow';
 import {
   requirePermission,
+  requirePatientReadAccess,
   requirePatientRelationship,
 } from '../../shared/authGuards';
 
@@ -78,7 +79,7 @@ export const riskService = {
     patientId: string,
   ): Promise<RiskAssessmentResponse[]> {
     requirePermission(auth, 'risk:read');
-    await requirePatientRelationship(auth, patientId);
+    await requirePatientReadAccess(auth, patientId);
     const rows = await riskRepository.listForPatient(auth.clinicId, patientId);
     return rows.map((r) => mapRowToResponse(r as unknown as Record<string, unknown>));
   },
@@ -90,7 +91,7 @@ export const riskService = {
     requirePermission(auth, 'risk:read');
     const row = await riskRepository.findById(auth.clinicId, id);
     if (!row) throw new AppError('Risk assessment not found', 404, 'NOT_FOUND');
-    await requirePatientRelationship(auth, (row as { patient_id: string }).patient_id);
+    await requirePatientReadAccess(auth, (row as { patient_id: string }).patient_id);
     return mapRowToResponse(row as unknown as Record<string, unknown>);
   },
 

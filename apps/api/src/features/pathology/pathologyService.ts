@@ -13,7 +13,7 @@ import type { AuthContext } from '@signacare/shared';
 import logger from '../../utils/logger';
 import { db, dbAdmin } from '../../db/db';
 import * as pathologyRepo from './pathologyRepository';
-import { requirePatientRelationship } from '../../shared/authGuards';
+import { requirePatientReadAccess, requirePatientRelationship } from '../../shared/authGuards';
 import { ensureClinicalNoteConsent } from '../../shared/recordingConsent';
 import { resolveStaffRecipientsWithAdminFallback } from '../../shared/staffActivenessResolver';
 import { getHl7OutboundRetryProfile } from '../../integrations/hl7/hl7OutboundRetryProfile';
@@ -268,7 +268,7 @@ export async function listOrders(
   auth: AuthContext,
   patientId: string,
 ): Promise<PathologyOrderResponse[]> {
-  await requirePatientRelationship(auth, patientId);
+  await requirePatientReadAccess(auth, patientId);
   const rows = await pathologyRepo.findOrdersByPatient(auth.clinicId, patientId);
   return rows.map((r) => mapOrder(r as unknown as Record<string, unknown>));
 }
@@ -284,7 +284,7 @@ export async function getOrderWithResults(
     err.code = 'PATHOLOGY_ORDER_NOT_FOUND';
     throw err;
   }
-  await requirePatientRelationship(auth, order.patient_id);
+  await requirePatientReadAccess(auth, order.patient_id);
   const results = await pathologyRepo.findResultsByOrder(auth.clinicId, orderId);
   return {
     order: mapOrder(order as unknown as Record<string, unknown>),

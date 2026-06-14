@@ -32,7 +32,8 @@ describe('dashboard preferences', () => {
       },
     });
 
-    expect(prefs.viewPreferences.my_dashboard.hiddenCardIds)
+    expect(prefs.viewPreferences.my_dashboard).toBeDefined();
+    expect(prefs.viewPreferences.my_dashboard!.hiddenCardIds)
       .not.toContain(safetyCard!.id);
   });
 

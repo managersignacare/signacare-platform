@@ -6,7 +6,7 @@ import { MODULE_KEYS } from '../../shared/moduleKeys';
 import { requireRoles } from '../../middleware/rbacMiddleware';
 import { AppError } from '../../shared/errors';
 import { buildAuthContext } from '../../shared/buildAuthContext';
-import { requirePatientRelationship } from '../../shared/authGuards';
+import { requirePatientReadAccess, requirePatientRelationship } from '../../shared/authGuards';
 import { db } from '../../db/db';
 import { CreateLaiValidationSchema } from '@signacare/shared';
 import {
@@ -68,7 +68,7 @@ router.get('/patients/:patientId/aims-assessments', requireRoles([...ROLES]), li
 router.get('/patients/:patientId/validations', requireRoles([...ROLES]), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const auth = buildAuthContext(req, req.params.patientId);
-    await requirePatientRelationship(auth, req.params.patientId);
+    await requirePatientReadAccess(auth, req.params.patientId);
     const rows = await db('lai_validations')
       .where({ clinic_id: req.clinicId, patient_id: req.params.patientId })
       .orderBy('validation_date', 'desc');
@@ -166,7 +166,7 @@ router.get('/:scheduleId/validations', requireRoles([...ROLES]), async (req: Req
       throw new AppError('LAI schedule not found', 404, 'NOT_FOUND');
     }
     const auth = buildAuthContext(req, schedule.patient_id);
-    await requirePatientRelationship(auth, schedule.patient_id);
+    await requirePatientReadAccess(auth, schedule.patient_id);
 
     const rows = await db('lai_validations')
       .where({ clinic_id: req.clinicId, lai_schedule_id: req.params.scheduleId })

@@ -26,9 +26,13 @@
  *   exit 1 = rules without coverage; BLOCK
  */
 import { readFileSync } from 'fs';
+import { dirname, resolve } from 'path';
+import { fileURLToPath } from 'url';
 
-const CLAUDE_MD = '/Users/drprakashkamath/Projects/Signacare/CLAUDE.md';
-const MATRIX_MD = '/Users/drprakashkamath/Projects/Signacare/docs/quality/rules-coverage-matrix.md';
+const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(SCRIPT_DIR, '../..');
+const CLAUDE_MD = resolve(REPO_ROOT, 'CLAUDE.md');
+const MATRIX_MD = resolve(REPO_ROOT, 'docs/quality/rules-coverage-matrix.md');
 
 interface Rule {
   id: string;

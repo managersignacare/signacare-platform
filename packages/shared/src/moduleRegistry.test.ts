@@ -42,7 +42,8 @@ describe('MODULE_REGISTRY patientTabs invariants', () => {
   it('every patientTabs.order is unique across the registry', () => {
     const orderByTabId = new Map<string, number>();
     for (const t of allTabs) {
-      orderByTabId.set(t.id, t.order);
+      expect(typeof t.order).toBe('number');
+      orderByTabId.set(t.id, t.order!);
     }
     const orders = [...orderByTabId.values()];
     const collisions = orders.filter((o, i) => orders.indexOf(o) !== i);

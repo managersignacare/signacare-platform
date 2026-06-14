@@ -62,6 +62,7 @@ import type { AuthContext } from '@signacare/shared';
 import { isIntegrationReady, loginAsAdmin } from './_helpers';
 import {
   requirePatientRelationship,
+  requirePatientReadAccess,
   requireClinicalAccessRole,
   requireAccessSettingsAuthority,
   requirePermissionOrClinicalLeadershipOverride,
@@ -569,31 +570,36 @@ describe.skipIf(!READY)('Phase 0.5.B two-rail access model', () => {
     await expect(inTenant(clinicId, () => requirePatientRelationship(auth, patientId))).resolves.not.toThrow();
   });
 
-  it('T20 — Clinical Manager role gets clinic-wide patient access across unrelated teams', async () => {
+  it('T20 — Clinical Manager role gets org-wide patient read access across unrelated teams', async () => {
     const auth = buildAuth({ staffId: clinicalManagerId, clinicId, role: 'manager', permissions: ['patient:read'] });
-    await expect(inTenant(clinicId, () => requirePatientRelationship(auth, patientId))).resolves.not.toThrow();
+    await expect(inTenant(clinicId, () => requirePatientReadAccess(auth, patientId))).resolves.not.toThrow();
   });
 
-  it('T21 — Medical Director role gets clinic-wide patient access across unrelated teams', async () => {
+  it('T21 — Medical Director role gets org-wide patient read access across unrelated teams', async () => {
     const auth = buildAuth({ staffId: medicalDirectorId, clinicId, role: 'manager', permissions: ['patient:read'] });
-    await expect(inTenant(clinicId, () => requirePatientRelationship(auth, patientId))).resolves.not.toThrow();
+    await expect(inTenant(clinicId, () => requirePatientReadAccess(auth, patientId))).resolves.not.toThrow();
   });
 
-  it('T22 — Clinical Manager may write clinic-wide clinical notes via leadership override', async () => {
+  it('T22 — Team leader role gets org-wide patient read access without a direct relationship', async () => {
+    const auth = buildAuth({ staffId: teamLeaderRoleOnlyId, clinicId, role: 'clinician', permissions: ['patient:read'] });
+    await expect(inTenant(clinicId, () => requirePatientReadAccess(auth, patientId))).resolves.not.toThrow();
+  });
+
+  it('T23 — Clinical Manager may not gain clinic-wide note write by leadership override alone', async () => {
     const auth = buildAuth({ staffId: clinicalManagerId, clinicId, role: 'manager', permissions: ['patient:read'] });
     await expect(
       inTenant(clinicId, () => requirePermissionOrClinicalLeadershipOverride(auth, 'note:create')),
-    ).resolves.not.toThrow();
+    ).rejects.toMatchObject({ status: 403, code: 'FORBIDDEN' });
   });
 
-  it('T23 — Medical Director may read clinic-wide clinical notes via leadership override', async () => {
+  it('T24 — Medical Director may read clinic-wide clinical notes via leadership override', async () => {
     const auth = buildAuth({ staffId: medicalDirectorId, clinicId, role: 'manager', permissions: ['patient:read'] });
     await expect(
       inTenant(clinicId, () => requirePermissionOrClinicalLeadershipOverride(auth, 'note:read')),
     ).resolves.not.toThrow();
   });
 
-  it('T24 — Generic manager without clinical leadership role cannot gain note write by role alone', async () => {
+  it('T25 — Generic manager without clinical leadership role cannot gain note write by role alone', async () => {
     const auth = buildAuth({ staffId: clinicianOnTeamBId, clinicId, role: 'manager', permissions: ['patient:read'] });
     await expect(
       inTenant(clinicId, () => requirePermissionOrClinicalLeadershipOverride(auth, 'note:create')),

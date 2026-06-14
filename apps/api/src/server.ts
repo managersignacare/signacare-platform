@@ -5,6 +5,7 @@
 // (no side effects), safe to call from these very-early handlers.
 import { sanitizeErrForLogging as _sanitizeErr } from './utils/sanitizeErrForLogging';
 import './shared/installBullmqEvictionWarningPolicy';
+import { isBenignRedisLifecycleRejection } from './shared/redisErrorClassification';
 process.on('uncaughtException', (err) => {
   const safe = _sanitizeErr(err);
   console.error('[FATAL] Uncaught exception:', safe.message, safe.stack);
@@ -16,6 +17,9 @@ process.on('uncaughtException', (err) => {
   }
 });
 process.on('unhandledRejection', (reason) => {
+  if (isBenignRedisLifecycleRejection(reason)) {
+    return;
+  }
   // reason may or may not be an Error. Only sanitize when it is.
   const safeReason = reason instanceof Error ? _sanitizeErr(reason) : reason;
   console.error('[FATAL] Unhandled rejection:', safeReason);
@@ -85,7 +89,7 @@ import { randomUUID } from 'crypto';
 import { resolveUploadBaseDir, resolveUploadPath } from './shared/uploadPaths';
 // BUG-469 L5 absorb-1 — `rateLimit` + `RedisStore` now imported by
 // `middleware/rateLimiters.ts` which is the limiter SSoT.
-import { redis } from './config/redis';
+import { redis, shutdownRedisClients } from './config/redis';
 import * as Sentry from '@sentry/node';
 import { errorHandler } from './middleware/errorHandler';
 import { flushLoggerSync, logger } from './utils/logger';
@@ -1149,7 +1153,7 @@ function registerHttpLayerShutdownHooks(server: import('http').Server | import('
   registerShutdownHook({
     name: 'redis',
     priority: 10,
-    handler: async () => { await redis.quit(); },
+    handler: async () => { await shutdownRedisClients(); },
   });
   registerShutdownHook({
     name: 'pino-sync-flush',

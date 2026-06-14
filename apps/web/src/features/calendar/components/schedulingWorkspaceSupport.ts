@@ -91,6 +91,25 @@ function dayOfWeekForIsoDate(isoDate: string): number {
   return new Date(`${isoDate}T00:00:00`).getDay();
 }
 
+function firstOccurrenceOnOrAfter(
+  isoDate: string,
+  targetDayOfWeek: number,
+): string {
+  const base = new Date(`${isoDate}T00:00:00Z`);
+  const current = base.getUTCDay();
+  const delta = (targetDayOfWeek - current + 7) % 7;
+  const out = new Date(base);
+  out.setUTCDate(base.getUTCDate() + delta);
+  return out.toISOString().slice(0, 10);
+}
+
+function isFortnightBoundary(anchorIsoDate: string, candidateIsoDate: string): boolean {
+  const anchor = new Date(`${anchorIsoDate}T00:00:00Z`);
+  const candidate = new Date(`${candidateIsoDate}T00:00:00Z`);
+  const diffDays = Math.floor((candidate.getTime() - anchor.getTime()) / 86_400_000);
+  return diffDays >= 0 && diffDays % 14 === 0;
+}
+
 function isBlockActiveOnDate(block: AvailabilityBlock, isoDate: string): boolean {
   if (block.effectiveFrom > isoDate) {
     return false;
@@ -100,6 +119,13 @@ function isBlockActiveOnDate(block: AvailabilityBlock, isoDate: string): boolean
   }
   if (block.recurrence === 'none') {
     return block.specificDate === isoDate;
+  }
+  if (block.recurrence === 'fortnightly') {
+    if (block.dayOfWeek !== dayOfWeekForIsoDate(isoDate) || block.dayOfWeek === null) {
+      return false;
+    }
+    const anchor = firstOccurrenceOnOrAfter(block.effectiveFrom, block.dayOfWeek);
+    return isFortnightBoundary(anchor, isoDate);
   }
   return block.dayOfWeek === dayOfWeekForIsoDate(isoDate);
 }

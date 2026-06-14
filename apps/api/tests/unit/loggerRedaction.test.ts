@@ -233,6 +233,18 @@ describe('BUG-216 — utils/logger.ts PHI redaction', () => {
     expect(patient.pbs_item_code).toBe('[REDACTED]');
   });
 
+  it('(6c) clinic sender mailbox addresses are redacted, but sender mode remains operational metadata', () => {
+    const out = redactPhi({
+      clinic_sender_email: 'mailbox@clinic.example',
+      clinicSenderEmail: 'mailbox@clinic.example',
+      email_sender_mode: 'clinic_mailbox',
+    });
+
+    expect(out.clinic_sender_email).toBe('[REDACTED]');
+    expect(out.clinicSenderEmail).toBe('[REDACTED]');
+    expect(out.email_sender_mode).toBe('clinic_mailbox');
+  });
+
   it('(6b) clinical narrative fields are redacted (L4 round 2 condition — the largest PHI vector)', () => {
     // BUG-216 L4 review — a single logger.info({ note: { clinical_notes:
     // "Patient Jane Doe reports..." } }) leaks an entire dictated narrative.

@@ -7,7 +7,12 @@ import { db } from '../../db/db';
 import { TMS_COURSES_COLUMNS } from '../../db/types/tms_courses';
 import { TMS_SESSIONS_COLUMNS } from '../../db/types/tms_sessions';
 import { AppError } from '../../shared/errors';
-import { requirePermission, requireSpecialty, requirePatientRelationship } from '../../shared/authGuards';
+import {
+  requirePatientReadAccess,
+  requirePatientRelationship,
+  requirePermission,
+  requireSpecialty,
+} from '../../shared/authGuards';
 import { writeAuditLog } from '../../utils/audit';
 
 const TMS_COURSE_COLUMNS = TMS_COURSES_COLUMNS;
@@ -161,7 +166,7 @@ export const tmsService = {
 
   async listByPatient(auth: AuthContext, patientId: string) {
     requirePermission(auth, 'tms:read');
-    await requirePatientRelationship(auth, patientId);
+    await requirePatientReadAccess(auth, patientId);
 
     const courses = await db('tms_courses')
       .where({ clinic_id: auth.clinicId, patient_id: patientId })
@@ -186,7 +191,7 @@ export const tmsService = {
       .whereNull('deleted_at')
       .first('patient_id');
     if (!course) throw new AppError('TMS course not found', 404, 'NOT_FOUND');
-    await requirePatientRelationship(auth, course.patient_id as string);
+    await requirePatientReadAccess(auth, course.patient_id as string);
     return db('tms_sessions')
       .where({ course_id: courseId, clinic_id: auth.clinicId })
       .orderBy('session_number', 'asc');

@@ -174,11 +174,11 @@ export async function countNewPathologyResults(
   clinicId: string,
   clinicianId: string,
 ): Promise<number> {
-  // NEW-S1-A fix (2026-04-30): correct FK column is `pathology_order_id`
-  // not `order_id`. Verified against schema-snapshot.json. Pre-fix this
-  // query crashed at runtime with "column lr.order_id does not exist";
-  // the dashboard counter silently returned the SQL-error-as-zero so
-  // the bug lived undetected.
+  // NEW-S1-A fix (2026-04-30): correct FK column is `pathology_order_id`.
+  // Verified against schema-snapshot.json. Pre-fix this query referenced
+  // the wrong pathology_results foreign key, crashed at runtime, and the
+  // dashboard counter silently returned the SQL-error-as-zero so the bug
+  // lived undetected.
   const [row] = await dbRead('pathology_orders as lo')
     .join('pathology_results as lr', 'lo.id', 'lr.pathology_order_id')
     .where('lo.clinic_id', clinicId)

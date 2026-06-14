@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-06-12",
-  "generatedAtIso": "2026-06-12T21:03:17.869Z",
+  "generatedAt": "2026-06-14",
+  "generatedAtIso": "2026-06-14T08:24:02.912Z",
   "database": "signacaredb",
   "tables": {
     "active_sessions": [

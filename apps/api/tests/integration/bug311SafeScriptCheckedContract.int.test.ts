@@ -20,6 +20,7 @@ import app from '../../src/server';
 import { dbAdmin } from '../../src/db/db';
 import { isIntegrationReady, loginAsClinician } from './_helpers';
 import { safeScriptService } from '../../src/integrations/safeScript/safeScriptService';
+import { CANONICAL_PASSWORD, CANONICAL_PERSONAS } from '../fixtures/canonical-personas';
 
 const ready = await isIntegrationReady();
 
@@ -29,18 +30,41 @@ describe.skipIf(!ready)('BUG-311 SafeScript checked contract', () => {
   let patientId = '';
   let prescriberId = '';
   let prescriptionId = '';
+  let originalRole: string | null = null;
+  let originalHpii: string | null = null;
 
   beforeAll(async () => {
     const session = await loginAsClinician();
-    token = session.token;
     clinicId = session.clinicId;
+    prescriberId = session.userId;
 
-    const prescriber = await dbAdmin('staff')
-      .where({ clinic_id: clinicId, discipline: 'psychiatry' })
-      .select('id')
+    const current = await dbAdmin('staff')
+      .where({ id: prescriberId, clinic_id: clinicId })
+      .select('role', 'hpii')
       .first();
-    if (!prescriber?.id) throw new Error('BUG-311: missing seeded psychiatry prescriber');
-    prescriberId = prescriber.id as string;
+    originalRole = (current?.role as string | null | undefined) ?? null;
+    originalHpii = (current?.hpii as string | null | undefined) ?? null;
+
+    await dbAdmin('staff')
+      .where({ id: prescriberId, clinic_id: clinicId })
+      .update({
+        role: 'prescriber_consultant',
+        hpii: '8003611234567893',
+        updated_at: new Date(),
+      });
+
+    const loginRes = await request(app)
+      .post('/api/v1/auth/login')
+      .set('X-CSRF-Token', 'test')
+      .set('X-Client', 'mobile')
+      .send({
+        email: CANONICAL_PERSONAS.clinician.email,
+        password: CANONICAL_PASSWORD,
+      });
+    if (loginRes.status !== 200) {
+      throw new Error(`BUG-311 prescriber relogin failed: ${loginRes.status} ${JSON.stringify(loginRes.body)}`);
+    }
+    token = String(loginRes.body?.accessToken ?? '');
 
     patientId = randomUUID();
     await dbAdmin('patients').insert({
@@ -78,6 +102,16 @@ describe.skipIf(!ready)('BUG-311 SafeScript checked contract', () => {
   afterAll(async () => {
     await dbAdmin('prescriptions').where({ id: prescriptionId }).del().catch(() => undefined);
     await dbAdmin('patients').where({ id: patientId }).del().catch(() => undefined);
+    if (prescriberId) {
+      await dbAdmin('staff')
+        .where({ id: prescriberId, clinic_id: clinicId })
+        .update({
+          role: originalRole,
+          hpii: originalHpii,
+          updated_at: new Date(),
+        })
+        .catch(() => undefined);
+    }
   });
 
   it('persists checked=true result to prescription row and response', async () => {

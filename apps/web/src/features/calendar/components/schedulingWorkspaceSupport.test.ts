@@ -83,6 +83,20 @@ describe('schedulingWorkspaceSupport', () => {
     expect(result.map((entry) => entry.id)).toEqual(['a', 'b']);
   });
 
+  it('activates fortnightly rules only on matching cadence weeks', () => {
+    const fortnightly = block({
+      id: 'fortnightly',
+      recurrence: 'fortnightly',
+      dayOfWeek: 1,
+      effectiveFrom: '2026-06-01',
+      startTime: '09:00',
+      endTime: '12:00',
+    });
+
+    expect(listAvailabilityBlocksForDate([fortnightly], '2026-06-15').map((entry) => entry.id)).toEqual(['fortnightly']);
+    expect(listAvailabilityBlocksForDate([fortnightly], '2026-06-22')).toEqual([]);
+  });
+
   it('summarizes availability with the highest-priority colour for a date', () => {
     const summary = getAvailabilitySummaryForDate([
       block({ id: 'green', colour: 'green', label: 'Clinic hours' }),

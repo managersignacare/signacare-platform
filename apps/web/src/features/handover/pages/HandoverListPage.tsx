@@ -91,6 +91,12 @@ function getShiftType(): ShiftType {
   return 'night';
 }
 
+function buildPatientCardKey(patient: CaseloadPatientRow, index: number): string {
+  const primaryId = patient.patient_id ?? patient.id ?? 'unknown-patient';
+  const emr = patient.emr_number ?? patient.emrNumber ?? 'no-emr';
+  return `${primaryId}:${emr}:${index}`;
+}
+
 export default function HandoverListPage(): React.ReactElement {
   const user = useAuthStore(s => s.user);
   const [tab, setTab] = useState<'write' | 'incoming'>('write');
@@ -368,7 +374,7 @@ function WriteHandoverPanel({ patients, shiftType, shiftDate, loading }: WriteHa
       )}
 
       <Grid container spacing={2}>
-        {patients.map((p) => {
+        {patients.map((p, index) => {
           const pid = p.patient_id ?? p.id;
           const name = p.patientName ?? `${p.givenName ?? p.given_name ?? ''} ${p.familyName ?? p.family_name ?? ''}`.trim() ?? 'Patient';
           const emr = p.emr_number ?? p.emrNumber ?? '';
@@ -376,7 +382,7 @@ function WriteHandoverPanel({ patients, shiftType, shiftDate, loading }: WriteHa
           const hasNote = noteText.trim().length > 0;
 
           return (
-            <Grid key={pid} size={{ xs: 12, md: 6 }}>
+            <Grid key={buildPatientCardKey(p, index)} size={{ xs: 12, md: 6 }}>
               <Paper variant="outlined" sx={{ p: 2, borderLeft: hasNote ? '4px solid #7B1FA2' : '4px solid #eee' }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                   <PersonIcon sx={{ color: hasNote ? '#7B1FA2' : '#999', fontSize: 18 }} />

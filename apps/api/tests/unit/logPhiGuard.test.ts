@@ -25,7 +25,7 @@ import { PHI_FIELDS } from '../../src/utils/phiFields';
 // Must match check-log-no-phi.ts and utils/logger.ts checkSchemaPhiDrift.
 const PHI_REGEX = /(?:phone|email|address|medicare|ihi\b|hpii|dva|ndis|prescriber|dob|given|family|preferred|nok|pbs|narrative|complaint|diagnosis|lookup|blind_?index)/i;
 
-const ALLOWLIST = new Set(['suspects', 'familyId', 'emailSent']);
+const ALLOWLIST = new Set(['suspects', 'familyId', 'emailSent', 'email_sender_mode']);
 
 function keyIsPhiViolation(key: string): boolean {
   if (ALLOWLIST.has(key)) return false;
@@ -51,6 +51,7 @@ describe('BUG-269 — PHI log-drift detection semantics', () => {
     expect(PHI_REGEX.test('familyId')).toBe(true); // "family" triggers regex
     expect(keyIsPhiViolation('familyId')).toBe(false); // but allowlisted
     expect(keyIsPhiViolation('emailSent')).toBe(false); // status flag, allowlisted
+    expect(keyIsPhiViolation('email_sender_mode')).toBe(false); // delivery mode enum, not the email value
   });
 
   it('G4 — PHI-regex non-match + non-allowlisted → no violation (unrelated field)', () => {
@@ -69,5 +70,12 @@ describe('BUG-269 — PHI log-drift detection semantics', () => {
     expect(PHI_FIELDS.has('adminEmail')).toBe(true);
     expect(PHI_FIELDS.has('admin_email')).toBe(true);
     expect(keyIsPhiViolation('adminEmail')).toBe(false);
+  });
+
+  it('G6 — clinic sender mailbox address is PHI-covered, but the sender mode enum is not', () => {
+    expect(PHI_FIELDS.has('clinic_sender_email')).toBe(true);
+    expect(PHI_FIELDS.has('clinicSenderEmail')).toBe(true);
+    expect(keyIsPhiViolation('clinic_sender_email')).toBe(false);
+    expect(keyIsPhiViolation('email_sender_mode')).toBe(false);
   });
 });

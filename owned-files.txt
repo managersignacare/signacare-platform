@@ -2422,6 +2422,7 @@ apps/api/migrations/20260701000109_staff_module_access_unique.ts
 apps/api/migrations/20260701000110_patient_duty_relationships.ts
 apps/api/migrations/20260701000111_patient_duty_relationships_lock_version.ts
 apps/api/migrations/20260701000112_outlook_calendar_sync_foundation.ts
+apps/api/migrations/20260701000113_calendar_fortnightly_recurrence.ts
 apps/api/node_modules/.vite/vitest/da39a3ee5e6b4b0d3255bfef95601890afd80709/results.json
 apps/api/node_modules/@msgpackr-extract/msgpackr-extract-darwin-arm64/README.md
 apps/api/node_modules/@msgpackr-extract/msgpackr-extract-darwin-arm64/index.js
@@ -9439,6 +9440,7 @@ apps/api/src/features/tasks/taskService.ts
 apps/api/src/features/tasks/taskStatusCatalog.ts
 apps/api/src/features/telehealth/telehealthRoutes.ts
 apps/api/src/features/telehealth/telehealthService.ts
+apps/api/src/features/templates/defaultClinicalNoteTemplates.ts
 apps/api/src/features/templates/template.controller.ts
 apps/api/src/features/templates/template.repository.ts
 apps/api/src/features/templates/template.routes.ts
@@ -9718,6 +9720,7 @@ apps/api/src/shared/recentRiskAssessmentGate.ts
 apps/api/src/shared/recentRiskAssessmentPolicy.ts
 apps/api/src/shared/recordLlmInteraction.ts
 apps/api/src/shared/recordingConsent.ts
+apps/api/src/shared/redisErrorClassification.ts
 apps/api/src/shared/referralAttachmentSafety.ts
 apps/api/src/shared/releaseMetadata.ts
 apps/api/src/shared/repositories/BaseRepository.ts
@@ -10022,6 +10025,7 @@ apps/api/tests/mtlsHelper.test.ts
 apps/api/tests/paediatrics.test.ts
 apps/api/tests/pbsPrescriptionPdf.test.ts
 apps/api/tests/phi-encryption.test.ts
+apps/api/tests/redisErrorClassification.test.ts
 apps/api/tests/referralAutoDegrade.test.ts
 apps/api/tests/risk.templates.test.ts
 apps/api/tests/rls-isolation.test.ts
@@ -10100,6 +10104,7 @@ apps/api/tests/unit/clozapineRiskClassification.test.ts
 apps/api/tests/unit/cspPolicy.test.ts
 apps/api/tests/unit/dataRetentionScheduler.test.ts
 apps/api/tests/unit/dateUtils.test.ts
+apps/api/tests/unit/defaultClinicalNoteTemplates.test.ts
 apps/api/tests/unit/detectScribeHallucinations.test.ts
 apps/api/tests/unit/duplicateDetection.test.ts
 apps/api/tests/unit/ectConsentExpiryScheduler.test.ts
@@ -10152,6 +10157,7 @@ apps/api/tests/unit/postDeployTelemetry.test.ts
 apps/api/tests/unit/prescriberHpiiWarnSignal.test.ts
 apps/api/tests/unit/prescriptionRepeatScheduler.test.ts
 apps/api/tests/unit/rbacPermission.test.ts
+apps/api/tests/unit/redisConfig.test.ts
 apps/api/tests/unit/redisDeploymentContract.test.ts
 apps/api/tests/unit/referralAttachmentSafety.test.ts
 apps/api/tests/unit/referralResponseMapper.test.ts
@@ -10964,8 +10970,6 @@ apps/web/node_modules/.vite/deps/@mui_icons-material_ArrowBack.js
 apps/web/node_modules/.vite/deps/@mui_icons-material_ArrowBack.js.map
 apps/web/node_modules/.vite/deps/@mui_icons-material_ArrowDownward.js
 apps/web/node_modules/.vite/deps/@mui_icons-material_ArrowDownward.js.map
-apps/web/node_modules/.vite/deps/@mui_icons-material_ArrowDropDown.js
-apps/web/node_modules/.vite/deps/@mui_icons-material_ArrowDropDown.js.map
 apps/web/node_modules/.vite/deps/@mui_icons-material_ArrowForward.js
 apps/web/node_modules/.vite/deps/@mui_icons-material_ArrowForward.js.map
 apps/web/node_modules/.vite/deps/@mui_icons-material_ArrowUpward.js
@@ -10982,6 +10986,8 @@ apps/web/node_modules/.vite/deps/@mui_icons-material_AttachFile.js
 apps/web/node_modules/.vite/deps/@mui_icons-material_AttachFile.js.map
 apps/web/node_modules/.vite/deps/@mui_icons-material_AutoAwesome.js
 apps/web/node_modules/.vite/deps/@mui_icons-material_AutoAwesome.js.map
+apps/web/node_modules/.vite/deps/@mui_icons-material_Badge.js
+apps/web/node_modules/.vite/deps/@mui_icons-material_Badge.js.map
 apps/web/node_modules/.vite/deps/@mui_icons-material_BarChart.js
 apps/web/node_modules/.vite/deps/@mui_icons-material_BarChart.js.map
 apps/web/node_modules/.vite/deps/@mui_icons-material_Bloodtype.js
@@ -11108,6 +11114,8 @@ apps/web/node_modules/.vite/deps/@mui_icons-material_KeyboardArrowDown.js
 apps/web/node_modules/.vite/deps/@mui_icons-material_KeyboardArrowDown.js.map
 apps/web/node_modules/.vite/deps/@mui_icons-material_KeyboardArrowRight.js
 apps/web/node_modules/.vite/deps/@mui_icons-material_KeyboardArrowRight.js.map
+apps/web/node_modules/.vite/deps/@mui_icons-material_KeyboardArrowUp.js
+apps/web/node_modules/.vite/deps/@mui_icons-material_KeyboardArrowUp.js.map
 apps/web/node_modules/.vite/deps/@mui_icons-material_Link.js
 apps/web/node_modules/.vite/deps/@mui_icons-material_Link.js.map
 apps/web/node_modules/.vite/deps/@mui_icons-material_LinkOff.js
@@ -11144,6 +11152,8 @@ apps/web/node_modules/.vite/deps/@mui_icons-material_NightsStay.js
 apps/web/node_modules/.vite/deps/@mui_icons-material_NightsStay.js.map
 apps/web/node_modules/.vite/deps/@mui_icons-material_NoteAdd.js
 apps/web/node_modules/.vite/deps/@mui_icons-material_NoteAdd.js.map
+apps/web/node_modules/.vite/deps/@mui_icons-material_Notes.js
+apps/web/node_modules/.vite/deps/@mui_icons-material_Notes.js.map
 apps/web/node_modules/.vite/deps/@mui_icons-material_NotificationsActive.js
 apps/web/node_modules/.vite/deps/@mui_icons-material_NotificationsActive.js.map
 apps/web/node_modules/.vite/deps/@mui_icons-material_NotificationsNone.js
@@ -11192,10 +11202,14 @@ apps/web/node_modules/.vite/deps/@mui_icons-material_PrintOutlined.js
 apps/web/node_modules/.vite/deps/@mui_icons-material_PrintOutlined.js.map
 apps/web/node_modules/.vite/deps/@mui_icons-material_Psychology.js
 apps/web/node_modules/.vite/deps/@mui_icons-material_Psychology.js.map
+apps/web/node_modules/.vite/deps/@mui_icons-material_Publish.js
+apps/web/node_modules/.vite/deps/@mui_icons-material_Publish.js.map
 apps/web/node_modules/.vite/deps/@mui_icons-material_QrCode2.js
 apps/web/node_modules/.vite/deps/@mui_icons-material_QrCode2.js.map
 apps/web/node_modules/.vite/deps/@mui_icons-material_Receipt.js
 apps/web/node_modules/.vite/deps/@mui_icons-material_Receipt.js.map
+apps/web/node_modules/.vite/deps/@mui_icons-material_RecordVoiceOver.js
+apps/web/node_modules/.vite/deps/@mui_icons-material_RecordVoiceOver.js.map
 apps/web/node_modules/.vite/deps/@mui_icons-material_Refresh.js
 apps/web/node_modules/.vite/deps/@mui_icons-material_Refresh.js.map
 apps/web/node_modules/.vite/deps/@mui_icons-material_RemoveCircle.js
@@ -11268,6 +11282,8 @@ apps/web/node_modules/.vite/deps/@mui_icons-material_TrendingUp.js
 apps/web/node_modules/.vite/deps/@mui_icons-material_TrendingUp.js.map
 apps/web/node_modules/.vite/deps/@mui_icons-material_Tune.js
 apps/web/node_modules/.vite/deps/@mui_icons-material_Tune.js.map
+apps/web/node_modules/.vite/deps/@mui_icons-material_Undo.js
+apps/web/node_modules/.vite/deps/@mui_icons-material_Undo.js.map
 apps/web/node_modules/.vite/deps/@mui_icons-material_UploadFile.js
 apps/web/node_modules/.vite/deps/@mui_icons-material_UploadFile.js.map
 apps/web/node_modules/.vite/deps/@mui_icons-material_Vaccines.js
@@ -11308,18 +11324,18 @@ apps/web/node_modules/.vite/deps/assertThisInitialized-ERAlQ433.js.map
 apps/web/node_modules/.vite/deps/axios.js
 apps/web/node_modules/.vite/deps/axios.js.map
 apps/web/node_modules/.vite/deps/chunk-BoAXSpZd.js
-apps/web/node_modules/.vite/deps/core.esm-BDEITVTj.js
-apps/web/node_modules/.vite/deps/core.esm-BDEITVTj.js.map
-apps/web/node_modules/.vite/deps/createSvgIcon-BZW-h9Jn.js
-apps/web/node_modules/.vite/deps/createSvgIcon-BZW-h9Jn.js.map
+apps/web/node_modules/.vite/deps/core.esm-C37AukYw.js
+apps/web/node_modules/.vite/deps/core.esm-C37AukYw.js.map
+apps/web/node_modules/.vite/deps/createSvgIcon-BZ0SbyQN.js
+apps/web/node_modules/.vite/deps/createSvgIcon-BZ0SbyQN.js.map
 apps/web/node_modules/.vite/deps/dist-D73f9MDg.js
 apps/web/node_modules/.vite/deps/dist-D73f9MDg.js.map
 apps/web/node_modules/.vite/deps/dist-JjUIdM6x.js
 apps/web/node_modules/.vite/deps/dist-JjUIdM6x.js.map
 apps/web/node_modules/.vite/deps/dompurify.js
 apps/web/node_modules/.vite/deps/dompurify.js.map
-apps/web/node_modules/.vite/deps/extends-jMMYCyu0.js
-apps/web/node_modules/.vite/deps/extends-jMMYCyu0.js.map
+apps/web/node_modules/.vite/deps/extends-C7ioZ_v_.js
+apps/web/node_modules/.vite/deps/extends-C7ioZ_v_.js.map
 apps/web/node_modules/.vite/deps/package.json
 apps/web/node_modules/.vite/deps/react-dom.js
 apps/web/node_modules/.vite/deps/react-dom.js.map
@@ -11327,8 +11343,8 @@ apps/web/node_modules/.vite/deps/react-dom_client.js
 apps/web/node_modules/.vite/deps/react-dom_client.js.map
 apps/web/node_modules/.vite/deps/react-hook-form.js
 apps/web/node_modules/.vite/deps/react-hook-form.js.map
-apps/web/node_modules/.vite/deps/react-is-DfH9fEZo.js
-apps/web/node_modules/.vite/deps/react-is-DfH9fEZo.js.map
+apps/web/node_modules/.vite/deps/react-is-DsIvLMxv.js
+apps/web/node_modules/.vite/deps/react-is-DsIvLMxv.js.map
 apps/web/node_modules/.vite/deps/react-router-dom.js
 apps/web/node_modules/.vite/deps/react-router-dom.js.map
 apps/web/node_modules/.vite/deps/react-signature-canvas.js
@@ -11601,6 +11617,7 @@ apps/web/src/features/calendar/components/SchedulingWorkspace.contract.test.ts
 apps/web/src/features/calendar/components/SchedulingWorkspace.tsx
 apps/web/src/features/calendar/components/SchedulingWorkspaceCalendarViews.tsx
 apps/web/src/features/calendar/components/TimeBlockingRulesDialog.tsx
+apps/web/src/features/calendar/components/TimeBlockingSection.tsx
 apps/web/src/features/calendar/components/TodayContactsView.tsx
 apps/web/src/features/calendar/components/schedulingWorkspaceSupport.test.ts
 apps/web/src/features/calendar/components/schedulingWorkspaceSupport.ts
@@ -11704,6 +11721,7 @@ apps/web/src/features/exports/pages/exportsPageSupport.ts
 apps/web/src/features/exports/queryKeys.ts
 apps/web/src/features/group-therapy/pages/GroupTherapyPage.tsx
 apps/web/src/features/group-therapy/queryKeys.ts
+apps/web/src/features/handover/pages/HandoverListPage.contract.test.ts
 apps/web/src/features/handover/pages/HandoverListPage.tsx
 apps/web/src/features/handover/queryKeys.ts
 apps/web/src/features/intake/components/ClarificationPanel.tsx
@@ -11970,6 +11988,7 @@ apps/web/src/features/patients/components/notes/AddNoteDialogSupport.test.ts
 apps/web/src/features/patients/components/notes/AddNoteDialogSupport.ts
 apps/web/src/features/patients/components/notes/AiDraftSignAttestationCheckbox.tsx
 apps/web/src/features/patients/components/notes/AmbientAiJobsDashboard.tsx
+apps/web/src/features/patients/components/notes/AmbientAiRecorder.contract.test.ts
 apps/web/src/features/patients/components/notes/AmbientAiRecorder.refactor.test.tsx
 apps/web/src/features/patients/components/notes/AmbientAiRecorder.tsx
 apps/web/src/features/patients/components/notes/AmbientAiResultPanel.tsx
@@ -12031,6 +12050,7 @@ apps/web/src/features/patients/types/patientTypes.test.ts
 apps/web/src/features/patients/types/patientTypes.ts
 apps/web/src/features/power-settings/__tests__/pathwaysModuleToggleCatalog.test.ts
 apps/web/src/features/power-settings/__tests__/scribeRuntimeLabels.contract.test.ts
+apps/web/src/features/power-settings/components/ClinicalNoteTemplatesPanel.tsx
 apps/web/src/features/power-settings/components/OnboardingWizard.tsx
 apps/web/src/features/power-settings/components/PowerAccessAdminsPanel.tsx
 apps/web/src/features/power-settings/components/PowerAiRuntimePanel.test.ts
@@ -12039,6 +12059,7 @@ apps/web/src/features/power-settings/components/PowerLevelLabelsPanel.tsx
 apps/web/src/features/power-settings/components/RetentionPanel.tsx
 apps/web/src/features/power-settings/components/SessionIdlePanel.tsx
 apps/web/src/features/power-settings/hooks/usePowerSettings.ts
+apps/web/src/features/power-settings/pages/PowerSettingsPage.clinicalNoteTemplates.contract.test.ts
 apps/web/src/features/power-settings/pages/PowerSettingsPage.ownership.test.ts
 apps/web/src/features/power-settings/pages/PowerSettingsPage.templateCategories.contract.test.ts
 apps/web/src/features/power-settings/pages/PowerSettingsPage.tsx
@@ -12909,6 +12930,7 @@ e2e/07-medications.spec.ts
 e2e/08-appointments-tasks.spec.ts
 e2e/09-admin.spec.ts
 e2e/10-clinical-lists.spec.ts
+e2e/11-calendar-timeblocking.spec.ts
 e2e/11-mar-write-rail.spec.ts
 e2e/accessibility/a11y-baseline-allowlist.json
 e2e/accessibility/lib/axeBaseline.ts
@@ -16191,6 +16213,7 @@ scripts/asr-benchmark/wer.ts
 scripts/audit-report/README.md
 scripts/audit-report/generate.ts
 scripts/ci/affected-workspaces.ts
+scripts/ci/ensure-postgres-runtime-role.sh
 scripts/contracts/export-openapi.ts
 scripts/design-tokens/generate-dart-design-tokens.test.ts
 scripts/design-tokens/generate-dart-design-tokens.ts

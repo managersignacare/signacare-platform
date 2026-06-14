@@ -20,6 +20,7 @@ import type { LaiScheduleRow } from './laiScheduleRepository';
 import type { LaiGivenRow, AimsAssessmentRow } from './laiGivenRepository';
 import {
   requireClinicalAccessRole,
+  requirePatientReadAccess,
   requirePatientRelationship,
 } from '../../shared/authGuards';
 
@@ -278,7 +279,7 @@ export const laiScheduleService = {
     statusFilter?: string,
   ): Promise<LaiScheduleResponse[]> {
     requireClinicalAccessRole(auth);
-    await requirePatientRelationship(auth, patientId);
+    await requirePatientReadAccess(auth, patientId);
     const rows = await laiScheduleRepository.findByPatient(
       auth.clinicId,
       patientId,
@@ -303,7 +304,7 @@ export const laiScheduleService = {
     if (!row) {
       throw new AppError('LAI schedule not found', 404, 'NOT_FOUND');
     }
-    await requirePatientRelationship(auth, row.patient_id);
+    await requirePatientReadAccess(auth, row.patient_id);
     await writeAuditLog({
       actorId: auth.staffId,
       clinicId: auth.clinicId,

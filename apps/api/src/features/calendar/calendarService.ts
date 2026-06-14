@@ -153,24 +153,24 @@ function validateBlockShape(input: {
       'VALIDATION_ERROR',
     );
   }
-  if (!['none', 'weekly'].includes(input.recurrence)) {
+  if (!['none', 'weekly', 'fortnightly'].includes(input.recurrence)) {
     throw new AppError(
       `Invalid recurrence: ${input.recurrence}`,
       400,
       'VALIDATION_ERROR',
     );
   }
-  if (input.recurrence === 'weekly') {
+  if (input.recurrence === 'weekly' || input.recurrence === 'fortnightly') {
     if (input.day_of_week === null || input.day_of_week < 0 || input.day_of_week > 6) {
       throw new AppError(
-        "recurrence='weekly' requires dayOfWeek in [0,6]",
+        "recurrence='weekly'/'fortnightly' requires dayOfWeek in [0,6]",
         400,
         'VALIDATION_ERROR',
       );
     }
     if (input.specific_date !== null) {
       throw new AppError(
-        "recurrence='weekly' must have null specificDate",
+        "recurrence='weekly'/'fortnightly' must have null specificDate",
         400,
         'VALIDATION_ERROR',
       );

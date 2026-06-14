@@ -66,6 +66,7 @@ import { OnboardingWizard } from '../components/OnboardingWizard'
 import { PowerLevelLabelsPanel } from '../components/PowerLevelLabelsPanel'
 import { AccessAdminsPanel } from '../components/PowerAccessAdminsPanel'
 import { PowerAiRuntimePanel } from '../components/PowerAiRuntimePanel'
+import { ClinicalNoteTemplatesPanel } from '../components/ClinicalNoteTemplatesPanel'
 import { ALL_MODULES } from './powerSettingsPageSupport'
 import { ModuleAccessMatrix as AccessControlPanel } from '../../staff-settings/components/ModuleAccessMatrix'
 import AuditPage from '../../audit/pages/AuditPage'
@@ -87,7 +88,7 @@ const DEFAULT_DISABLED_MODULE_KEYS = new Set<string>([
 const BrandingFormSchema = SubscriberBrandingUpdateSchema
 
 type BrandingForm = z.infer<typeof BrandingFormSchema>
-type TabId = 'onboarding' | 'branding' | 'level-labels' | 'disciplines' | 'roles' | 'role-types' | 'system-roles' | 'referral-sources' | 'investigation-types' | 'alert-types' | 'legal-order-types' | 'appointment-modes' | 'template-categories' | 'episode-types' | 'clinical-policies' | 'workflow-builder' | 'access-control' | 'audit-log' | 'backup-settings' | 'integrations' | 'email-print' | 'cmi' | 'ai-context' | 'ai-training' | 'ai-runtime' | 'subscriptions' | 'specialties' | 'fee-schedules' | 'clinician-fees' | 'access-admins' | 'retention' | 'session-idle'
+type TabId = 'onboarding' | 'branding' | 'level-labels' | 'disciplines' | 'roles' | 'role-types' | 'system-roles' | 'referral-sources' | 'investigation-types' | 'alert-types' | 'legal-order-types' | 'appointment-modes' | 'template-categories' | 'clinical-note-templates' | 'episode-types' | 'clinical-policies' | 'workflow-builder' | 'access-control' | 'audit-log' | 'backup-settings' | 'integrations' | 'email-print' | 'cmi' | 'ai-context' | 'ai-training' | 'ai-runtime' | 'subscriptions' | 'specialties' | 'fee-schedules' | 'clinician-fees' | 'access-admins' | 'retention' | 'session-idle'
 
 export const PowerSettingsPage: React.FC = () => {
   const user = useAuthStore((s) => s.user)
@@ -125,6 +126,7 @@ export const PowerSettingsPage: React.FC = () => {
         <Tab label="Legal Order Types" value="legal-order-types" />
         <Tab label="Appointment Modes" value="appointment-modes" />
         <Tab label="Template Categories" value="template-categories" />
+        <Tab label="Clinical Note Templates" value="clinical-note-templates" />
         <Tab label="Episode Types" value="episode-types" />
         <Tab label="Clinical Policies" value="clinical-policies" />
         <Tab label="Workflow Builder" value="workflow-builder" />
@@ -159,6 +161,7 @@ export const PowerSettingsPage: React.FC = () => {
       {tab === 'legal-order-types' && <LegalOrderTypesPanel />}
       {tab === 'appointment-modes' && <AppointmentModesPanel />}
       {tab === 'template-categories' && <TemplateCategoriesPanel />}
+      {tab === 'clinical-note-templates' && <ClinicalNoteTemplatesPanel />}
       {tab === 'episode-types' && <EpisodeTypesPanel />}
       {tab === 'clinical-policies' && <ClinicalPoliciesPanel />}
       {tab === 'workflow-builder' && <WorkflowBuilderSettingsPanel />}

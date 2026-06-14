@@ -1,6 +1,7 @@
 import { templateRepository } from './template.repository';
 import { AppError } from '../../shared/errors';
 import type { TemplateRow } from './template.repository';
+import { ensureDefaultClinicalNoteTemplates } from './defaultClinicalNoteTemplates';
 import type {
   CreateTemplateDTO,
   CreateTemplateCategoryDTO,
@@ -49,8 +50,10 @@ export const templateService = {
 
   async list(
     clinicId: string,
+    actorId: string,
     filters: { status?: string; category?: string; q?: string },
   ): Promise<TemplateRow[]> {
+    await ensureDefaultClinicalNoteTemplates(clinicId, actorId);
     return templateRepository.list(clinicId, filters);
   },
 

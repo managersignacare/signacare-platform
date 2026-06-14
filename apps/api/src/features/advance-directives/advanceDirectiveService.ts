@@ -1,6 +1,6 @@
 import type { AuthContext } from '@signacare/shared';
 import { AppError } from '../../shared/errors';
-import { requirePatientRelationship, requirePermission } from '../../shared/authGuards';
+import { requirePatientReadAccess, requirePatientRelationship, requirePermission } from '../../shared/authGuards';
 import { advanceDirectiveRepository, type AdvanceDirectiveRow } from './advanceDirectiveRepository';
 
 interface CreateAdvanceDirectiveInput {
@@ -15,7 +15,7 @@ interface CreateAdvanceDirectiveInput {
 export const advanceDirectiveService = {
   async listByPatient(auth: AuthContext, patientId: string): Promise<AdvanceDirectiveRow[]> {
     requirePermission(auth, 'note:read');
-    await requirePatientRelationship(auth, patientId);
+    await requirePatientReadAccess(auth, patientId);
     return advanceDirectiveRepository.listByPatient(auth.clinicId, patientId);
   },
 

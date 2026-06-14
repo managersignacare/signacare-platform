@@ -58,7 +58,6 @@ import {
 } from '../hooks/useCalendarPreferences';
 import { useCalendarBlocks } from '../hooks/useCalendarBlocks';
 import { useTodayView } from '../hooks/useTodayView';
-import { TimeBlockingRulesDialog } from './TimeBlockingRulesDialog';
 import { ICalSubscribeCard } from './ICalSubscribeCard';
 import {
   getAvailabilitySummaryForDate,
@@ -73,6 +72,7 @@ import {
   type AppointmentSummary,
 } from './SchedulingWorkspaceCalendarViews';
 import { TodayContactsView } from './TodayContactsView';
+import { TimeBlockingSection } from './TimeBlockingSection';
 
 type CalendarScope = 'mine' | 'team' | 'clinic';
 type CalendarView = 'month' | 'day' | 'workweek' | 'week' | 'list';
@@ -215,7 +215,6 @@ export function SchedulingWorkspace({
   const [dropTargetSlot, setDropTargetSlot] = React.useState<DragSlot | null>(null);
   const [rescheduleError, setRescheduleError] = React.useState('');
   const [reschedulingAppointmentId, setReschedulingAppointmentId] = React.useState<string | null>(null);
-  const [timeBlockingDialogOpen, setTimeBlockingDialogOpen] = React.useState(false);
   const syncCardRef = React.useRef<HTMLDivElement | null>(null);
 
   const prefs = useCalendarPreferences();
@@ -470,13 +469,6 @@ export function SchedulingWorkspace({
             sx={{ textTransform: 'none' }}
           >
             Sync Setup
-          </Button>
-          <Button
-            variant="outlined"
-            onClick={() => setTimeBlockingDialogOpen(true)}
-            sx={{ textTransform: 'none' }}
-          >
-            Manage Time Blocking
           </Button>
           <Button
             startIcon={<AddIcon />}
@@ -739,24 +731,21 @@ export function SchedulingWorkspace({
             <Alert severity="warning" sx={{ mt: 1 }}>
               Appointments are loaded, but time blocking is temporarily unavailable. Refresh to retry.
             </Alert>
-          ) : prefs.data && blocks.data ? (
-            <Alert severity="info" sx={{ mt: 1 }}>
-              Time blocking is integrated into the calendar above as green, yellow, and red overlays. Use
-              <strong> Manage Time Blocking</strong> to adjust those rules without switching to a second calendar surface.
-            </Alert>
           ) : null}
         </Stack>
 
         <Stack spacing={2.5}>
-          {todayScopeRequiresClinicianSelection ? (
-        <Alert severity="info">
-          Select a clinician to review contacts and DNA while using team or clinic calendar scope.
-        </Alert>
-          ) : todayViewLoadFailed ? (
+          {prefs.data && blocks.data ? (
+            <TimeBlockingSection blocks={blocks.data} />
+          ) : timeBlockingLoadFailed ? (
             <Alert severity="warning">
-              Today&apos;s contacts and workload summary are temporarily unavailable. Your appointment calendar is still available.
+              Time blocking is temporarily unavailable. Refresh to retry.
             </Alert>
-      ) : today.data ? <TodayContactsView data={today.data} /> : <Box display="flex" justifyContent="center" py={6}><CircularProgress /></Box>}
+          ) : (
+            <Box display="flex" justifyContent="center" py={6}>
+              <CircularProgress />
+            </Box>
+          )}
           <Box ref={syncCardRef}>
             <ICalSubscribeCard onRefreshCalendar={refreshCalendarWorkspace} />
           </Box>
@@ -835,12 +824,6 @@ export function SchedulingWorkspace({
         }}
         onEdit={handleEditAppointment}
         staffNamesById={staffNamesById}
-      />
-      <TimeBlockingRulesDialog
-        blocks={blocks.data}
-        open={timeBlockingDialogOpen}
-        preferences={prefs.data}
-        onClose={() => setTimeBlockingDialogOpen(false)}
       />
     </Container>
   );

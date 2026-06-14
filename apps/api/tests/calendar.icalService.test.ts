@@ -167,6 +167,17 @@ describe('icalService — weekly recurrence', () => {
     });
     expect(ics).toContain('UNTIL=');
   });
+
+  it('fortnightly block emits an interval-2 weekly RRULE', () => {
+    const ics = buildCalendarIcs({
+      ...base,
+      blocks: [makeBlock({ recurrence: 'fortnightly', dayOfWeek: 1 })],
+    });
+    expect(ics).toContain('RRULE:');
+    expect(ics).toContain('FREQ=WEEKLY');
+    expect(ics).toContain('INTERVAL=2');
+    expect(ics).toMatch(/BYDAY=MO/);
+  });
 });
 
 describe('icalService — one-off blocks', () => {

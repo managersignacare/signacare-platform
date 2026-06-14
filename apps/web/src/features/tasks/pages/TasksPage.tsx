@@ -1,8 +1,6 @@
 import AddIcon from '@mui/icons-material/Add';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
-import ExpandLessIcon from '@mui/icons-material/ExpandLess';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import {
   Alert,
@@ -11,7 +9,6 @@ import {
   Card,
   CardContent,
   Chip,
-  Collapse,
   Dialog,
   DialogActions,
   DialogContent,
@@ -31,9 +28,8 @@ import {
   Typography,
 } from '@mui/material';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import type {
-  TaskMonitoringSummary,
   TaskOwnershipFilter,
   TaskPriority,
   TaskStatus,
@@ -57,12 +53,6 @@ import {
   workbenchBucketToQuery,
   type TaskWorkbenchBucket,
 } from '../taskMonitoringSupport';
-import {
-  parseTaskMonitoringCollapseState,
-  serializeTaskMonitoringCollapseState,
-  TASK_MONITORING_COLLAPSE_KEY,
-  type TaskMonitoringCollapseState,
-} from '../taskMonitoringPreferences';
 
 function flattenUnits(nodes: OrgUnit[]): { id: string; name: string }[] {
   const out: { id: string; name: string }[] = [];
@@ -88,14 +78,6 @@ interface TaskMutationErrorLike {
 type ScopeMode = 'my' | 'team';
 type LayoutMode = 'list' | 'board';
 type BucketMode = 'all' | TaskWorkbenchBucket;
-
-function loadTaskMonitoringCollapseState(): TaskMonitoringCollapseState {
-  if (typeof window === 'undefined') {
-    return parseTaskMonitoringCollapseState(null);
-  }
-
-  return parseTaskMonitoringCollapseState(window.localStorage.getItem(TASK_MONITORING_COLLAPSE_KEY));
-}
 
 const STATUS_OPTIONS: Array<{ value: '' | TaskStatus; label: string }> = [
   { value: '', label: 'All statuses' },
@@ -276,76 +258,6 @@ function TaskRow(props: {
   );
 }
 
-function MonitoringPanel(props: {
-  collapsed: boolean;
-  onToggleCollapsed: () => void;
-  summary?: TaskMonitoringSummary;
-  title: string;
-  subtitle: string;
-}) {
-  if (!props.summary) return null;
-  const cards = buildMonitoringCards(props.summary);
-  return (
-    <Paper variant="outlined" sx={{ p: 2.25, borderRadius: 3 }}>
-      <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1.5 }}>
-        <Box>
-          <Typography variant="h6" fontWeight={800}>{props.title}</Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-            {props.subtitle}
-          </Typography>
-        </Box>
-        <Button
-          size="small"
-          variant="text"
-          onClick={props.onToggleCollapsed}
-          endIcon={props.collapsed ? <ExpandMoreIcon /> : <ExpandLessIcon />}
-          sx={{ textTransform: 'none', whiteSpace: 'nowrap' }}
-        >
-          {props.collapsed ? 'Expand' : 'Minimise'}
-        </Button>
-      </Box>
-      <Collapse in={!props.collapsed}>
-        <Grid container spacing={1.5} sx={{ mb: 2, mt: 0.5 }}>
-          {cards.map((card) => (
-            <Grid key={card.id} size={{ xs: 6, md: 4 }}>
-              <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2, bgcolor: '#FCFBF9' }}>
-                <Typography variant="caption" color="text.secondary">{card.label}</Typography>
-                <Typography variant="h6" fontWeight={800}>{card.value}</Typography>
-              </Paper>
-            </Grid>
-          ))}
-        </Grid>
-        <Typography variant="subtitle2" fontWeight={800} sx={{ mb: 1 }}>
-          Ownership radar
-        </Typography>
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-          {props.summary.assigneeBreakdown.slice(0, 6).map((row) => (
-            <Box
-              key={row.staffId ?? 'unassigned'}
-              sx={{
-                display: 'grid',
-                gridTemplateColumns: '1.4fr repeat(5, minmax(0, 72px))',
-                gap: 1,
-                alignItems: 'center',
-                py: 0.75,
-                borderBottom: '1px solid',
-                borderColor: 'divider',
-              }}
-            >
-              <Typography variant="body2" fontWeight={700}>{row.displayName}</Typography>
-              <Typography variant="caption" color="text.secondary">Open {row.openCount}</Typography>
-              <Typography variant="caption" color={row.overdueCount > 0 ? 'error.main' : 'text.secondary'}>OD {row.overdueCount}</Typography>
-              <Typography variant="caption" color={row.dueTodayCount > 0 ? 'warning.main' : 'text.secondary'}>Today {row.dueTodayCount}</Typography>
-              <Typography variant="caption" color={row.blockedCount > 0 ? 'error.main' : 'text.secondary'}>Blocked {row.blockedCount}</Typography>
-              <Typography variant="caption" color={row.waitingExternalCount > 0 ? 'warning.main' : 'text.secondary'}>Waiting {row.waitingExternalCount}</Typography>
-            </Box>
-          ))}
-        </Box>
-      </Collapse>
-    </Paper>
-  );
-}
-
 export default function TasksPage() {
   const user = useAuthStore((s) => s.user);
   const qc = useQueryClient();
@@ -382,19 +294,7 @@ export default function TasksPage() {
   const [editStatus, setEditStatus] = useState<TaskStatus>('pending');
   const [showArchive, setShowArchive] = useState(false);
   const [signTask, setSignTask] = useState<Task | null>(null);
-  const [monitoringCollapsedByScope, setMonitoringCollapsedByScope] = useState<TaskMonitoringCollapseState>(loadTaskMonitoringCollapseState);
   const { signature: savedSignature } = useStaffSignature();
-
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return;
-    }
-
-    window.localStorage.setItem(
-      TASK_MONITORING_COLLAPSE_KEY,
-      serializeTaskMonitoringCollapseState(monitoringCollapsedByScope),
-    );
-  }, [monitoringCollapsedByScope]);
 
   const taskQuery = useMemo(() => buildScopeQuery({
     scope,
@@ -417,13 +317,6 @@ export default function TasksPage() {
     ...(scope === 'my' ? { assignedToId: user?.id } : teamFilter ? { teamId: teamFilter } : { teamScope: 'mine' as const }),
     ...(scope === 'team' && clinicianFilter ? { assignedToId: clinicianFilter } : {}),
   });
-
-  const toggleMonitoringCollapsed = () => {
-    setMonitoringCollapsedByScope((current) => ({
-      ...current,
-      [scope]: !current[scope],
-    }));
-  };
 
   const displayTasks = useMemo(
     () => openTasks.filter((task) => (
@@ -541,102 +434,99 @@ export default function TasksPage() {
         <Tab label="Team Tasks" value="team" />
       </Tabs>
 
-      <Grid container spacing={2} sx={{ mb: 2 }}>
-        <Grid size={{ xs: 12, lg: 8 }}>
-          <Paper variant="outlined" sx={{ p: 2.25, borderRadius: 3 }}>
-            <Typography variant="subtitle1" fontWeight={800} sx={{ mb: 1.5 }}>
-              Workbench buckets
-            </Typography>
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
-              {BUCKET_OPTIONS.map((option) => (
-                <Chip
-                  key={option.value}
-                  label={option.label}
-                  color={bucket === option.value ? 'primary' : 'default'}
-                  variant={bucket === option.value ? 'filled' : 'outlined'}
-                  onClick={() => setBucket(option.value)}
-                />
-              ))}
-            </Box>
+      <Paper variant="outlined" sx={{ p: 2.25, borderRadius: 3, mb: 2 }}>
+        <Typography variant="subtitle1" fontWeight={800} sx={{ mb: 1.5 }}>
+          Workbench buckets
+        </Typography>
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
+          {BUCKET_OPTIONS.map((option) => (
+            <Chip
+              key={option.value}
+              label={option.label}
+              color={bucket === option.value ? 'primary' : 'default'}
+              variant={bucket === option.value ? 'filled' : 'outlined'}
+              onClick={() => setBucket(option.value)}
+            />
+          ))}
+        </Box>
 
-            <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
-              <TextField
-                size="small"
-                placeholder="Filter by patient..."
-                value={patientFilter}
-                onChange={(event) => setPatientFilter(event.target.value)}
-                sx={{ minWidth: 180, '& .MuiOutlinedInput-root': { bgcolor: '#fff' } }}
+        {summary ? (
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
+            {buildMonitoringCards(summary).map((card) => (
+              <Chip
+                key={card.id}
+                label={`${card.label}: ${card.value}`}
+                sx={{ bgcolor: '#FCFBF9', fontWeight: 700 }}
               />
-              {scope === 'team' && (
-                <FormControl size="small" sx={{ minWidth: 180 }}>
-                  <InputLabel>Clinician</InputLabel>
-                  <Select value={clinicianFilter} onChange={(event) => setClinicianFilter(event.target.value)} label="Clinician" sx={{ bgcolor: '#fff' }}>
-                    <MenuItem value="">All clinicians</MenuItem>
-                    {(staffList ?? []).map((staff) => (
-                      <MenuItem key={staff.id} value={staff.id}>
-                        {staff.givenName} {staff.familyName}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              )}
-              {scope === 'team' && (
-                <FormControl size="small" sx={{ minWidth: 180 }}>
-                  <InputLabel>Team</InputLabel>
-                  <Select value={teamFilter} onChange={(event) => setTeamFilter(event.target.value)} label="Team" sx={{ bgcolor: '#fff' }}>
-                    <MenuItem value="">My teams</MenuItem>
-                    {flatUnits.map((unit) => (
-                      <MenuItem key={unit.id} value={unit.id}>{unit.name}</MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              )}
-              <FormControl size="small" sx={{ minWidth: 170 }}>
-                <InputLabel>Status</InputLabel>
-                <Select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as '' | TaskStatus)} label="Status" sx={{ bgcolor: '#fff' }}>
-                  {STATUS_OPTIONS.map((option) => (
-                    <MenuItem key={option.label} value={option.value}>{option.label}</MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-              <FormControl size="small" sx={{ minWidth: 160 }}>
-                <InputLabel>Priority</InputLabel>
-                <Select value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value as '' | TaskPriority)} label="Priority" sx={{ bgcolor: '#fff' }}>
-                  {PRIORITY_OPTIONS.map((option) => (
-                    <MenuItem key={option.label} value={option.value}>{option.label}</MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-              <FormControl size="small" sx={{ minWidth: 160 }}>
-                <InputLabel>Ownership</InputLabel>
-                <Select value={ownershipFilter} onChange={(event) => setOwnershipFilter(event.target.value as '' | TaskOwnershipFilter)} label="Ownership" sx={{ bgcolor: '#fff' }}>
-                  {OWNERSHIP_OPTIONS.map((option) => (
-                    <MenuItem key={option.label} value={option.value}>{option.label}</MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-              <FormControl size="small" sx={{ minWidth: 150 }}>
-                <InputLabel>Layout</InputLabel>
-                <Select value={layout} onChange={(event) => setLayout(event.target.value as LayoutMode)} label="Layout" sx={{ bgcolor: '#fff' }}>
-                  <MenuItem value="list">List</MenuItem>
-                  <MenuItem value="board">Board</MenuItem>
-                </Select>
-              </FormControl>
-            </Box>
-          </Paper>
-        </Grid>
-        <Grid size={{ xs: 12, lg: 4 }}>
-          <MonitoringPanel
-            collapsed={monitoringCollapsedByScope[scope]}
-            onToggleCollapsed={toggleMonitoringCollapsed}
-            summary={summary}
-            title={scope === 'my' ? 'My monitoring snapshot' : 'Team monitoring snapshot'}
-            subtitle={scope === 'my'
-              ? 'Track what needs attention before it silently becomes overdue.'
-              : 'Use this to spot unowned work, blocked follow-up, and overload before governance drifts.'}
+            ))}
+          </Box>
+        ) : null}
+
+        <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+          <TextField
+            size="small"
+            placeholder="Filter by patient..."
+            value={patientFilter}
+            onChange={(event) => setPatientFilter(event.target.value)}
+            sx={{ minWidth: 180, '& .MuiOutlinedInput-root': { bgcolor: '#fff' } }}
           />
-        </Grid>
-      </Grid>
+          {scope === 'team' && (
+            <FormControl size="small" sx={{ minWidth: 180 }}>
+              <InputLabel>Clinician</InputLabel>
+              <Select value={clinicianFilter} onChange={(event) => setClinicianFilter(event.target.value)} label="Clinician" sx={{ bgcolor: '#fff' }}>
+                <MenuItem value="">All clinicians</MenuItem>
+                {(staffList ?? []).map((staff) => (
+                  <MenuItem key={staff.id} value={staff.id}>
+                    {staff.givenName} {staff.familyName}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          )}
+          {scope === 'team' && (
+            <FormControl size="small" sx={{ minWidth: 180 }}>
+              <InputLabel>Team</InputLabel>
+              <Select value={teamFilter} onChange={(event) => setTeamFilter(event.target.value)} label="Team" sx={{ bgcolor: '#fff' }}>
+                <MenuItem value="">My teams</MenuItem>
+                {flatUnits.map((unit) => (
+                  <MenuItem key={unit.id} value={unit.id}>{unit.name}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          )}
+          <FormControl size="small" sx={{ minWidth: 170 }}>
+            <InputLabel>Status</InputLabel>
+            <Select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as '' | TaskStatus)} label="Status" sx={{ bgcolor: '#fff' }}>
+              {STATUS_OPTIONS.map((option) => (
+                <MenuItem key={option.label} value={option.value}>{option.label}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <FormControl size="small" sx={{ minWidth: 160 }}>
+            <InputLabel>Priority</InputLabel>
+            <Select value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value as '' | TaskPriority)} label="Priority" sx={{ bgcolor: '#fff' }}>
+              {PRIORITY_OPTIONS.map((option) => (
+                <MenuItem key={option.label} value={option.value}>{option.label}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <FormControl size="small" sx={{ minWidth: 160 }}>
+            <InputLabel>Ownership</InputLabel>
+            <Select value={ownershipFilter} onChange={(event) => setOwnershipFilter(event.target.value as '' | TaskOwnershipFilter)} label="Ownership" sx={{ bgcolor: '#fff' }}>
+              {OWNERSHIP_OPTIONS.map((option) => (
+                <MenuItem key={option.label} value={option.value}>{option.label}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <FormControl size="small" sx={{ minWidth: 150 }}>
+            <InputLabel>Layout</InputLabel>
+            <Select value={layout} onChange={(event) => setLayout(event.target.value as LayoutMode)} label="Layout" sx={{ bgcolor: '#fff' }}>
+              <MenuItem value="list">List</MenuItem>
+              <MenuItem value="board">Board</MenuItem>
+            </Select>
+          </FormControl>
+        </Box>
+      </Paper>
 
       {isError && (
         <Alert severity="error" sx={{ mb: 2 }}>

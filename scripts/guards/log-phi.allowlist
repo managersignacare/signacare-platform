@@ -31,6 +31,12 @@ familyId | permanent: BUG-269 baseline — workflow metadata keys matching PHI r
 # `email`) would be blocked; this is the status, not the value.
 emailSent | permanent: BUG-269 baseline — workflow metadata keys matching PHI regex but legitimate in logging context (not patient data)
 
+# Delivery mode enum for clinic sender profiles. This is metadata about
+# whether mail is sent as delegated staff mail vs clinic mailbox, not
+# the mailbox address itself. The actual address key
+# `clinic_sender_email` is PHI-covered and must remain redacted.
+email_sender_mode | permanent: sender-profile operational enum, not personal information
+
 # BUG-296 — boolean flags logged by requireValidHpii WARN path
 # indicating whether the prescriber's HPI-I is absent vs malformed.
 # Both are booleans (not HPI-I values). The underlying `hpii` key IS

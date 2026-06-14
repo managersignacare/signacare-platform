@@ -6,6 +6,7 @@ import { createAutoContactRecord } from '../contacts/autoContactRecord';
 import { AppError } from '../../shared/errors';
 import {
   requireClinicalAccessRole,
+  requirePatientReadAccess,
   requirePatientRelationship,
   requirePermissionOrClinicalLeadershipOverride,
 } from '../../shared/authGuards';
@@ -67,7 +68,7 @@ export const clinicalNoteService = {
   ): Promise<ClinicalNoteRow[]> {
     requireClinicalAccessRole(auth);
     await requirePermissionOrClinicalLeadershipOverride(auth, 'note:read');
-    await requirePatientRelationship(auth, patientId);
+    await requirePatientReadAccess(auth, patientId);
     return clinicalNoteRepository.listByPatient(auth.clinicId, patientId, episodeId);
   },
 
@@ -76,7 +77,7 @@ export const clinicalNoteService = {
     await requirePermissionOrClinicalLeadershipOverride(auth, 'note:read');
     const note = await clinicalNoteRepository.findById(auth.clinicId, id);
     if (!note) throw new AppError('Note not found', 404, 'NOTE_NOT_FOUND');
-    await requirePatientRelationship(auth, note.patientId);
+    await requirePatientReadAccess(auth, note.patientId);
     return note;
   },
 

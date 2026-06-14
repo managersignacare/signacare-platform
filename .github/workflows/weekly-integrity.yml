@@ -12,7 +12,7 @@ jobs:
     timeout-minutes: 120
     services:
       postgres:
-        image: postgres:17-alpine
+        image: pgvector/pgvector:pg17
         env:
           POSTGRES_DB: signacaredb_test
           POSTGRES_USER: signacare_owner
@@ -41,8 +41,8 @@ jobs:
       DB_PASSWORD: signacare_ci_test_pw
       DB_NAME: signacaredb_test
       DB_SSL: 'false'
-      DB_APP_USER: signacare_owner
-      DB_APP_PASSWORD: signacare_ci_test_pw
+      DB_APP_USER: app_user
+      DB_APP_PASSWORD: signacare_ci_app_pw
       JWT_ACCESS_SECRET: ci-test-access-secret-64-char-hex-0123456789abcdef0123456789abcdef
       JWT_REFRESH_SECRET: ci-test-refresh-secret-64-char-hex-0123456789abcdef0123456789abcdef
       JWT_ACCESS_TTL_MINUTES: '60'
@@ -63,6 +63,8 @@ jobs:
           cache: 'npm'
       - name: Install dependencies (cold start)
         run: npm ci --workspaces --include-workspace-root
+      - name: Ensure runtime DB role exists
+        run: bash scripts/ci/ensure-postgres-runtime-role.sh
       - name: Global guard pack
         run: npm run guard:all
       - name: Type-check

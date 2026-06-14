@@ -9,7 +9,12 @@ import { db } from '../../db/db';
 import { ECT_COURSES_COLUMNS } from '../../db/types/ect_courses';
 import { ECT_SESSIONS_COLUMNS } from '../../db/types/ect_sessions';
 import { AppError } from '../../shared/errors';
-import { requirePermission, requireSpecialty, requirePatientRelationship } from '../../shared/authGuards';
+import {
+  requirePatientReadAccess,
+  requirePatientRelationship,
+  requirePermission,
+  requireSpecialty,
+} from '../../shared/authGuards';
 import { writeAuditLog } from '../../utils/audit';
 
 const ECT_COURSE_COLUMNS = ECT_COURSES_COLUMNS;
@@ -167,7 +172,7 @@ export const ectService = {
 
   async listByPatient(auth: AuthContext, patientId: string) {
     requirePermission(auth, 'ect:read');
-    await requirePatientRelationship(auth, patientId);
+    await requirePatientReadAccess(auth, patientId);
 
     const courses = await db('ect_courses')
       .where({ clinic_id: auth.clinicId, patient_id: patientId })
@@ -192,7 +197,7 @@ export const ectService = {
       .whereNull('deleted_at')
       .first('patient_id');
     if (!course) throw new AppError('ECT course not found', 404, 'NOT_FOUND');
-    await requirePatientRelationship(auth, course.patient_id as string);
+    await requirePatientReadAccess(auth, course.patient_id as string);
     return db('ect_sessions')
       .where({ course_id: courseId, clinic_id: auth.clinicId })
       .orderBy('session_number', 'asc');

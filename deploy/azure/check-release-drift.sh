@@ -133,6 +133,13 @@ def app_setting(settings, key):
     return ""
 
 
+def normalize_unknown(value):
+    if isinstance(value, str):
+        trimmed = value.strip()
+        return trimmed if trimmed else "unknown"
+    return value
+
+
 def webapp_linux_fx(resource_group, app_name, slot):
     cmd = [
         "az", "webapp", "show",
@@ -192,8 +199,18 @@ checks = {
     "SIGNACARE_PROMOTION_SOURCE_PIPELINE_RUN_ID": version_payload.get("promotion", {}).get("sourcePipelineRunId", ""),
     "SIGNACARE_PROMOTED_AT": version_payload.get("promotion", {}).get("promotedAt", ""),
 }
+unknown_normalized_keys = {
+    "SIGNACARE_PROMOTION_SOURCE_ENV",
+    "SIGNACARE_PROMOTION_SOURCE_ACR_NAME",
+    "SIGNACARE_PROMOTION_SOURCE_RELEASE_MANIFEST_SHA256",
+    "SIGNACARE_PROMOTION_SOURCE_PIPELINE_RUN_ID",
+    "SIGNACARE_PROMOTED_AT",
+}
 for key, expected in checks.items():
     actual = app_setting(app_settings, key)
+    if key in unknown_normalized_keys:
+        actual = normalize_unknown(actual)
+        expected = normalize_unknown(expected)
     if actual != expected:
         errors.append(f"{key}={actual!r} expected {expected!r}")
 

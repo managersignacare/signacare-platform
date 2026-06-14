@@ -8,6 +8,10 @@ describe('SchedulingWorkspace source contract', () => {
     resolve(__dirname, './SchedulingWorkspaceCalendarViews.tsx'),
     'utf8',
   );
+  const timeBlockingSectionSource = readFileSync(
+    resolve(__dirname, './TimeBlockingSection.tsx'),
+    'utf8',
+  );
 
   it('pins My Calendar as the unified scheduling surface', () => {
     expect(source).toContain('One scheduling surface for clinician, team, and clinic appointments');
@@ -23,16 +27,15 @@ describe('SchedulingWorkspace source contract', () => {
   });
 
   it('keeps appointments and time blocking on the same page', () => {
-    expect(source).toContain('<TimeBlockingRulesDialog');
-    expect(source).toContain('<TodayContactsView');
+    expect(source).toContain('<TimeBlockingSection');
     expect(source).toContain('<ICalSubscribeCard');
-    expect(source).toContain('Time blocking is integrated into the calendar above as green, yellow, and red overlays');
-    expect(source).toContain('Manage Time Blocking');
+    expect(timeBlockingSectionSource).toContain('Time Blocking');
+    expect(timeBlockingSectionSource).toContain('Green slots signal where team members can place appointments');
   });
 
   it('degrades gracefully when auxiliary calendar panels fail', () => {
     expect(source).toContain('Failed to load appointments. Try refreshing.');
-    expect(source).toContain('Appointments are loaded, but time blocking is temporarily unavailable.');
+    expect(source).toContain('Time blocking is temporarily unavailable. Refresh to retry.');
     expect(source).toContain("Today&apos;s contacts and workload summary are temporarily unavailable.");
   });
 

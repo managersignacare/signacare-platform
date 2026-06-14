@@ -6,8 +6,57 @@
 //   DB 3: SSE pub/sub + cache
 import Redis from 'ioredis';
 import { logger } from '../utils/logger';
+import { isRedisConnectionClosedError } from '../shared/redisErrorClassification';
 
 const baseUrl = process.env.REDIS_URL ?? 'redis://localhost:6379';
+
+type ManagedRedisClient = Pick<Redis, 'status' | 'connect' | 'ping' | 'quit' | 'disconnect' | 'on'>;
+
+function bindRedisLifecycleLogging(
+  client: ManagedRedisClient,
+  name: 'redis' | 'redisRateLimit' | 'redisCache',
+): void {
+  client.on('error', (err: Error) => {
+    const message = err.message ?? String(err);
+    if (message.includes('Connection is closed') && (client.status === 'close' || client.status === 'end')) {
+      return;
+    }
+    logger.error({ err: message, client: name }, 'Redis connection error');
+  });
+
+  client.on('connect', () => {
+    if (name === 'redis') {
+      logger.info('Redis connected');
+    }
+  });
+}
+
+async function closeRedisClient(
+  client: ManagedRedisClient,
+  name: 'redis' | 'redisRateLimit' | 'redisCache',
+): Promise<void> {
+  const status = client.status;
+
+  if (status === 'wait' || status === 'end') {
+    return;
+  }
+
+  if (status === 'close' || status === 'reconnecting') {
+    client.disconnect(false);
+    return;
+  }
+
+  try {
+    await client.quit();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (isRedisConnectionClosedError(err)) {
+      return;
+    }
+    logger.warn({ err: message, client: name }, 'Redis shutdown cleanup fell back to best-effort disconnect');
+    client.disconnect(false);
+  }
+}
 
 // Primary Redis instance (DB 0 — sessions, general)
 export const redis = new Redis(baseUrl + '/0', {
@@ -31,13 +80,9 @@ export const redisCache = new Redis(baseUrl + '/3', {
   maxRetriesPerRequest: 1,
 });
 
-redis.on('error', (err: Error) => {
-  logger.error({ err: err.message }, 'Redis connection error');
-});
-
-redis.on('connect', () => {
-  logger.info('Redis connected');
-});
+bindRedisLifecycleLogging(redis, 'redis');
+bindRedisLifecycleLogging(redisRateLimit, 'redisRateLimit');
+bindRedisLifecycleLogging(redisCache, 'redisCache');
 
 /**
  * Connect to Redis and verify. Call before server.listen().
@@ -68,4 +113,12 @@ export async function connectRedis(): Promise<boolean> {
     logger.warn({ err, message }, 'Redis unavailable — rate limiting will use in-memory fallback');
     return false;
   }
+}
+
+export async function shutdownRedisClients(): Promise<void> {
+  await Promise.all([
+    closeRedisClient(redis, 'redis'),
+    closeRedisClient(redisRateLimit, 'redisRateLimit'),
+    closeRedisClient(redisCache, 'redisCache'),
+  ]);
 }

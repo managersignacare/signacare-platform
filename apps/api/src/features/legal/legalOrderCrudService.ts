@@ -2,6 +2,7 @@ import type { AuthContext, CreateLegalOrderDTO, UpdateLegalOrderDTO } from '@sig
 import { AppError } from '../../shared/errors';
 import {
   requireClinicalAccessRole,
+  requirePatientReadAccess,
   requirePatientRelationship,
   requirePermission,
 } from '../../shared/authGuards';
@@ -176,7 +177,7 @@ export const legalOrderCrudService = {
     // R-FIX-BUG-576-AUTHCONTEXT-LIST
     requireClinicalAccessRole(auth);
     requirePermission(auth, 'patient:read');
-    await requirePatientRelationship(auth, patientId);
+    await requirePatientReadAccess(auth, patientId);
 
     const rows = await legalOrderCrudRepository.listByPatient(patientId, auth.clinicId);
     const now = new Date();
