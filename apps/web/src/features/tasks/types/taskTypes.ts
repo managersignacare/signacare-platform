@@ -18,10 +18,6 @@ import {
   TaskUpdateSchema as SharedTaskUpdateSchema,
   TaskResponseSchema as SharedTaskResponseSchema,
   TaskStatusSchema as SharedTaskStatusSchema,
-  type TaskCreateDTO as SharedTaskCreateDTO,
-  type TaskPriority as SharedTaskPriority,
-  type TaskStatus as SharedTaskStatus,
-  type TaskUpdateDTO as SharedTaskUpdateDTO,
   type TaskResponse as SharedTaskResponse,
 } from '@signacare/shared';
 
@@ -29,17 +25,17 @@ import {
 // the Task*Schema z.object() definitions, so re-declare them here as
 // named exports for the frontend call sites that reference them.
 export const TaskPrioritySchema = SharedTaskPrioritySchema;
-export type TaskPriority = SharedTaskPriority;
+export type { TaskPriority } from '@signacare/shared';
 
 export const TaskStatusSchema = SharedTaskStatusSchema;
-export type TaskStatus = SharedTaskStatus;
+export type { TaskStatus } from '@signacare/shared';
 
 // Re-export shared DTO schemas + types under the historical local names.
 export const CreateTaskSchema = SharedTaskCreateSchema;
-export type CreateTaskDTO = SharedTaskCreateDTO;
+export type { TaskCreateDTO as CreateTaskDTO } from '@signacare/shared';
 
 export const UpdateTaskSchema = SharedTaskUpdateSchema;
-export type UpdateTaskDTO = SharedTaskUpdateDTO;
+export type { TaskUpdateDTO as UpdateTaskDTO } from '@signacare/shared';
 
 // Re-export the canonical shared TaskResponse so callers can import it
 // from this file under its original name (for historical API compat).

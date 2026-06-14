@@ -215,7 +215,10 @@ function validateAzureBlobBicepContract(failures: string[]): void {
   if (!/resource apiSlot[\s\S]+identity:\s*\{[\s\S]+type: 'SystemAssigned'/.test(bicep)) {
     failures.push(`${AZURE_APPSERVICE_BICEP_PATH}: deployment slot must have a system-assigned identity for Key Vault references`);
   }
-  if (!/resource apiSlot[\s\S]+appSettings: apiSlotAppSettings/.test(bicep)) {
+  const slotAppSettingsWired =
+    /var apiSlotProperties = union\(\{[\s\S]+appSettings: apiSlotAppSettings/.test(bicep) ||
+    /resource apiSlot[\s\S]+appSettings: apiSlotAppSettings/.test(bicep);
+  if (!slotAppSettingsWired) {
     failures.push(`${AZURE_APPSERVICE_BICEP_PATH}: deployment slot must use Azure Blob app settings before smoke/swap`);
   }
   if (!/resource apiSlotKvRole[\s\S]+principalId: apiSlot!\.identity\.principalId/.test(bicep)) {

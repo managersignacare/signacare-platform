@@ -52,6 +52,9 @@ export const sharedClinicProfileKeys = {
   all: ['shared', 'clinic-profile'] as const,
   /** The current clinic's branding (logo, legal name, address). */
   current: () => [...sharedClinicProfileKeys.all, 'current'] as const,
+  /** Pathology request printouts reuse the clinic profile payload. */
+  pathologyRequestPrint: () =>
+    [...sharedClinicProfileKeys.all, 'pathology-request-print'] as const,
 };
 
 // ── Contact-form banner ───────────────────────────────────────────
@@ -115,6 +118,16 @@ export const sharedBrandingKeys = {
   all: ['shared', 'branding'] as const,
   /** The current clinic's subscriber branding overrides. */
   mine: () => [...sharedBrandingKeys.all, 'me'] as const,
+};
+
+export const sharedClinicModulesKeys = {
+  all: ['shared', 'clinic-modules'] as const,
+  mine: () => [...sharedClinicModulesKeys.all, 'me'] as const,
+};
+
+export const sharedBuildKeys = {
+  all: ['shared', 'build-stamp'] as const,
+  apiHealth: () => [...sharedBuildKeys.all, 'api-health'] as const,
 };
 
 // ── Tab config (per-clinic navigation override) ──────────────────

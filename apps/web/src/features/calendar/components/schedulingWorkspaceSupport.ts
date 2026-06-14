@@ -16,6 +16,13 @@ export interface SchedulingAvailabilitySummary {
   labels: string[];
 }
 
+export interface SchedulingAvailabilitySlotSummary {
+  dominantColour: AvailabilityColour | null;
+  labels: string[];
+  notes: string[];
+  primaryText: string | null;
+}
+
 export function buildRescheduledTimes(
   appointment: Pick<AppointmentResponse, 'endTime' | 'startTime'>,
   targetDate: string,
@@ -86,6 +93,20 @@ export function listAvailabilityBlocksForDate(
   return blocks.filter((block) => isBlockActiveOnDate(block, isoDate));
 }
 
+export function listAvailabilityBlocksForSlot(
+  blocks: readonly AvailabilityBlock[],
+  isoDate: string,
+  slotStartMinutes: number,
+  slotDurationMinutes: number,
+): AvailabilityBlock[] {
+  const slotEndMinutes = slotStartMinutes + slotDurationMinutes;
+  return listAvailabilityBlocksForDate(blocks, isoDate).filter((block) => {
+    const start = toMinutes(block.startTime);
+    const end = toMinutes(block.endTime);
+    return start < slotEndMinutes && end > slotStartMinutes;
+  });
+}
+
 export function getAvailabilitySummaryForDate(
   blocks: readonly AvailabilityBlock[],
   isoDate: string,
@@ -114,15 +135,50 @@ export function getAvailabilityColourForSlot(
   slotStartMinutes: number,
   slotDurationMinutes: number,
 ): AvailabilityColour | null {
-  const slotEndMinutes = slotStartMinutes + slotDurationMinutes;
-  const active = listAvailabilityBlocksForDate(blocks, isoDate).filter((block) => {
-    const start = toMinutes(block.startTime);
-    const end = toMinutes(block.endTime);
-    return start < slotEndMinutes && end > slotStartMinutes;
-  });
+  const active = listAvailabilityBlocksForSlot(
+    blocks,
+    isoDate,
+    slotStartMinutes,
+    slotDurationMinutes,
+  );
 
   if (active.some((block) => block.colour === 'red')) return 'red';
   if (active.some((block) => block.colour === 'yellow')) return 'yellow';
   if (active.some((block) => block.colour === 'green')) return 'green';
   return null;
+}
+
+export function summarizeAvailabilityForSlot(
+  blocks: readonly AvailabilityBlock[],
+  isoDate: string,
+  slotStartMinutes: number,
+  slotDurationMinutes: number,
+): SchedulingAvailabilitySlotSummary {
+  const active = listAvailabilityBlocksForSlot(
+    blocks,
+    isoDate,
+    slotStartMinutes,
+    slotDurationMinutes,
+  );
+
+  const labels = active
+    .map((block) => block.label?.trim() ?? '')
+    .filter((value): value is string => value.length > 0);
+  const notes = active
+    .map((block) => block.notes?.trim() ?? '')
+    .filter((value): value is string => value.length > 0);
+
+  const primaryText = labels[0] ?? notes[0] ?? null;
+
+  return {
+    dominantColour: getAvailabilityColourForSlot(
+      blocks,
+      isoDate,
+      slotStartMinutes,
+      slotDurationMinutes,
+    ),
+    labels,
+    notes,
+    primaryText,
+  };
 }

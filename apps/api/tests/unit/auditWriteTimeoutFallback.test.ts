@@ -14,7 +14,14 @@ const { dbAdminMock, enqueueAuditOutboxMock, loggerErrorMock, loggerWarnMock, lo
 }));
 
 vi.mock('../../src/db/db', () => ({
-  dbAdmin: dbAdminMock,
+  db: dbAdminMock,
+  rlsStore: {
+    getStore: vi.fn(() => undefined),
+  },
+}));
+
+vi.mock('../../src/shared/tenantContext', () => ({
+  withTenantContext: async (_clinicId: string, fn: () => Promise<unknown>) => fn(),
 }));
 
 vi.mock('../../src/shared/auditOutbox', () => ({

@@ -539,7 +539,7 @@ export function EpisodeDetailView({ episode, patientId, unitNameMap, onBack, onE
   );
   const expandedTimelineThreadId = expandedTimelineItem?.threadId ?? null;
   const { data: expandedThreadDetail } = useQuery({
-    queryKey: ['episodes', 'timeline-thread-detail', expandedTimelineThreadId],
+    queryKey: episodesKeys.timelineThreadDetail(expandedTimelineThreadId),
     queryFn: () => apiClient.get<MessageThreadDetail>(`messages/threads/${expandedTimelineThreadId}`).catch(() => ({ messages: [] })),
     enabled: !!expandedTimelineThreadId,
   });

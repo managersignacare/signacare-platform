@@ -44,6 +44,7 @@ import {
   useStaffSignature,
 } from '../../../shared/components/ui/DigitalSignature';
 import { useAuthStore } from '../../../shared/store/authStore';
+import { orgSettingsKeys } from '../../org-settings/queryKeys';
 import { orgSettingsApi, type OrgUnit } from '../../org-settings/services/orgSettingsApi';
 import { useTasks, useTaskSummary } from '../hooks/useTasks';
 import { staffLookupKeys, tasksKeys } from '../queryKeys';
@@ -350,7 +351,7 @@ export default function TasksPage() {
   const qc = useQueryClient();
   const { data: staffList } = useStaffLookup();
   const { data: teamTree = [] } = useQuery({
-    queryKey: ['org-settings', 'units', 'tree', 'tasks'],
+    queryKey: orgSettingsKeys.unitsTreeForTasks(),
     queryFn: () => orgSettingsApi.getOrgTree(),
     staleTime: 5 * 60 * 1000,
   });

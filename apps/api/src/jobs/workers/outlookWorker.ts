@@ -96,7 +96,7 @@ const outlookWorker = new Worker(
 outlookWorker.on('failed', (job, err) => {
   const data = job?.data as OutlookJobData | undefined;
   if (data?.appointmentId && data.clinicId) {
-    void withTenantContext(data.clinicId, async () => {
+    withTenantContext(data.clinicId, async () => {
       await db('appointments')
         .where({ id: data.appointmentId, clinic_id: data.clinicId })
         .update({

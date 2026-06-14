@@ -1,5 +1,6 @@
 import { Box, Tooltip, Typography } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
+import { sharedBuildKeys } from '../../queryKeys';
 import { resolveWebBuildInfo, shortenCommitSha } from './buildStampSupport';
 
 interface ApiHealthPayload {
@@ -43,7 +44,7 @@ async function fetchApiHealth() {
 
 export function BuildStamp(): React.ReactElement {
   const { data, isError } = useQuery({
-    queryKey: ['build-stamp', 'api-health'],
+    queryKey: sharedBuildKeys.apiHealth(),
     queryFn: fetchApiHealth,
     staleTime: 60_000,
     retry: 0,

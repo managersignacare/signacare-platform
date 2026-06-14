@@ -4,6 +4,7 @@ import { AppError } from '../../shared/errors';
 import { logger } from '../../utils/logger';
 import type { AppointmentStatus } from './appointmentRepository';
 import type { ZodIssue } from 'zod';
+import { hasOptionalTable } from '../../shared/optionalSchema';
 
 type AppointmentResponseType = typeof AppointmentResponse._type;
 
@@ -133,6 +134,8 @@ export async function enrichAppointmentRows(
     .map((row) => (typeof row.patient_id === 'string' ? row.patient_id : null))
     .filter((id): id is string => id !== null);
 
+  const attendeeTableAvailable = await hasOptionalTable('appointment_attendees');
+
   const [teamRows, patientTeamRows, attendeeRows] = await Promise.all([
     db('appointments as a')
       .leftJoin('episodes as e', 'e.id', 'a.episode_id')
@@ -162,18 +165,20 @@ export async function enrichAppointmentRows(
         org_unit_id: 'pta.org_unit_id',
         org_unit_name: 'ou.name',
       }) as Promise<PatientTeamDecoratedRow[]>,
-    db('appointment_attendees as aa')
-      .leftJoin('staff as s', 's.id', 'aa.staff_id')
-      .where('aa.clinic_id', clinicId)
-      .whereIn('aa.appointment_id', appointmentIds)
-      .whereNot('aa.attendance_status', 'removed')
-      .orderBy('aa.invited_at', 'asc')
-      .select({
-        appointment_id: 'aa.appointment_id',
-        staff_id: 'aa.staff_id',
-        given_name: 's.given_name',
-        family_name: 's.family_name',
-      }) as Promise<AppointmentAttendeeDecoratedRow[]>,
+    attendeeTableAvailable
+      ? (db('appointment_attendees as aa')
+        .leftJoin('staff as s', 's.id', 'aa.staff_id')
+        .where('aa.clinic_id', clinicId)
+        .whereIn('aa.appointment_id', appointmentIds)
+        .whereNot('aa.attendance_status', 'removed')
+        .orderBy('aa.invited_at', 'asc')
+        .select({
+          appointment_id: 'aa.appointment_id',
+          staff_id: 'aa.staff_id',
+          given_name: 's.given_name',
+          family_name: 's.family_name',
+        }) as Promise<AppointmentAttendeeDecoratedRow[]>)
+      : Promise.resolve([] as AppointmentAttendeeDecoratedRow[]),
   ]);
 
   const teamByAppointment = new Map(

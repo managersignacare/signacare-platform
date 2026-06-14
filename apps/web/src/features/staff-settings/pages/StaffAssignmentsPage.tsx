@@ -16,6 +16,7 @@ import {
   staffSettingsKeys,
 } from '../queryKeys'
 import { useOrgTree } from '../../org-settings/hooks/useOrgSettings'
+import { orgSettingsKeys } from '../../org-settings/queryKeys'
 import type { OrgUnit } from '../../org-settings/services/orgSettingsApi'
 import { EditStaffCredentialsDialog } from '../components/EditStaffCredentialsDialog'
 import { StaffOnboardDialog } from '../components/StaffOnboardDialog'
@@ -114,7 +115,7 @@ export const StaffAssignmentsPage: React.FC = () => {
   const [selectedClinicId, setSelectedClinicId] = React.useState<string>(sessionClinicId)
 
   const { data: clinics } = useQuery({
-    queryKey: ['clinics', 'lookup', 'staff-assignments'],
+    queryKey: orgSettingsKeys.clinicsLookupForStaffAssignments(),
     queryFn: () => apiClient.get<Array<{ id: string; name: string }>>('clinics/lookup'),
     enabled: isSuperadmin,
   })

@@ -124,7 +124,7 @@ router.get(
   async (req: Request, res: Response) => {
     const { patientId } = req.params;
     const records = await db('ai_provenance')
-      .where({ patient_id: patientId })
+      .where({ patient_id: patientId, clinic_id: req.clinicId })
       .leftJoin('staff as s', 's.id', 'ai_provenance.created_by_staff_id')
       .leftJoin('staff as r', 'r.id', 'ai_provenance.reviewed_by_staff_id')
       .select(

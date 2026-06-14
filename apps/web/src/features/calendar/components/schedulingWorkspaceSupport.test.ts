@@ -4,8 +4,10 @@ import {
   buildRescheduledTimes,
   getAvailabilityColourForSlot,
   getAvailabilitySummaryForDate,
+  listAvailabilityBlocksForSlot,
   listAvailabilityBlocksForDate,
   matchesSchedulingSearch,
+  summarizeAvailabilityForSlot,
 } from './schedulingWorkspaceSupport';
 
 function block(overrides: Partial<AvailabilityBlock>): AvailabilityBlock {
@@ -102,5 +104,46 @@ describe('schedulingWorkspaceSupport', () => {
     ], '2026-06-15', 9 * 60, 60);
 
     expect(colour).toBe('red');
+  });
+
+  it('lists the named availability blocks active for a slot', () => {
+    const blocks = listAvailabilityBlocksForSlot([
+      block({ id: 'green', colour: 'green', startTime: '08:00', endTime: '12:00', label: 'Clinic availability' }),
+      block({ id: 'yellow', colour: 'yellow', startTime: '09:00', endTime: '09:30', label: 'Phone triage' }),
+      block({ id: 'other-day', dayOfWeek: 2, label: 'Ignore me' }),
+    ], '2026-06-15', 9 * 60, 30);
+
+    expect(blocks.map((entry) => entry.label)).toEqual([
+      'Clinic availability',
+      'Phone triage',
+    ]);
+  });
+
+  it('summarizes slot booking guidance with visible primary text and notes', () => {
+    const summary = summarizeAvailabilityForSlot([
+      block({
+        id: 'green',
+        colour: 'green',
+        startTime: '08:00',
+        endTime: '12:00',
+        label: 'Bookable clinic hours',
+        notes: 'Reception can fill these slots.',
+      }),
+      block({
+        id: 'yellow',
+        colour: 'yellow',
+        startTime: '09:00',
+        endTime: '10:00',
+        label: 'Protected MDT window',
+        notes: 'Book only if released by admin.',
+      }),
+    ], '2026-06-15', 9 * 60, 30);
+
+    expect(summary).toEqual({
+      dominantColour: 'yellow',
+      labels: ['Bookable clinic hours', 'Protected MDT window'],
+      notes: ['Reception can fill these slots.', 'Book only if released by admin.'],
+      primaryText: 'Bookable clinic hours',
+    });
   });
 });

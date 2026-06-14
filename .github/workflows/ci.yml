@@ -195,16 +195,16 @@ jobs:
       JWT_ACCESS_TTL_MINUTES: '60'
       JWT_REFRESH_TTL_DAYS: '7'
       # ── PHI + blind-index keys (32+ char min) ──
-      PHI_ENCRYPTION_KEY: ci-test-phi-encryption-key-64-char-hex-0123456789abcdef0123456789
-      BLIND_INDEX_KEY: ci-test-blind-index-key-64-char-hex-0123456789abcdef0123456789abcd
-      SESSION_SECRET: ci-test-session-secret-64-char-hex-0123456789abcdef0123456789abcdef
+      PHI_ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      BLIND_INDEX_KEY: fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210
+      SESSION_SECRET: 00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff
       # ── Redis ──
       REDIS_URL: redis://localhost:6379
       # ── Misc operational ──
       CORS_ORIGIN: http://localhost:5173
       PORT: '3001'
       # ── Phase 13 — iCal HMAC secret (needed at server boot) ──
-      CALENDAR_ICAL_SECRET: ci-test-ical-secret-64-char-hex-0123456789abcdef0123456789abcdef
+      CALENDAR_ICAL_SECRET: ffeeddccbbaa99887766554433221100ffeeddccbbaa99887766554433221100
     steps:
       - uses: actions/checkout@v4
       - name: Setup Node.js 20
@@ -271,13 +271,13 @@ jobs:
       JWT_REFRESH_SECRET: ci-test-refresh-secret-64-char-hex-0123456789abcdef0123456789abcdef
       JWT_ACCESS_TTL_MINUTES: '60'
       JWT_REFRESH_TTL_DAYS: '7'
-      PHI_ENCRYPTION_KEY: ci-test-phi-encryption-key-64-char-hex-0123456789abcdef0123456789
-      BLIND_INDEX_KEY: ci-test-blind-index-key-64-char-hex-0123456789abcdef0123456789abcd
-      SESSION_SECRET: ci-test-session-secret-64-char-hex-0123456789abcdef0123456789abcdef
+      PHI_ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      BLIND_INDEX_KEY: fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210
+      SESSION_SECRET: 00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff
       REDIS_URL: redis://localhost:6379
       CORS_ORIGIN: http://localhost:5173
       PORT: '4000'
-      CALENDAR_ICAL_SECRET: ci-test-ical-secret-64-char-hex-0123456789abcdef0123456789abcdef
+      CALENDAR_ICAL_SECRET: ffeeddccbbaa99887766554433221100ffeeddccbbaa99887766554433221100
       VITE_API_URL: /api/v1
     steps:
       - uses: actions/checkout@v4
@@ -1316,13 +1316,13 @@ jobs:
       JWT_REFRESH_SECRET: ci-test-refresh-secret-64-char-hex-0123456789abcdef0123456789abcdef
       JWT_ACCESS_TTL_MINUTES: '60'
       JWT_REFRESH_TTL_DAYS: '7'
-      PHI_ENCRYPTION_KEY: ci-test-phi-encryption-key-64-char-hex-0123456789abcdef0123456789
-      BLIND_INDEX_KEY: ci-test-blind-index-key-64-char-hex-0123456789abcdef0123456789abcd
-      SESSION_SECRET: ci-test-session-secret-64-char-hex-0123456789abcdef0123456789abcdef
+      PHI_ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      BLIND_INDEX_KEY: fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210
+      SESSION_SECRET: 00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff
       REDIS_URL: redis://localhost:6379
       CORS_ORIGIN: http://localhost:5173
       PORT: '4000'
-      CALENDAR_ICAL_SECRET: ci-test-ical-secret-64-char-hex-0123456789abcdef0123456789abcdef
+      CALENDAR_ICAL_SECRET: ffeeddccbbaa99887766554433221100ffeeddccbbaa99887766554433221100
       VITE_API_URL: /api/v1
     steps:
       - uses: actions/checkout@v4

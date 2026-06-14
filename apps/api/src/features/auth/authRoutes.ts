@@ -521,7 +521,7 @@ authRouter.post('/change-password', authMiddleware, asyncHandler(async (req, res
     maxAge: config.jwt.refreshTtlDays * 24 * 60 * 60 * 1000,
   });
 
-  void effectiveIdleMinutesForClinic(result.user.clinicId)
+  effectiveIdleMinutesForClinic(result.user.clinicId)
     .then((minutes) => primeIdleWindow(result.user.id, minutes))
     .catch((err: unknown) => {
       logger.warn(

@@ -1,14 +1,5 @@
-// apps/web/src/features/calendar/components/TodayContactsView.tsx
-//
-// Phase 13 PR3 — three-card summary of one clinician on one day:
-// Appointments (excluding DNAs) → Contacts completed → DNAs.
-// Each card shows a count header and a tappable list. Empty cards
-// render a muted "Nothing yet" message instead of vanishing so the
-// layout stays stable across the day.
-
 import React from 'react';
 import {
-  Box,
   Card,
   CardContent,
   Chip,
@@ -27,6 +18,7 @@ import type { TodayViewResponse } from '@signacare/shared';
 
 interface Props {
   data: TodayViewResponse;
+  mode?: 'summary' | 'contacts' | 'dna';
 }
 
 function formatClock(iso: string): string {
@@ -46,124 +38,154 @@ const STATUS_COLOUR: Record<string, 'default' | 'primary' | 'success' | 'warning
   no_show: 'error',
 };
 
-export const TodayContactsView: React.FC<Props> = ({ data }) => {
+function AppointmentsCard({ data }: { data: TodayViewResponse }) {
   const navigate = useNavigate();
-  const { appointments, dnas, contacts, counts } = data;
+  const { appointments, counts } = data;
+
+  return (
+    <Card variant="outlined">
+      <CardContent>
+        <Stack direction="row" alignItems="center" spacing={1} mb={1}>
+          <EventAvailableIcon color="primary" />
+          <Typography variant="subtitle1" sx={{ flex: 1 }}>
+            Appointments
+          </Typography>
+          <Chip size="small" label={appointments.length} />
+        </Stack>
+        <Divider sx={{ mb: 1 }} />
+        {appointments.length === 0 ? (
+          <Typography variant="body2" color="text.secondary">
+            Nothing scheduled.
+          </Typography>
+        ) : (
+          <List dense disablePadding>
+            {appointments.map((a) => (
+              <ListItemButton
+                key={a.id}
+                onClick={() => navigate(`/patients/${a.patientId}`)}
+              >
+                <ListItemText
+                  primary={`${formatClock(a.appointmentStart)} — ${a.patientName}`}
+                  secondary={a.appointmentType}
+                />
+                <Chip
+                  size="small"
+                  label={a.status}
+                  color={STATUS_COLOUR[a.status] ?? 'default'}
+                />
+              </ListItemButton>
+            ))}
+          </List>
+        )}
+        <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+          Scheduled {counts.scheduled} · Confirmed {counts.confirmed} · Arrived {counts.arrived} · In session {counts.inSession} · Completed {counts.completed} · Cancelled {counts.cancelled}
+        </Typography>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ContactsCard({ data }: { data: TodayViewResponse }) {
+  const navigate = useNavigate();
+  const { contacts, counts } = data;
+
+  return (
+    <Card variant="outlined">
+      <CardContent>
+        <Stack direction="row" alignItems="center" spacing={1} mb={1}>
+          <AssignmentTurnedInIcon color="success" />
+          <Typography variant="subtitle1" sx={{ flex: 1 }}>
+            Contacts completed
+          </Typography>
+          <Chip size="small" label={contacts.length} />
+        </Stack>
+        <Divider sx={{ mb: 1 }} />
+        {contacts.length === 0 ? (
+          <Typography variant="body2" color="text.secondary">
+            No contacts recorded yet.
+          </Typography>
+        ) : (
+          <List dense disablePadding>
+            {contacts.map((c) => (
+              <ListItemButton
+                key={c.id}
+                onClick={() => navigate(`/patients/${c.patientId}`)}
+              >
+                <ListItemText
+                  primary={c.patientName}
+                  secondary={`${c.durationMinutes} min · ${c.status}`}
+                />
+              </ListItemButton>
+            ))}
+          </List>
+        )}
+        <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+          Draft {counts.contactsDraft} · Signed {counts.contactsSigned}
+        </Typography>
+      </CardContent>
+    </Card>
+  );
+}
+
+function DnaCard({ data }: { data: TodayViewResponse }) {
+  const navigate = useNavigate();
+  const { dnas, counts } = data;
+
+  return (
+    <Card variant="outlined">
+      <CardContent>
+        <Stack direction="row" alignItems="center" spacing={1} mb={1}>
+          <EventBusyIcon color="error" />
+          <Typography variant="subtitle1" sx={{ flex: 1 }}>
+            Did not attend
+          </Typography>
+          <Chip size="small" label={dnas.length} color="error" />
+        </Stack>
+        <Divider sx={{ mb: 1 }} />
+        {dnas.length === 0 ? (
+          <Typography variant="body2" color="text.secondary">
+            No DNAs.
+          </Typography>
+        ) : (
+          <List dense disablePadding>
+            {dnas.map((a) => (
+              <ListItemButton
+                key={a.id}
+                onClick={() => navigate(`/patients/${a.patientId}`)}
+              >
+                <ListItemText
+                  primary={`${formatClock(a.appointmentStart)} — ${a.patientName}`}
+                  secondary={a.appointmentType}
+                />
+              </ListItemButton>
+            ))}
+          </List>
+        )}
+        <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+          No-show count today: {counts.noShow}
+        </Typography>
+      </CardContent>
+    </Card>
+  );
+}
+
+export const TodayContactsView: React.FC<Props> = ({
+  data,
+  mode = 'summary',
+}) => {
+  if (mode === 'contacts') {
+    return <ContactsCard data={data} />;
+  }
+
+  if (mode === 'dna') {
+    return <DnaCard data={data} />;
+  }
 
   return (
     <Stack spacing={2}>
-      <Card variant="outlined">
-        <CardContent>
-          <Stack direction="row" alignItems="center" spacing={1} mb={1}>
-            <EventAvailableIcon color="primary" />
-            <Typography variant="subtitle1" sx={{ flex: 1 }}>
-              Appointments
-            </Typography>
-            <Chip size="small" label={appointments.length} />
-          </Stack>
-          <Divider sx={{ mb: 1 }} />
-          {appointments.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">
-              Nothing scheduled.
-            </Typography>
-          ) : (
-            <List dense disablePadding>
-              {appointments.map((a) => (
-                <ListItemButton
-                  key={a.id}
-                  onClick={() => navigate(`/patients/${a.patientId}`)}
-                >
-                  <ListItemText
-                    primary={`${formatClock(a.appointmentStart)} — ${a.patientName}`}
-                    secondary={a.appointmentType}
-                  />
-                  <Chip
-                    size="small"
-                    label={a.status}
-                    color={STATUS_COLOUR[a.status] ?? 'default'}
-                  />
-                </ListItemButton>
-              ))}
-            </List>
-          )}
-          <Box mt={1}>
-            <Typography variant="caption" color="text.secondary">
-              Scheduled {counts.scheduled} · Confirmed {counts.confirmed} ·
-              Arrived {counts.arrived} · In session {counts.inSession} ·
-              Completed {counts.completed} · Cancelled {counts.cancelled}
-            </Typography>
-          </Box>
-        </CardContent>
-      </Card>
-
-      <Card variant="outlined">
-        <CardContent>
-          <Stack direction="row" alignItems="center" spacing={1} mb={1}>
-            <AssignmentTurnedInIcon color="success" />
-            <Typography variant="subtitle1" sx={{ flex: 1 }}>
-              Contacts completed
-            </Typography>
-            <Chip size="small" label={contacts.length} />
-          </Stack>
-          <Divider sx={{ mb: 1 }} />
-          {contacts.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">
-              No contacts recorded yet.
-            </Typography>
-          ) : (
-            <List dense disablePadding>
-              {contacts.map((c) => (
-                <ListItemButton
-                  key={c.id}
-                  onClick={() => navigate(`/patients/${c.patientId}`)}
-                >
-                  <ListItemText
-                    primary={c.patientName}
-                    secondary={`${c.durationMinutes} min · ${c.status}`}
-                  />
-                </ListItemButton>
-              ))}
-            </List>
-          )}
-          <Box mt={1}>
-            <Typography variant="caption" color="text.secondary">
-              Draft {counts.contactsDraft} · Signed {counts.contactsSigned}
-            </Typography>
-          </Box>
-        </CardContent>
-      </Card>
-
-      <Card variant="outlined">
-        <CardContent>
-          <Stack direction="row" alignItems="center" spacing={1} mb={1}>
-            <EventBusyIcon color="error" />
-            <Typography variant="subtitle1" sx={{ flex: 1 }}>
-              Did not attend
-            </Typography>
-            <Chip size="small" label={dnas.length} color="error" />
-          </Stack>
-          <Divider sx={{ mb: 1 }} />
-          {dnas.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">
-              No DNAs.
-            </Typography>
-          ) : (
-            <List dense disablePadding>
-              {dnas.map((a) => (
-                <ListItemButton
-                  key={a.id}
-                  onClick={() => navigate(`/patients/${a.patientId}`)}
-                >
-                  <ListItemText
-                    primary={`${formatClock(a.appointmentStart)} — ${a.patientName}`}
-                    secondary={a.appointmentType}
-                  />
-                </ListItemButton>
-              ))}
-            </List>
-          )}
-        </CardContent>
-      </Card>
+      <AppointmentsCard data={data} />
+      <ContactsCard data={data} />
+      <DnaCard data={data} />
     </Stack>
   );
 };

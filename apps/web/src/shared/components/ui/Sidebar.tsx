@@ -53,6 +53,7 @@ import SettingsIcon from '@mui/icons-material/Settings';
 import { useQuery } from '@tanstack/react-query';
 import { useLogout } from '../../../features/auth/hooks/useLogout';
 import { useModuleVisibility } from '../../hooks/useModuleVisibility';
+import { sharedClinicModulesKeys } from '../../queryKeys';
 import { apiClient } from '../../services/apiClient';
 import { useAuthStore } from '../../store/authStore';
 import { useBrandingStore } from '../../store/brandingStore';
@@ -301,7 +302,7 @@ export function Sidebar({ collapsed = false }: SidebarProps): React.ReactElement
   const isSuperadmin = userRole === 'superadmin';
   const rawNavGroups = buildNavGroups(userRole);
   const { data: clinicModules = {} } = useQuery({
-    queryKey: ['clinic-modules', 'me'],
+    queryKey: sharedClinicModulesKeys.mine(),
     queryFn: async () => {
       try {
         const resp = await apiClient.get<{ modules: Record<string, boolean> }>(

@@ -22,6 +22,7 @@ import {
   Box,
   Paper,
   Stack,
+  TextField,
   ToggleButton,
   ToggleButtonGroup,
   Typography,
@@ -107,6 +108,8 @@ export const AvailabilityGridEditor: React.FC<Props> = ({
   const [tool, setTool] = useState<Tool>('green');
   const [dragging, setDragging] = useState(false);
   const [pending, setPending] = useState<Map<string, PendingCell>>(new Map());
+  const [draftLabel, setDraftLabel] = useState('');
+  const [draftNotes, setDraftNotes] = useState('');
 
   // Released-button safety: if the mouse leaves the grid mid-drag we
   // still need to commit on the next mouseup anywhere in the document.
@@ -206,8 +209,8 @@ export const AvailabilityGridEditor: React.FC<Props> = ({
               endTime,
               effectiveFrom: new Date().toISOString().slice(0, 10),
               effectiveUntil: null,
-              label: null,
-              notes: null,
+              label: draftLabel.trim() || null,
+              notes: draftNotes.trim() || null,
             });
           } catch {
             /* surfaced by the parent */
@@ -255,6 +258,25 @@ export const AvailabilityGridEditor: React.FC<Props> = ({
           </ToggleButton>
           <ToggleButton value="erase">⌫ Erase</ToggleButton>
         </ToggleButtonGroup>
+      </Stack>
+
+      <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} mb={2}>
+        <TextField
+          size="small"
+          label="Time block name"
+          value={draftLabel}
+          onChange={(event) => setDraftLabel(event.target.value)}
+          placeholder="e.g. MDT case conference"
+          sx={{ minWidth: 240 }}
+        />
+        <TextField
+          size="small"
+          label="Block notes"
+          value={draftNotes}
+          onChange={(event) => setDraftNotes(event.target.value)}
+          placeholder="Optional booking guidance"
+          fullWidth
+        />
       </Stack>
 
       <Box
@@ -334,6 +356,9 @@ export const AvailabilityGridEditor: React.FC<Props> = ({
       <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
         Click and drag to paint. Yellow blocks ask reception to confirm before
         booking. Red blocks block all booking attempts.
+      </Typography>
+      <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
+        The name and notes above are applied to any new time blocks you paint.
       </Typography>
     </Paper>
   );

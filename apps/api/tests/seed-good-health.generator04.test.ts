@@ -7,6 +7,7 @@ import {
   CLINIC_ROLE_ROSTER,
 } from '../src/seed-good-health/config/catalog';
 import { clinicId } from '../src/seed-good-health/config/ids';
+import { validateHpiiFormat } from '../src/integrations/hiService/hiServiceClient';
 
 const EXPECTED_COUNT =
   MENTAL_HEALTH_CLINICS.length * (1 + TEAM_SLUGS.length * CLINIC_ROLE_ROSTER.length);
@@ -91,12 +92,31 @@ describe('seed-good-health generator 04: clinic staff', () => {
   it('role mix matches the roster plus one superadmin per clinic', async () => {
     const { staffRows } = await buildClinicStaff(stubHash);
     const clinicianCount = staffRows.filter((r) => r.role === 'clinician').length;
+    const prescriberConsultantCount = staffRows.filter((r) => r.role === 'prescriber_consultant').length;
+    const prescriberRegistrarCount = staffRows.filter((r) => r.role === 'prescriber_registrar').length;
     const receptionistCount = staffRows.filter((r) => r.role === 'receptionist').length;
     const superadminCount = staffRows.filter((r) => r.role === 'superadmin').length;
-    // 9 clinician slots + 1 admin receptionist slot × 8 teams = 72 + 8
-    expect(clinicianCount).toBe(72);
+    // 6 non-prescriber clinician slots + 3 prescriber slots + 1 receptionist slot × 8 teams
+    expect(clinicianCount).toBe(48);
+    expect(prescriberConsultantCount).toBe(8);
+    expect(prescriberRegistrarCount).toBe(16);
     expect(receptionistCount).toBe(8);
     expect(superadminCount).toBe(MENTAL_HEALTH_CLINICS.length);
+  });
+
+  it('every seeded prescriber carries a valid HPI-I plus demo provider identifiers', async () => {
+    const { staffRows } = await buildClinicStaff(stubHash);
+    const prescribers = staffRows.filter((row) =>
+      row.role === 'prescriber_consultant' || row.role === 'prescriber_registrar',
+    );
+
+    expect(prescribers.length).toBe(24);
+    for (const row of prescribers) {
+      expect(typeof row.hpii).toBe('string');
+      expect(validateHpiiFormat(row.hpii ?? '')).toBe(true);
+      expect(row.prescriber_number).toMatch(/^PBS\d{4}$/);
+      expect(row.provider_number).toMatch(/^MED\d{4}$/);
+    }
   });
 
   it('ids are byte-stable across two builds (idempotency proof)', async () => {

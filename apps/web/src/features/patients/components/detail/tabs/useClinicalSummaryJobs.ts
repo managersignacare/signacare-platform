@@ -210,14 +210,14 @@ export function useClinicalSummaryJobs(options: UseClinicalSummaryJobsOptions): 
   }, [persistedFormulation.id, persistedFormulation.content]);
 
   const summaryJobsQuery = useQuery({
-    queryKey: ['clinical-ai-jobs', patientId, 'maudsley'],
+    queryKey: patientsKeys.clinicalAiJobs(patientId, 'maudsley'),
     queryFn: () => llmAiJobsApi.listAiJobs({ patientId, action: 'maudsley' }).then((r) => r.jobs),
     enabled: !!patientId,
     staleTime: 10_000,
     refetchInterval: summaryBuckets.loading ? 5_000 : 30_000,
   });
   const formulationJobsQuery = useQuery({
-    queryKey: ['clinical-ai-jobs', patientId, 'formulation'],
+    queryKey: patientsKeys.clinicalAiJobs(patientId, 'formulation'),
     queryFn: () => llmAiJobsApi.listAiJobs({ patientId, action: 'formulation' }).then((r) => r.jobs),
     enabled: !!patientId,
     staleTime: 10_000,

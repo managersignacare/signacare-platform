@@ -55,9 +55,12 @@ describe('BlobStorage backend deployment contract', () => {
     expect(bicep).toContain("name: 'BLOB_AZURE_ACCOUNT_NAME'");
     expect(bicep).toContain("name: 'BLOB_AZURE_ACCOUNT_KEY'");
     expect(bicep).toContain("name: 'BLOB_AZURE_CONTAINER'");
-    expect(bicep).toMatch(/var apiSlotAppSettings = \[/);
+    expect(bicep).toMatch(/var apiSlotAppSettings = (?:\[|concat\()/);
     expect(bicep).toMatch(/resource apiSlot[\s\S]+identity:\s*\{[\s\S]+type: 'SystemAssigned'/);
-    expect(bicep).toMatch(/resource apiSlot[\s\S]+appSettings: apiSlotAppSettings/);
+    expect(
+      /var apiSlotProperties = union\(\{[\s\S]+appSettings: apiSlotAppSettings/.test(bicep) ||
+      /resource apiSlot[\s\S]+appSettings: apiSlotAppSettings/.test(bicep),
+    ).toBe(true);
     expect(bicep).toMatch(/resource apiSlotKvRole[\s\S]+principalId: apiSlot!\.identity\.principalId/);
     expect(bicep).toMatch(/resource apiSlotAcrPullRole[\s\S]+principalId: apiSlot!\.identity\.principalId/);
     expect(bicep).toMatch(/resource webSlot[\s\S]+identity:\s*\{[\s\S]+type: 'SystemAssigned'/);

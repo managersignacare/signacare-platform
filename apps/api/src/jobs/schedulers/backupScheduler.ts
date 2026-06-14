@@ -22,7 +22,7 @@
 // Naming: backup_config / backup_history columns snake_case, function
 // names camelCase, cron module from node-cron.
 
-import cron from 'node-cron';
+import cron, { type ScheduledTask } from 'node-cron';
 import path from 'path';
 import { logger } from '../../utils/logger';
 import { runBackup, cleanOldBackups, getBackupConfig } from '../../features/backup/backupRoutes';
@@ -158,7 +158,7 @@ async function tick(): Promise<void> {
  * Wire up the scheduler. Called once from server bootstrap. Returns the
  * cron task so callers can stop it in tests.
  */
-export function startBackupScheduler(): cron.ScheduledTask | null {
+export function startBackupScheduler(): ScheduledTask | null {
   schedulerDisabled = false;
   // Tick every minute. The check is cheap (one indexed SELECT against the
   // singleton config row) so this is well within budget.

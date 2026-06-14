@@ -1,15 +1,23 @@
+import { dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
+
+const workspaceRoot = dirname(fileURLToPath(import.meta.url));
 
 /**
  * Default `pnpm test` (and CI) executes only fast in-process unit tests.
  *
- * The three live-server integration suites — auth, api-endpoints,
- * clinical-workflows — depend on a real running API at TEST_API_URL
- * with seeded admin credentials. They are excluded from the default
- * run and executed via `pnpm test:integration` against a deployed
- * environment.
+ * The default run excludes both:
+ *   1. live-server / Postgres-backed integration suites
+ *   2. slower conformance packs that exercise broader external-
+ *      integration contracts (for example NPDS/eScript flows)
+ *
+ * That keeps the unit-test CI lane deterministic and fast. The
+ * integration and conformance surfaces belong in their dedicated
+ * lanes, not the in-process unit lane.
  */
 export default defineConfig({
+  root: workspaceRoot,
   test: {
     globals: true,
     environment: 'node',
@@ -24,6 +32,9 @@ export default defineConfig({
       // with migrations + the seeded admin user. Run via
       // `pnpm test:integration` after `docker compose up postgres`.
       'tests/integration/**',
+      // CTS / conformance packs cover broader cross-system contracts
+      // and are intentionally kept out of the fast unit-test lane.
+      'tests/conformance/**',
     ],
     setupFiles: ['./tests/setup.ts'],
     testTimeout: 30000,

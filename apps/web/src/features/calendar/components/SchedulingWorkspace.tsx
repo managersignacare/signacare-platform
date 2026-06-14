@@ -20,6 +20,8 @@ import {
   Paper,
   Select,
   Stack,
+  Tab,
+  Tabs,
   TextField,
   ToggleButton,
   ToggleButtonGroup,
@@ -30,8 +32,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ALL_SPECIALTIES,
   SPECIALTY_DISPLAY,
-  type AvailabilityBlock,
-  type AppointmentMode,
   type AppointmentStatus,
   type AppointmentResponse,
   type SpecialtyType,
@@ -40,6 +40,7 @@ import React from 'react';
 import { useCurrentUser } from '../../auth/hooks/useCurrentUser';
 import { apiClient } from '../../../shared/services/apiClient';
 import { PatientSearchAutocomplete, type PatientOption } from '../../patients/components/PatientSearchAutocomplete';
+import { patientAppointmentsKeys, patientsKeys } from '../../patients/queryKeys';
 import { useOrgTree } from '../../org-settings/hooks/useOrgSettings';
 import type { OrgUnit } from '../../org-settings/services/orgSettingsApi';
 import { staffSettingsApi } from '../../staff-settings/services/staffSettingsApi';
@@ -60,16 +61,22 @@ import { useTodayView } from '../hooks/useTodayView';
 import { TimeBlockingRulesDialog } from './TimeBlockingRulesDialog';
 import { ICalSubscribeCard } from './ICalSubscribeCard';
 import {
-  buildRescheduledTimes,
-  getAvailabilityColourForSlot,
   getAvailabilitySummaryForDate,
   matchesSchedulingSearch,
 } from './schedulingWorkspaceSupport';
+import {
+  appointmentModeLabel,
+  buildRescheduledTimes,
+  DayWeekGrid,
+  type DragSlot,
+  ListView,
+  type AppointmentSummary,
+} from './SchedulingWorkspaceCalendarViews';
 import { TodayContactsView } from './TodayContactsView';
 
 type CalendarScope = 'mine' | 'team' | 'clinic';
 type CalendarView = 'month' | 'day' | 'workweek' | 'week' | 'list';
-type DragSlot = `${string}|${string}`;
+type WorkspaceTab = 'calendar' | 'contacts' | 'dna';
 interface StaffLookupRow {
   id: string;
   givenName: string;
@@ -83,24 +90,10 @@ interface AppointmentDraftSeed {
   duration?: number;
   startTime?: string;
 }
-interface AppointmentSummary {
-  clinicianId: string;
-  clinicianName: string;
-  date: string;
-  endTimeLabel: string;
-  modeLabel: string;
-  raw: AppointmentResponse;
-  startHour: number;
-  startTimeLabel: string;
-  teamId: string | null;
-  teamName: string;
-  title: string;
-}
 
 const SLOT_OPTIONS = [15, 20, 30, 45, 60] as const;
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
 const ALLDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-const HOURS = Array.from({ length: 12 }, (_, index) => index + 7);
 const APPOINTMENT_STATUS_OPTIONS: AppointmentStatus[] = [
   'scheduled',
   'confirmed',
@@ -138,21 +131,6 @@ function flattenUnits(nodes: OrgUnit[]): { id: string; name: string }[] {
 
   walk(nodes, 0);
   return rows;
-}
-
-function appointmentModeLabel(mode?: AppointmentMode | null, telehealthLink?: string | null): string {
-  switch (mode) {
-    case 'direct':
-      return 'Direct';
-    case 'telehealth':
-      return 'Telehealth';
-    case 'videoconference':
-      return 'Videoconference';
-    case 'other':
-      return 'Other';
-    default:
-      return telehealthLink ? 'Videoconference' : 'Direct';
-  }
 }
 
 function monthBounds(isoDate: string): { from: string; monthDate: Date; to: string } {
@@ -197,213 +175,6 @@ function formatRangeDate(date: Date): string {
   return date.toLocaleDateString('en-AU', { day: '2-digit', month: 'short' });
 }
 
-function DayWeekGrid({
-  appointments,
-  availabilityBlocks,
-  dates,
-  dayLabels,
-  draggingAppointmentId,
-  dropTargetSlot,
-  slotMinutes,
-  onDragHoverSlot,
-  onDragEndAppointment,
-  onDragStartAppointment,
-  onDropAppointment,
-  onCreateSlot,
-  onSelect,
-}: {
-  appointments: AppointmentSummary[];
-  availabilityBlocks: readonly AvailabilityBlock[];
-  dates: Date[];
-  dayLabels: string[];
-  draggingAppointmentId: string | null;
-  dropTargetSlot: DragSlot | null;
-  slotMinutes: number;
-  onDragHoverSlot: (slot: DragSlot | null) => void;
-  onDragEndAppointment: () => void;
-  onDragStartAppointment: (appointment: AppointmentResponse) => void;
-  onDropAppointment: (appointment: AppointmentResponse, date: string, startTime: string) => void;
-  onCreateSlot: (date: string, startTime: string) => void;
-  onSelect: (appointment: AppointmentResponse) => void;
-}) {
-  return (
-    <Paper variant="outlined" sx={{ overflow: 'auto' }}>
-      <Box sx={{ display: 'grid', gridTemplateColumns: `60px repeat(${dates.length}, 1fr)`, minWidth: dates.length > 5 ? 920 : 720 }}>
-        <Box sx={{ borderBottom: '1px solid', borderColor: 'divider', p: 0.5, bgcolor: '#FBF8F5' }} />
-        {dates.map((date, index) => {
-          const isToday = date.toDateString() === new Date().toDateString();
-          return (
-            <Box key={date.toISOString()} sx={{ borderBottom: '1px solid', borderLeft: '1px solid', borderColor: 'divider', p: 0.5, textAlign: 'center', bgcolor: isToday ? '#FFF3E0' : '#FBF8F5' }}>
-              <Typography variant="caption" fontWeight={600} sx={{ color: isToday ? '#b8621a' : '#3D484B' }}>
-                {dayLabels[index]}
-              </Typography>
-              <Typography variant="caption" display="block" sx={{ color: isToday ? '#b8621a' : 'text.secondary' }}>
-                {date.getDate()}
-              </Typography>
-            </Box>
-          );
-        })}
-
-        {HOURS.map((hour) => (
-          <React.Fragment key={hour}>
-            <Box sx={{ borderBottom: '1px solid', borderColor: 'divider', p: 0.5, textAlign: 'right', pr: 1 }}>
-              <Typography variant="caption" color="text.secondary">
-                {`${hour}:00`}
-              </Typography>
-            </Box>
-            {dates.map((date) => {
-              const iso = date.toISOString().slice(0, 10);
-              const slotAppointments = appointments.filter((appointment) => appointment.date === iso && appointment.startHour === hour);
-              const slotKey = `${iso}|${String(hour).padStart(2, '0')}:00` as DragSlot;
-              const availabilityColour = getAvailabilityColourForSlot(
-                availabilityBlocks,
-                iso,
-                hour * 60,
-                Math.max(slotMinutes, 60),
-              );
-              return (
-                <Box
-                  key={`${iso}-${hour}`}
-                  role="button"
-                  tabIndex={0}
-                  aria-label={`Create appointment on ${iso} at ${String(hour).padStart(2, '0')}:00`}
-                  sx={{
-                    borderBottom: '1px solid',
-                    borderLeft: '1px solid',
-                    borderColor: 'divider',
-                    minHeight: 54,
-                    p: 0.25,
-                    cursor: 'pointer',
-                    bgcolor: dropTargetSlot === slotKey
-                      ? '#FFF3E0'
-                      : availabilityColour === 'red'
-                        ? '#FFEBEE'
-                        : availabilityColour === 'yellow'
-                          ? '#FFF8E1'
-                          : availabilityColour === 'green'
-                            ? '#F1F8E9'
-                            : undefined,
-                  }}
-                  onClick={() => onCreateSlot(iso, `${String(hour).padStart(2, '0')}:00`)}
-                  onDragOver={(event) => {
-                    if (draggingAppointmentId) {
-                      event.preventDefault();
-                      onDragHoverSlot(slotKey);
-                    }
-                  }}
-                  onDrop={(event) => {
-                    if (!draggingAppointmentId) return;
-                    event.preventDefault();
-                    const appointmentId = event.dataTransfer.getData('text/appointment-id');
-                    const appointment = appointments.find((row) => row.raw.id === appointmentId);
-                    if (appointment) {
-                      onDropAppointment(
-                        appointment.raw,
-                        iso,
-                        `${String(hour).padStart(2, '0')}:00`,
-                      );
-                    }
-                    onDragHoverSlot(null);
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      event.preventDefault();
-                      onCreateSlot(iso, `${String(hour).padStart(2, '0')}:00`);
-                    }
-                  }}
-                >
-                  {slotAppointments.map((appointment) => (
-                    <Tooltip key={appointment.raw.id} title={`${appointment.clinicianName} | ${appointment.modeLabel}`}>
-                      <Box
-                        draggable
-                        role="button"
-                        tabIndex={0}
-                        sx={{
-                          bgcolor: '#E3F2FD',
-                          borderLeft: '3px solid #2196F3',
-                          borderRadius: 0.5,
-                          p: 0.5,
-                          mb: 0.25,
-                          cursor: 'pointer',
-                          opacity: draggingAppointmentId === appointment.raw.id ? 0.55 : 1,
-                        }}
-                        onDragEnd={onDragEndAppointment}
-                        onDragStart={(event) => {
-                          event.dataTransfer.setData('text/appointment-id', appointment.raw.id);
-                          event.dataTransfer.effectAllowed = 'move';
-                          onDragStartAppointment(appointment.raw);
-                        }}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          onSelect(appointment.raw);
-                        }}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Enter' || event.key === ' ') {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            onSelect(appointment.raw);
-                          }
-                        }}
-                      >
-                        <Typography variant="caption" fontWeight={600} sx={{ fontSize: 10, display: 'block', lineHeight: 1.2 }}>
-                          {appointment.title}
-                        </Typography>
-                        <Typography variant="caption" sx={{ fontSize: 9, color: 'text.secondary' }}>
-                          {appointment.startTimeLabel}–{appointment.endTimeLabel}
-                        </Typography>
-                      </Box>
-                    </Tooltip>
-                  ))}
-                </Box>
-              );
-            })}
-          </React.Fragment>
-        ))}
-      </Box>
-    </Paper>
-  );
-}
-
-function ListView({
-  appointments,
-  onSelect,
-}: {
-  appointments: AppointmentSummary[];
-  onSelect: (appointment: AppointmentResponse) => void;
-}) {
-  const sorted = [...appointments].sort((left, right) =>
-    `${left.raw.startTime}`.localeCompare(`${right.raw.startTime}`),
-  );
-  if (!sorted.length) {
-    return (
-      <Paper variant="outlined" sx={{ p: 4, textAlign: 'center' }}>
-        <Typography color="text.secondary">No appointments to display.</Typography>
-      </Paper>
-    );
-  }
-
-  return (
-    <Stack spacing={1}>
-      {sorted.map((appointment) => (
-        <Paper
-          key={appointment.raw.id}
-          variant="outlined"
-          component="button"
-          type="button"
-          sx={{ p: 1.5, cursor: 'pointer', '&:hover': { borderColor: '#b8621a' }, textAlign: 'left', width: '100%', background: '#fff' }}
-          onClick={() => onSelect(appointment.raw)}
-        >
-          <Typography variant="body2" fontWeight={600}>
-            {appointment.title}
-          </Typography>
-          <Typography variant="caption" color="text.secondary">
-            {new Date(appointment.raw.startTime).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })} | {appointment.startTimeLabel}–{appointment.endTimeLabel} | {appointment.clinicianName} | {appointment.teamName} | {appointment.modeLabel}
-          </Typography>
-        </Paper>
-      ))}
-    </Stack>
-  );
-}
 
 export function SchedulingWorkspace({
   routeLabel = 'My Calendar',
@@ -426,6 +197,7 @@ export function SchedulingWorkspace({
   );
 
   const [view, setView] = React.useState<CalendarView>('workweek');
+  const [workspaceTab, setWorkspaceTab] = React.useState<WorkspaceTab>('calendar');
   const [currentDate, setCurrentDate] = React.useState(new Date());
   const [scope, setScope] = React.useState<CalendarScope>('mine');
   const [teamFilter, setTeamFilter] = React.useState('');
@@ -466,7 +238,7 @@ export function SchedulingWorkspace({
   const appointmentsQuery = useQuery({
     queryKey: calendarKeys.appointments({
       from,
-      limit: '300',
+      limit: '200',
       patientId: patientFilter?.id ?? '',
       to,
     }),
@@ -474,7 +246,7 @@ export function SchedulingWorkspace({
       calendarApi
         .listAppointments({
           from: `${from}T00:00:00.000Z`,
-          limit: '300',
+          limit: '200',
           patientId: patientFilter?.id ?? undefined,
           to: `${to}T23:59:59.999Z`,
         })
@@ -585,8 +357,8 @@ export function SchedulingWorkspace({
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: appointmentKeys.all }),
       queryClient.invalidateQueries({ queryKey: calendarKeys.all }),
-      queryClient.invalidateQueries({ queryKey: ['patient-appointments', patientId] }),
-      queryClient.invalidateQueries({ queryKey: ['appointments', patientId] }),
+      queryClient.invalidateQueries({ queryKey: patientsKeys.appointments(patientId) }),
+      queryClient.invalidateQueries({ queryKey: patientAppointmentsKeys.byPatient(patientId) }),
     ]);
   };
 
@@ -714,7 +486,21 @@ export function SchedulingWorkspace({
         </Alert>
       ) : null}
 
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', xl: '2fr 1fr' }, gap: 3 }}>
+      <Paper variant="outlined" sx={{ mb: 2, borderRadius: 2 }}>
+        <Tabs
+          value={workspaceTab}
+          onChange={(_, value: WorkspaceTab) => setWorkspaceTab(value)}
+          variant="scrollable"
+          scrollButtons="auto"
+        >
+          <Tab value="calendar" label="Calendar" />
+          <Tab value="contacts" label="Contacts" />
+          <Tab value="dna" label="DNA" />
+        </Tabs>
+      </Paper>
+
+      {workspaceTab === 'calendar' ? (
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', xl: '2fr 1fr' }, gap: 3 }}>
         <Stack spacing={2.5}>
           <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
             <Stack spacing={2}>
@@ -962,7 +748,50 @@ export function SchedulingWorkspace({
             <ICalSubscribeCard onRefreshCalendar={refreshCalendarWorkspace} />
           </Box>
         </Stack>
-      </Box>
+        </Box>
+      ) : workspaceTab === 'contacts' ? (
+        todayViewLoadFailed ? (
+          <Alert severity="warning">
+            Today&apos;s contacts and workload summary are temporarily unavailable. Refresh to retry.
+          </Alert>
+        ) : today.data ? (
+          <Stack spacing={2}>
+            <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
+              <Typography variant="h6" sx={{ fontWeight: 700 }}>
+                Contacts for {today.data.clinicianName || 'this clinician'}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                {today.data.date}
+              </Typography>
+            </Paper>
+            <TodayContactsView data={today.data} mode="contacts" />
+          </Stack>
+        ) : (
+          <Box display="flex" justifyContent="center" py={6}>
+            <CircularProgress />
+          </Box>
+        )
+      ) : todayViewLoadFailed ? (
+        <Alert severity="warning">
+          DNA activity is temporarily unavailable. Refresh to retry.
+        </Alert>
+      ) : today.data ? (
+        <Stack spacing={2}>
+          <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
+            <Typography variant="h6" sx={{ fontWeight: 700 }}>
+              DNA activity for {today.data.clinicianName || 'this clinician'}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              {today.data.date}
+            </Typography>
+          </Paper>
+          <TodayContactsView data={today.data} mode="dna" />
+        </Stack>
+      ) : (
+        <Box display="flex" justifyContent="center" py={6}>
+          <CircularProgress />
+        </Box>
+      )}
 
       <SchedulingAppointmentDialog
         open={dialogOpen}

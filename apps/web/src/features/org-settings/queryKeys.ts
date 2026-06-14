@@ -5,4 +5,8 @@
 export const orgSettingsKeys = {
   all: ['org-settings'] as const,
   staffLookup: () => ['staff', 'lookup'] as const,
+  unitsTree: () => [...orgSettingsKeys.all, 'tree'] as const,
+  unitsTreeForTasks: () => [...orgSettingsKeys.all, 'units', 'tree', 'tasks'] as const,
+  clinicsLookupForStaffAssignments: () =>
+    ['clinics', 'lookup', 'staff-assignments'] as const,
 } as const;

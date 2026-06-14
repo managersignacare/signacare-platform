@@ -18,6 +18,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import React from 'react';
 import type { AppointmentMode, AppointmentResponse, AppointmentStatus } from '@signacare/shared';
 import { calendarKeys } from '../../calendar/queryKeys';
+import { patientAppointmentsKeys, patientsKeys } from '../../patients/queryKeys';
 import { appointmentKeys } from '../queryKeys';
 import { appointmentApi } from '../services/appointmentApi';
 import { getAppointmentStatusMeta } from '../types/appointmentTypes';
@@ -119,8 +120,8 @@ export function AppointmentDetailsDrawer({
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: appointmentKeys.all }),
       queryClient.invalidateQueries({ queryKey: calendarKeys.all }),
-      queryClient.invalidateQueries({ queryKey: ['patient-appointments', appointment.patientId] }),
-      queryClient.invalidateQueries({ queryKey: ['appointments', appointment.patientId] }),
+      queryClient.invalidateQueries({ queryKey: patientsKeys.appointments(appointment.patientId) }),
+      queryClient.invalidateQueries({ queryKey: patientAppointmentsKeys.byPatient(appointment.patientId) }),
     ]);
   };
 

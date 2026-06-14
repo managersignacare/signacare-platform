@@ -9,9 +9,9 @@ import {
 import { clinicId, staffId } from '../src/seed-good-health/config/ids';
 
 describe('seed-good-health generator 09: medications', () => {
-  it('emits exactly 240 medication rows (3 per patient × 80 patients)', () => {
+  it('emits exactly 248 medication rows (baseline 240 + 8 LAI rows for index cases)', () => {
     const { rows } = buildMedications();
-    expect(rows).toHaveLength(240);
+    expect(rows).toHaveLength(248);
   });
 
   it('every medication references a patient_id emitted by gen 06', () => {
@@ -32,7 +32,7 @@ describe('seed-good-health generator 09: medications', () => {
     }
   });
 
-  it('each patient has exactly 3 medications (sertraline, lorazepam, melatonin)', () => {
+  it('every patient keeps the baseline trio, and index-case patients gain an LAI fourth item', () => {
     const { rows } = buildMedications();
     const byPatient = new Map<string, Set<string>>();
     for (const row of rows) {
@@ -41,17 +41,24 @@ describe('seed-good-health generator 09: medications', () => {
       byPatient.set(row.patient_id, set);
     }
     expect(byPatient.size).toBe(80);
+    let laiPatients = 0;
     for (const set of byPatient.values()) {
-      expect(set.size).toBe(3);
       expect(set.has('Sertraline')).toBe(true);
       expect(set.has('Lorazepam')).toBe(true);
       expect(set.has('Melatonin')).toBe(true);
+      if (set.has('Paliperidone')) {
+        laiPatients++;
+        expect(set.size).toBe(4);
+      } else {
+        expect(set.size).toBe(3);
+      }
     }
+    expect(laiPatients).toBe(8);
   });
 
-  it('all ids are distinct across 240 rows', () => {
+  it('all ids are distinct across 248 rows', () => {
     const ids = new Set(buildMedications().rows.map((r) => r.id));
-    expect(ids.size).toBe(240);
+    expect(ids.size).toBe(248);
   });
 
   it('every row is active, has status=active, and no end_date', () => {
@@ -78,13 +85,18 @@ describe('seed-good-health generator 09: medications', () => {
     }
   });
 
-  it('no medications are flagged is_lai in the baseline cohort', () => {
-    for (const row of buildMedications().rows) {
-      expect(row.is_lai).toBe(false);
+  it('seeds exactly 8 active LAI medications for the team index cases', () => {
+    const laiRows = buildMedications().rows.filter((row) => row.is_lai);
+    expect(laiRows).toHaveLength(8);
+    for (const row of laiRows) {
+      expect(row.generic_name).toBe('Paliperidone');
+      expect(row.route).toBe('im');
+      expect(row.frequency).toBe('monthly');
+      expect(row.status).toBe('active');
     }
   });
 
-  it('is_regular is true for exactly 2 of the 3 meds per patient', () => {
+  it('baseline patients have 2 regular meds, while the LAI cohort has 3', () => {
     const { rows } = buildMedications();
     const byPatient = new Map<string, number>();
     for (const row of rows) {
@@ -92,9 +104,15 @@ describe('seed-good-health generator 09: medications', () => {
         byPatient.set(row.patient_id, (byPatient.get(row.patient_id) ?? 0) + 1);
       }
     }
+    let laiRegularCount = 0;
     for (const count of byPatient.values()) {
-      expect(count).toBe(2);
+      if (count === 3) {
+        laiRegularCount++;
+      } else {
+        expect(count).toBe(2);
+      }
     }
+    expect(laiRegularCount).toBe(8);
   });
 
   it('prescribed_by_staff_id always points at a team-lead staff row', () => {

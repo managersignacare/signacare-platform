@@ -18,6 +18,7 @@ import type {
   StaffRow,
   StaffMasterLoginRow,
 } from './02_executive_staff';
+import { isPrescriberSystemRole } from '@signacare/shared';
 
 // Phase 0.8 generator 04 — clinic staff (84 personas).
 //
@@ -53,6 +54,39 @@ interface StaffSpecialtyRow {
   credential_ref: string | null;
 }
 
+function appendLuhnCheckDigit(baseDigits: string): string {
+  const candidate = `${baseDigits}0`;
+  let sum = 0;
+  let alternate = false;
+  for (let i = candidate.length - 1; i >= 0; i--) {
+    let value = Number(candidate[i]);
+    if (alternate) {
+      value *= 2;
+      if (value > 9) {
+        value -= 9;
+      }
+    }
+    sum += value;
+    alternate = !alternate;
+  }
+  const checkDigit = (10 - (sum % 10)) % 10;
+  return `${baseDigits}${checkDigit}`;
+}
+
+function buildDemoPrescriberDetails(index: number): {
+  hpii: string;
+  prescriberNumber: string;
+  providerNumber: string;
+} {
+  const sequence = String(index + 1).padStart(4, '0');
+  const hpiiBase = `800361${String(100000000 + index).padStart(9, '0')}`;
+  return {
+    hpii: appendLuhnCheckDigit(hpiiBase),
+    prescriberNumber: `PBS${sequence}`,
+    providerNumber: `MED${sequence}`,
+  };
+}
+
 export interface ClinicStaffBuild {
   readonly staffRows: StaffRow[];
   readonly specialtyRows: StaffSpecialtyRow[];
@@ -66,6 +100,7 @@ export async function buildClinicStaff(
   const specialtyRows: StaffSpecialtyRow[] = [];
   const loginTable: StaffMasterLoginRow[] = [];
   const emailsByClinic = new Map<string, Set<string>>();
+  let prescriberSeedIndex = 0;
 
   for (const clinic of MENTAL_HEALTH_CLINICS) {
     const cid = clinicId(clinic.slug);
@@ -128,6 +163,9 @@ export async function buildClinicStaff(
 
         const plainPassword = buildPlainPassword(roster.passwordToken, family);
         const hash = await Promise.resolve(hashFn(plainPassword));
+        const prescriberDetails = isPrescriberSystemRole(roster.role)
+          ? buildDemoPrescriberDetails(prescriberSeedIndex++)
+          : null;
 
         staffRows.push({
           id,
@@ -138,6 +176,9 @@ export async function buildClinicStaff(
           password_hash: hash,
           role: roster.role,
           discipline: roster.discipline,
+          prescriber_number: prescriberDetails?.prescriberNumber ?? null,
+          provider_number: prescriberDetails?.providerNumber ?? null,
+          hpii: prescriberDetails?.hpii ?? null,
           is_active: true,
           require_mfa: true,
           has_mfa_configured: false,

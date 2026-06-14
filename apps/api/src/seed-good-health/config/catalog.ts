@@ -315,7 +315,11 @@ export const DEPARTMENT_HEADS: readonly CatalogDepartmentHead[] = [
 export interface CatalogClinicRole {
   readonly slug: string;
   readonly titleLabel: string;
-  readonly role: 'clinician' | 'receptionist';
+  readonly role:
+    | 'clinician'
+    | 'receptionist'
+    | 'prescriber_consultant'
+    | 'prescriber_registrar';
   readonly discipline: string;
   readonly passwordToken: string;
 }
@@ -324,21 +328,21 @@ export const CLINIC_ROLE_ROSTER: readonly CatalogClinicRole[] = [
   {
     slug: 'team-lead',
     titleLabel: 'Consultant Psychiatrist (Team Lead)',
-    role: 'clinician',
+    role: 'prescriber_consultant',
     discipline: 'Psychiatry',
     passwordToken: 'TeamLead',
   },
   {
     slug: 'registrar-1',
     titleLabel: 'Psychiatry Registrar',
-    role: 'clinician',
+    role: 'prescriber_registrar',
     discipline: 'Psychiatry',
     passwordToken: 'Registrar',
   },
   {
     slug: 'registrar-2',
     titleLabel: 'Psychiatry Registrar',
-    role: 'clinician',
+    role: 'prescriber_registrar',
     discipline: 'Psychiatry',
     passwordToken: 'Registrar',
   },

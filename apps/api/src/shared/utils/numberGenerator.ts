@@ -26,7 +26,13 @@ async function reserveNextSequenceValue(
         SELECT set_config('app.clinic_id', ?, true)
       )
       INSERT INTO clinic_sequences (id, clinic_id, scope_key, next_value, created_at, updated_at)
-      SELECT gen_random_uuid(), ?, ?, 1, now(), now()
+      SELECT
+        gen_random_uuid(),
+        NULLIF(current_setting('app.clinic_id', true), '')::uuid,
+        ?,
+        1,
+        now(),
+        now()
       FROM __tenant_context
       ON CONFLICT (clinic_id, scope_key)
       DO UPDATE
@@ -34,7 +40,7 @@ async function reserveNextSequenceValue(
           updated_at = now()
       RETURNING next_value
     `,
-    [clinicId, clinicId, scopeKey],
+    [clinicId, scopeKey],
   );
   return toSequenceValue(result.rows?.[0]?.next_value);
 }

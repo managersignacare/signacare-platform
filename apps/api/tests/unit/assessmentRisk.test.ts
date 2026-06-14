@@ -29,7 +29,7 @@ describe('assessmentRisk', () => {
     expect(signal.submittedTotalScore).toBe(8);
     expect(signal.hasScoreMismatch).toBe(true);
     expect(signal.triggered).toBe(true);
-    expect(signal.reason).toBe('PHQ-9 Q9 positive');
+    expect(signal.reason).toBe('PHQ-9 self-harm/suicide item positive');
   });
 
   it('triggers on PHQ-9 total score >= 20 when Q9 is 0', () => {

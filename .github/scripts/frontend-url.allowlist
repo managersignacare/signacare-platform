@@ -61,3 +61,17 @@ DELETE staff-settings/role-types/:DYNAMIC
 # TODO — Backup location delete not in backupRoutes. Either
 # implement the handler or remove the delete button.
 DELETE backup/locations/:DYNAMIC
+
+# TODO — Patient-app admin surfaces in Viva still reference a set of
+# backend handlers that have not been ported into patientAppRoutes yet.
+# Keep these explicit until the digital-interventions / patient-app
+# backlog is implemented or the UI is retired.
+POST patient-app/checklists/:DYNAMIC
+POST patient-app/thresholds/:DYNAMIC
+DELETE patient-app/thresholds/:DYNAMIC/:DYNAMIC
+PATCH patient-app/tracking/:DYNAMIC
+DELETE patient-app/tracking/:DYNAMIC
+POST patient-app/med-reminders/:DYNAMIC
+DELETE patient-app/med-reminders/:DYNAMIC/:DYNAMIC
+POST patient-app/shared-docs/:DYNAMIC
+POST patient-app/assessments/:DYNAMIC/assign

@@ -1,6 +1,7 @@
 // apps/api/src/features/appointments/appointmentRepository.ts
 import { db } from '../../db/db';
 import type { Knex } from 'knex';
+import { hasOptionalTable } from '../../shared/optionalSchema';
 
 export type AppointmentStatus =
   | 'scheduled'
@@ -203,7 +204,7 @@ export const appointmentRepository = {
     // pivot, a co_clinician would never see a shared booking in
     // their day view. The single-clinician fast path is preserved
     // by always writing a primary attendee row in service.create.
-    if (clinicianId) {
+    if (clinicianId && await hasOptionalTable('appointment_attendees')) {
       const rows = (await db('appointments as a')
         .join('appointment_attendees as aa', 'aa.appointment_id', 'a.id')
         .where('a.clinic_id', clinicId)
@@ -232,6 +233,7 @@ export const appointmentRepository = {
       .offset(offset);
 
     if (patientId) query.andWhere('patient_id', patientId);
+    if (clinicianId) query.andWhere('clinician_id', clinicianId);
     if (specialtyCode) query.andWhere('specialty_code', specialtyCode);
     if (status) query.andWhere('status', status);
     if (from) query.andWhere('appointment_start', '>=', from);

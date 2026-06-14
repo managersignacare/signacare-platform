@@ -24,4 +24,15 @@ export const referralKeys = {
 export const referralsCrossFeatureKeys = {
   patientsSearch: (search: string) => ['patients', 'search', search] as const,
   staffLookup: (clinicId?: string) => ['staff', 'lookup', clinicId ?? 'session'] as const,
+  referralSources: () => ['staff-settings', 'referral-sources'] as const,
+} as const;
+
+export const referralOutKeys = {
+  all: ['referral-out'] as const,
+  diagnoses: (patientId: string | null) =>
+    ['referral-out', patientId ?? 'none', 'diagnoses'] as const,
+  medications: (patientId: string | null) =>
+    ['referral-out', patientId ?? 'none', 'medications'] as const,
+  providers: (patientId: string | null) =>
+    ['referral-out', patientId ?? 'none', 'providers'] as const,
 } as const;

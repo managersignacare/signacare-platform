@@ -1,5 +1,5 @@
 // apps/web/src/features/appointments/components/AppointmentCalendar.tsx
-import { Alert, Box, Chip, Grid, Paper, Stack, Typography } from '@mui/material';
+import { Alert, Box, Chip, Grid, Paper, Stack, Tooltip, Typography } from '@mui/material';
 import type { Appointment } from '../types/appointmentTypes';
 import { getAppointmentStatusMeta } from '../types/appointmentTypes';
 import type { AvailabilityColour } from '@signacare/shared';
@@ -10,6 +10,7 @@ interface Props {
   getAvailabilitySummary?: (day: Date) => {
     blockCount: number;
     dominantColour: AvailabilityColour | null;
+    labels?: string[];
   };
   onDropAppointment?: (appointment: Appointment, day: Date) => void;
   onSelectAppointment?: (appointment: Appointment) => void;
@@ -67,7 +68,15 @@ export const AppointmentCalendar = ({
           const availability = getAvailabilitySummary?.(day) ?? {
             blockCount: 0,
             dominantColour: null,
+            labels: [],
           };
+          const availabilityLabel = availability.labels?.length
+            ? availability.labels[0]
+            : availability.dominantColour === 'red'
+              ? 'Blocked'
+              : availability.dominantColour === 'yellow'
+                ? 'Tentative'
+                : 'Available';
           const isCurrentMonth = day.getMonth() === month.getMonth();
           return (
             <Grid size={12 / 7} key={day.toISOString()}>
@@ -109,39 +118,59 @@ export const AppointmentCalendar = ({
                 </Stack>
                 <Stack spacing={0.75} mt={1}>
                   {availability.blockCount > 0 ? (
-                    <Chip
-                      size="small"
-                      variant="outlined"
-                      label={
-                        availability.dominantColour === 'red'
-                          ? 'Blocked'
-                          : availability.dominantColour === 'yellow'
-                            ? 'Tentative'
-                            : 'Available'
-                      }
-                      sx={{
-                        justifyContent: 'flex-start',
-                        borderColor:
-                          availability.dominantColour === 'red'
-                            ? '#D32F2F'
-                            : availability.dominantColour === 'yellow'
-                              ? '#C58A00'
-                              : '#2E7D32',
-                        color:
-                          availability.dominantColour === 'red'
-                            ? '#D32F2F'
-                            : availability.dominantColour === 'yellow'
-                              ? '#8A5A00'
-                              : '#2E7D32',
-                        bgcolor:
-                          availability.dominantColour === 'red'
-                            ? '#FFEBEE'
-                            : availability.dominantColour === 'yellow'
-                              ? '#FFF8E1'
-                              : '#E8F5E9',
-                      }}
-                    />
+                    <Tooltip
+                      title={availability.labels?.length ? availability.labels.join(' · ') : availabilityLabel}
+                    >
+                      <Chip
+                        size="small"
+                        variant="outlined"
+                        label={availabilityLabel}
+                        sx={{
+                          justifyContent: 'flex-start',
+                          maxWidth: '100%',
+                          borderColor:
+                            availability.dominantColour === 'red'
+                              ? '#D32F2F'
+                              : availability.dominantColour === 'yellow'
+                                ? '#C58A00'
+                                : '#2E7D32',
+                          color:
+                            availability.dominantColour === 'red'
+                              ? '#D32F2F'
+                              : availability.dominantColour === 'yellow'
+                                ? '#8A5A00'
+                                : '#2E7D32',
+                          bgcolor:
+                            availability.dominantColour === 'red'
+                              ? '#FFEBEE'
+                              : availability.dominantColour === 'yellow'
+                                ? '#FFF8E1'
+                                : '#E8F5E9',
+                          '& .MuiChip-label': {
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          },
+                        }}
+                      />
+                    </Tooltip>
                   ) : null}
+                  {availability.labels?.slice(1, 2).map((label) => (
+                    <Typography
+                      key={label}
+                      variant="caption"
+                      sx={{
+                        color: 'text.secondary',
+                        display: 'block',
+                        lineHeight: 1.2,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {label}
+                    </Typography>
+                  ))}
                   {dayAppointments.slice(0, 3).map((appointment) => {
                     const meta = getAppointmentStatusMeta(appointment.status);
                     return (

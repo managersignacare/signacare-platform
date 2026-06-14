@@ -74,6 +74,7 @@ interface MedicationTemplate {
   readonly indication: string;
   readonly is_regular: boolean;
   readonly is_prn: boolean;
+  readonly is_lai?: boolean;
 }
 
 const MEDICATION_TEMPLATES: readonly MedicationTemplate[] = [
@@ -121,6 +122,22 @@ const MEDICATION_TEMPLATES: readonly MedicationTemplate[] = [
   },
 ];
 
+const LAI_TEMPLATE: MedicationTemplate = {
+  slug: 'paliperidone-lai',
+  drug_label: 'Paliperidone LAI 150mg',
+  generic_name: 'Paliperidone',
+  brand_name: 'Invega Sustenna',
+  dose: '150',
+  dose_unit: 'mg',
+  route: 'im',
+  frequency: 'monthly',
+  instructions: 'Administer deep IM every 28 days with depot follow-up booking.',
+  indication: 'Schizophrenia maintenance',
+  is_regular: true,
+  is_prn: false,
+  is_lai: true,
+};
+
 const EPISODE_2_START = '2024-11-10';
 
 export function buildMedications(): MedicationsBuild {
@@ -158,6 +175,33 @@ export function buildMedications(): MedicationsBuild {
             source: 'seed',
             prescribed_by_staff_id: leadClinicianId,
             notes: null,
+          });
+        }
+
+        if (i === 1) {
+          rows.push({
+            id: derive(pid, `med.${LAI_TEMPLATE.slug}`),
+            clinic_id: cid,
+            patient_id: pid,
+            episode_id: ep2Uuid,
+            drug_label: LAI_TEMPLATE.drug_label,
+            generic_name: LAI_TEMPLATE.generic_name,
+            brand_name: LAI_TEMPLATE.brand_name,
+            dose: LAI_TEMPLATE.dose,
+            dose_unit: LAI_TEMPLATE.dose_unit,
+            route: LAI_TEMPLATE.route,
+            frequency: LAI_TEMPLATE.frequency,
+            instructions: LAI_TEMPLATE.instructions,
+            indication: LAI_TEMPLATE.indication,
+            start_date: EPISODE_2_START,
+            end_date: null,
+            status: 'active',
+            is_regular: LAI_TEMPLATE.is_regular,
+            is_prn: LAI_TEMPLATE.is_prn,
+            is_lai: true,
+            source: 'seed',
+            prescribed_by_staff_id: leadClinicianId,
+            notes: 'Seeded LAI regimen for prescribing and depot-calendar demonstrations.',
           });
         }
       }

@@ -29,6 +29,7 @@ import { apiClient } from '../../../shared/services/apiClient';
 import { extractListResponse } from '../../../shared/services/extractListResponse';
 import { calendarKeys } from '../../calendar/queryKeys';
 import { PatientSearchAutocomplete, type PatientOption } from '../../patients/components/PatientSearchAutocomplete';
+import { patientAppointmentsKeys, patientsKeys } from '../../patients/queryKeys';
 import { appointmentKeys } from '../queryKeys';
 import { appointmentApi } from '../services/appointmentApi';
 
@@ -204,7 +205,7 @@ export function SchedulingAppointmentDialog({
   const effectivePatientId = editing?.patientId ?? selectedPatient?.id ?? '';
 
   const patientSummary = useQuery({
-    queryKey: ['appointment-dialog-patient', editing?.patientId ?? ''],
+    queryKey: appointmentKeys.dialogPatient(editing?.patientId ?? ''),
     queryFn: () => apiClient.get<{ givenName?: string; familyName?: string; emrNumber?: string }>(`patients/${editing?.patientId}`),
     enabled: Boolean(editing?.patientId),
     staleTime: 60_000,
@@ -276,8 +277,8 @@ export function SchedulingAppointmentDialog({
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: appointmentKeys.all }),
       queryClient.invalidateQueries({ queryKey: calendarKeys.all }),
-      queryClient.invalidateQueries({ queryKey: ['patient-appointments', patientId] }),
-      queryClient.invalidateQueries({ queryKey: ['appointments', patientId] }),
+      queryClient.invalidateQueries({ queryKey: patientsKeys.appointments(patientId) }),
+      queryClient.invalidateQueries({ queryKey: patientAppointmentsKeys.byPatient(patientId) }),
     ]);
   };
 

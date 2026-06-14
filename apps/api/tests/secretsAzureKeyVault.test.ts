@@ -235,10 +235,12 @@ describe('BUG-366a L5 absorb — production boot entry points route via index.ts
     expect(pkg.main).toBe('dist/src/index.js');
   });
 
-  it('apps/api/Dockerfile CMD points at dist/src/index.js', () => {
+  it('apps/api/Dockerfile boots through entrypoint.sh and entrypoint launches dist/src/index.js', () => {
     const df = fs.readFileSync(path.join(__dirname, '..', 'Dockerfile'), 'utf8');
-    expect(df).toMatch(/CMD.*dist\/src\/index\.js/);
-    expect(df).not.toMatch(/CMD.*dist\/src\/server\.js/);
+    const entrypoint = fs.readFileSync(path.join(__dirname, '..', 'entrypoint.sh'), 'utf8');
+    expect(df).toMatch(/ENTRYPOINT \["\.\/entrypoint\.sh"\]/);
+    expect(entrypoint).toMatch(/exec node -r dotenv\/config dist\/src\/index\.js/);
+    expect(entrypoint).not.toMatch(/dist\/src\/server\.js/);
   });
 
   it('apps/api/src/index.ts awaits loadSecretsAsync', () => {

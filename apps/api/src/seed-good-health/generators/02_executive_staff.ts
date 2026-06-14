@@ -29,6 +29,9 @@ export interface StaffRow {
   password_hash: string;
   role: string;
   discipline: string | null;
+  prescriber_number?: string | null;
+  provider_number?: string | null;
+  hpii?: string | null;
   is_active: boolean;
   require_mfa: boolean;
   has_mfa_configured: boolean;

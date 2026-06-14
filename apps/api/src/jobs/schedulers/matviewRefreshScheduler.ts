@@ -27,7 +27,7 @@
 // Naming compliance: snake_case view names, camelCase TS exports,
 // kebab-case node-cron expression.
 
-import cron from 'node-cron';
+import cron, { type ScheduledTask } from 'node-cron';
 import { db } from '../../db/db';
 import { logger } from '../../utils/logger';
 
@@ -103,7 +103,7 @@ async function tick(): Promise<void> {
   }
 }
 
-export function startMatviewRefreshScheduler(): cron.ScheduledTask | null {
+export function startMatviewRefreshScheduler(): ScheduledTask | null {
   const views = parseViewList();
   if (views.length === 0) {
     // No views configured — leave the scheduler off entirely so we

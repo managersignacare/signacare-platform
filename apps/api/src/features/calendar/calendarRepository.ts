@@ -23,6 +23,7 @@
 //         handles try/catch — this repo throws on error
 
 import { db } from '../../db/db';
+import { hasOptionalTable } from '../../shared/optionalSchema';
 
 export type AvailabilityColour = 'red' | 'yellow' | 'green';
 export type Recurrence = 'none' | 'weekly';
@@ -317,6 +318,34 @@ async function listAppointmentsForClinicianOnDate(
 ): Promise<TodayViewAppointmentDb[]> {
   const start = `${isoDate} 00:00:00`;
   const end = `${isoDate} 23:59:59`;
+
+  if (!(await hasOptionalTable('appointment_attendees'))) {
+    const legacyRows = (await db('appointments as a')
+      .join('patients as p', 'p.id', 'a.patient_id')
+      .where({
+        'a.clinic_id': clinicId,
+        'a.clinician_id': clinicianId,
+      })
+      .whereNull('a.deleted_at')
+      .andWhereBetween('a.appointment_start', [start, end])
+      .orderBy('a.appointment_start', 'asc')
+      .select({
+        id: 'a.id',
+        clinic_id: 'a.clinic_id',
+        patient_id: 'a.patient_id',
+        clinician_id: 'a.clinician_id',
+        patient_given_name: 'p.given_name',
+        patient_family_name: 'p.family_name',
+        appointment_start: 'a.appointment_start',
+        appointment_end: 'a.appointment_end',
+        appointment_type: 'a.appointment_type',
+        status: 'a.status',
+        telehealth: 'a.telehealth',
+        notes: 'a.notes',
+      })) as TodayViewAppointmentDb[];
+    return legacyRows;
+  }
+
   const rows = (await db('appointments as a')
     .join('appointment_attendees as aa', 'aa.appointment_id', 'a.id')
     .join('patients as p', 'p.id', 'a.patient_id')

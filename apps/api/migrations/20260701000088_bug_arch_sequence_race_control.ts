@@ -22,12 +22,20 @@ export async function up(knex: Knex): Promise<void> {
     });
   }
 
-  // @migration-raw-exempt: check_constraint
-  await knex.raw(`
-    ALTER TABLE clinic_sequences
-      ADD CONSTRAINT clinic_sequences_next_value_nonnegative
-      CHECK (next_value >= 0)
-  `).catch(() => undefined);
+  const constraintExists = await knex
+    .select(knex.raw('1'))
+    .from('pg_constraint')
+    .where({ conname: 'clinic_sequences_next_value_nonnegative' })
+    .first();
+
+  if (!constraintExists) {
+    // @migration-raw-exempt: check_constraint
+    await knex.raw(`
+      ALTER TABLE clinic_sequences
+        ADD CONSTRAINT clinic_sequences_next_value_nonnegative
+        CHECK (next_value >= 0)
+    `);
+  }
 
   // @migration-raw-exempt: rls_policy
   await knex.raw(`
@@ -83,10 +91,10 @@ export async function up(knex: Knex): Promise<void> {
 
 export async function down(knex: Knex): Promise<void> {
   // @migration-raw-exempt: index_functional
-  await knex.raw('DROP INDEX IF EXISTS uq_invoices_clinic_invoice_number').catch(() => undefined);
+  await knex.raw('DROP INDEX IF EXISTS uq_invoices_clinic_invoice_number');
   // @migration-raw-exempt: index_partial
-  await knex.raw('DROP INDEX IF EXISTS uq_referrals_clinic_referral_number_active').catch(() => undefined);
+  await knex.raw('DROP INDEX IF EXISTS uq_referrals_clinic_referral_number_active');
   // @migration-raw-exempt: drop_policy_if_exists
-  await knex.raw('DROP POLICY IF EXISTS rls_clinic_sequences_tenant ON clinic_sequences').catch(() => undefined);
+  await knex.raw('DROP POLICY IF EXISTS rls_clinic_sequences_tenant ON clinic_sequences');
   await knex.schema.dropTableIfExists('clinic_sequences');
 }

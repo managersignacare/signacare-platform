@@ -4,6 +4,10 @@ import { describe, expect, it } from 'vitest';
 
 describe('SchedulingWorkspace source contract', () => {
   const source = readFileSync(resolve(__dirname, './SchedulingWorkspace.tsx'), 'utf8');
+  const calendarViewsSource = readFileSync(
+    resolve(__dirname, './SchedulingWorkspaceCalendarViews.tsx'),
+    'utf8',
+  );
 
   it('pins My Calendar as the unified scheduling surface', () => {
     expect(source).toContain('One scheduling surface for clinician, team, and clinic appointments');
@@ -38,6 +42,12 @@ describe('SchedulingWorkspace source contract', () => {
     expect(source).toContain('value="clinic"');
   });
 
+  it('keeps calendar, contacts, and DNA inside one My Calendar surface', () => {
+    expect(source).toContain('value="calendar"');
+    expect(source).toContain('value="contacts"');
+    expect(source).toContain('value="dna"');
+  });
+
   it('supports slot creation and appointment details from the same workspace', () => {
     expect(source).toContain('<AppointmentDetailsDrawer');
     expect(source).toContain('onCreateSlot');
@@ -48,7 +58,7 @@ describe('SchedulingWorkspace source contract', () => {
     expect(source).toContain('label="Status"');
     expect(source).toContain('label="Search"');
     expect(source).toContain('handleDropAppointment');
-    expect(source).toContain('draggable');
+    expect(calendarViewsSource).toContain('draggable');
   });
 
   it('surfaces explicit refresh and sync setup controls in My Calendar', () => {
@@ -60,6 +70,12 @@ describe('SchedulingWorkspace source contract', () => {
   it('loads the calendar page appointments through the calendar module surface', () => {
     expect(source).toContain('calendarApi');
     expect(source).toContain('listAppointments');
+    expect(source).toContain("limit: '200'");
     expect(source).not.toContain('appointmentApi.list({');
+  });
+
+  it('renders time block placeholder text directly inside the calendar cells', () => {
+    expect(calendarViewsSource).toContain('slotSummary.primaryText');
+    expect(calendarViewsSource).toContain('slotSummary.notes[0]');
   });
 });

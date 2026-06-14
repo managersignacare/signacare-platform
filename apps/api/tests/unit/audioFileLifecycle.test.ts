@@ -1,23 +1,15 @@
 /**
- * Audio file hard-delete verification — raw audio MUST be removed
- * from disk immediately after transcription, not deferred to the
- * audioRetentionScheduler (which is a 30-day safety net for
- * orphaned files, not the primary cleanup path).
+ * Audio upload lifecycle verification.
  *
- * Testing runtime deletion would require booting a live Whisper
- * server + streaming real audio — impractical. Instead this test
- * takes a source-level approach: it reads the streaming transcribe
- * route and asserts that EVERY transcription code path ends with
- * `fs.unlink(req.file.path, ...)`. That's the invariant we actually
- * care about — a future PR that removes the unlink call fails this
- * test immediately, catching a data-retention regression at PR time.
+ * The original implementation wrote streamed chunks to disk and had to
+ * `fs.unlink(req.file.path, ...)` on every path. The current route uses
+ * `multer.memoryStorage()` and forwards `req.file.buffer` directly to
+ * Whisper, which is the stricter privacy posture: no temp audio file is
+ * ever created, so there is nothing to delete.
  *
- * A proper runtime test belongs in an end-to-end harness with a
- * mocked Whisper HTTP endpoint; flagged as a follow-up.
- *
- * Standard satisfied: Australian Privacy Act 1988 APP 11.2 (data
- *                     retention minimisation), HIPAA §164.514(a)
- *                     (de-identification timing), ACHS Standard 1.
+ * These tests now pin that stronger invariant and fail loudly if a future
+ * refactor regresses back to disk-backed temp files without an explicit
+ * decision.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -28,54 +20,41 @@ const STREAMING_ROUTE_PATH = join(
   __dirname, '..', '..', 'src', 'features', 'llm', 'streamingTranscribeRoutes.ts',
 );
 
-describe('Audio file lifecycle (hard-delete on transcription)', () => {
+describe('Audio file lifecycle (memory-only transcription transport)', () => {
   it('streamingTranscribeRoutes.ts file exists', () => {
     expect(() => readFileSync(STREAMING_ROUTE_PATH, 'utf8')).not.toThrow();
   });
 
-  describe('/stream-chunk route — per-chunk cleanup', () => {
+  describe('/stream-chunk route — in-memory upload handling', () => {
     const src = readFileSync(STREAMING_ROUTE_PATH, 'utf8');
 
-    it('calls fs.unlink on the happy path AFTER transcription', () => {
-      // Extract the stream-chunk handler body
+    it('uses multer.memoryStorage and forwards req.file.buffer to Whisper', () => {
       const match = src.match(/router\.post\(['"]\/stream-chunk['"][\s\S]+?\n\}\);/);
       expect(match).toBeTruthy();
       const handler = match![0];
-      // The happy path must call fs.unlink(req.file.path, ...) AFTER
-      // the whisper response is received. A handler that POSTs to
-      // whisper but NEVER unlinks is a leak.
-      expect(handler).toMatch(/fs\.unlink\(req\.file\.path/);
-      // Find the unlink position and assert it sits AFTER the whisper
-      // axios.post call.
-      const axiosPos = handler.indexOf('axios.post');
-      const unlinkPos = handler.indexOf('fs.unlink');
-      expect(axiosPos).toBeGreaterThan(-1);
-      expect(unlinkPos).toBeGreaterThan(-1);
-      expect(unlinkPos).toBeGreaterThan(axiosPos);
+      expect(src).toMatch(/multer\.memoryStorage\(\)/);
+      expect(handler).toMatch(/fd\.append\('file', req\.file\.buffer,/);
     });
 
-    it('calls fs.unlink in the catch block (error-path cleanup)', () => {
-      // On whisper failure the temp file MUST still be removed;
-      // otherwise /tmp fills up on repeated 500s.
+    it('never references req.file.path or fs.unlink because no disk temp file exists', () => {
       const match = src.match(/router\.post\(['"]\/stream-chunk['"][\s\S]+?\n\}\);/);
+      expect(match).toBeTruthy();
       const handler = match![0];
-      // Locate the catch block
-      const catchBlock = handler.match(/catch\s*\([^)]*\)\s*\{[\s\S]+?\n\s{2,}\}/);
-      expect(catchBlock).toBeTruthy();
-      expect(catchBlock![0]).toMatch(/fs\.unlink\(req\.file\.path/);
+      expect(handler).not.toMatch(/req\.file\.path/);
+      expect(handler).not.toMatch(/fs\.unlink/);
     });
   });
 
-  describe('/stream-final route — final-chunk cleanup', () => {
+  describe('/stream-final route — in-memory upload handling', () => {
     const src = readFileSync(STREAMING_ROUTE_PATH, 'utf8');
 
-    it('the final-chunk handler also unlinks on both paths', () => {
-      // Count total unlink calls — the file currently has 4:
-      //   stream-chunk happy, stream-chunk catch,
-      //   stream-final happy, stream-final catch.
-      // A future PR that drops any of them fails this count.
-      const unlinkCount = (src.match(/fs\.unlink\(req\.file\.path/g) || []).length;
-      expect(unlinkCount).toBeGreaterThanOrEqual(3);
+    it('reuses the same memory-only transport for the final chunk', () => {
+      const match = src.match(/router\.post\(['"]\/stream-final['"][\s\S]+?\n\}\);/);
+      expect(match).toBeTruthy();
+      const handler = match![0];
+      expect(handler).toMatch(/fd\.append\('file', req\.file\.buffer,/);
+      expect(handler).not.toMatch(/req\.file\.path/);
+      expect(handler).not.toMatch(/fs\.unlink/);
     });
   });
 
@@ -99,14 +78,10 @@ describe('Audio file lifecycle (hard-delete on transcription)', () => {
     });
   });
 
-  describe('Regression guard: no setTimeout cleanup', () => {
+  describe('Regression guard: no deferred temp-file cleanup', () => {
     const src = readFileSync(STREAMING_ROUTE_PATH, 'utf8');
 
-    it('cleanup is synchronous, not deferred via setTimeout / setImmediate', () => {
-      // A future "optimisation" might defer cleanup to a later
-      // event-loop tick. That's a bug: the deferred call can
-      // legitimately lose its reference on process exit, orphaning
-      // files indefinitely. Fail loudly if anyone tries.
+    it('does not introduce deferred file cleanup hooks because files stay in memory', () => {
       expect(src).not.toMatch(/setTimeout\([^,]*fs\.unlink/);
       expect(src).not.toMatch(/setImmediate\([^,]*fs\.unlink/);
     });

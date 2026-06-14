@@ -24,7 +24,7 @@
 //
 // Naming compliance: snake_case env vars (AUDIO_*), camelCase TS.
 
-import cron from 'node-cron';
+import cron, { type ScheduledTask } from 'node-cron';
 import fs from 'fs';
 import path from 'path';
 import { logger } from '../../utils/logger';
@@ -133,7 +133,7 @@ async function tick(): Promise<void> {
   }
 }
 
-export function startAudioRetentionScheduler(): cron.ScheduledTask | null {
+export function startAudioRetentionScheduler(): ScheduledTask | null {
   const cronExpr = process.env.AUDIO_RETENTION_CRON ?? '0 3 * * *'; // daily at 03:00
   if (!cron.validate(cronExpr)) {
     logger.error({ cronExpr }, 'audioRetentionScheduler: invalid AUDIO_RETENTION_CRON');

@@ -131,6 +131,8 @@ export const patientsKeys = {
   patientSearch: (search: string) => ['patients', 'search', search] as const,
   staffSettingsAppointmentModes: () => ['staff-settings', 'appointment-modes'] as const,
   staffSettingsContactOptions: () => ['staff-settings', 'contact-options'] as const,
+  clinicalAiJobs: (patientId: string, action: 'maudsley' | 'formulation') =>
+    ['clinical-ai-jobs', patientId, action] as const,
   alertTypes: () => ['patients', 'alert-types'] as const,
   plannedTransitions: (patientId?: string) =>
     patientId ? ['planned-transitions', patientId] as const : ['planned-transitions'] as const,
@@ -157,6 +159,8 @@ export const episodesKeys = {
   lettersAll: () => ['episode-letters'] as const,
   messages: (patientId: string, episodeId: string) => ['episode-messages', patientId, episodeId] as const,
   types: () => ['episode-types'] as const,
+  timelineThreadDetail: (threadId: string | null) =>
+    ['episodes', 'timeline-thread-detail', threadId ?? 'none'] as const,
 } as const;
 
 // ─── Appointments (patient detail surface) ───────────────────────────────
@@ -208,6 +212,7 @@ export const patientMedicationsKeys = {
 // ─── Pathology ───────────────────────────────────────────────────────────
 export const pathologyKeys = {
   byPatient: (patientId: string) => ['pathology', patientId] as const,
+  orders: (patientId: string) => ['pathology-orders', patientId] as const,
   summary: (patientId: string) => ['pathology', patientId, 'summary'] as const,
   mdtByPatient: (patientId: string) => ['pathology-mdt', patientId] as const,
 } as const;

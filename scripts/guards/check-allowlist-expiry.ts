@@ -25,9 +25,11 @@
  *   exit 1 = expired entries OR missing annotations; BLOCK
  */
 import { readFileSync, readdirSync } from 'fs';
-import { join } from 'path';
+import { dirname, join, resolve } from 'path';
+import { fileURLToPath } from 'url';
 
-const ALLOWLIST_DIR = '/Users/drprakashkamath/Projects/Signacare/scripts/guards';
+const scriptDir = dirname(fileURLToPath(import.meta.url));
+const ALLOWLIST_DIR = resolve(scriptDir);
 const TODAY = new Date();
 
 interface ExpiryViolation {

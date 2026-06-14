@@ -25,7 +25,7 @@ import { useOrgTree } from '../../org-settings/hooks/useOrgSettings'
 import type { OrgUnit } from '../../org-settings/services/orgSettingsApi'
 import { apiClient } from '../../../shared/services/apiClient'
 import { useAuthStore } from '../../../shared/store/authStore'
-import { referralKeys, referralsCrossFeatureKeys } from '../queryKeys'
+import { referralKeys, referralOutKeys, referralsCrossFeatureKeys } from '../queryKeys'
 import { buildReferralOutLetterDraft, type ReferralOutTargetType } from './referralOutSupport'
 
 interface SearchPatientRow {
@@ -103,7 +103,7 @@ function usePatientSearch(search: string) {
 
 function usePatientDiagnoses(patientId: string | null) {
   return useQuery({
-    queryKey: ['referral-out', patientId ?? 'none', 'diagnoses'],
+    queryKey: referralOutKeys.diagnoses(patientId),
     queryFn: () =>
       apiClient
         .get<{ data: PatientDiagnosisRow[] }>(`patients/${patientId}/diagnoses`)
@@ -115,7 +115,7 @@ function usePatientDiagnoses(patientId: string | null) {
 
 function usePatientMedications(patientId: string | null) {
   return useQuery({
-    queryKey: ['referral-out', patientId ?? 'none', 'medications'],
+    queryKey: referralOutKeys.medications(patientId),
     queryFn: () =>
       apiClient
         .get<PatientMedicationRow[] | { data?: PatientMedicationRow[] }>(
@@ -133,7 +133,7 @@ function usePatientMedications(patientId: string | null) {
 
 function usePatientProviders(patientId: string | null) {
   return useQuery({
-    queryKey: ['referral-out', patientId ?? 'none', 'providers'],
+    queryKey: referralOutKeys.providers(patientId),
     queryFn: () =>
       apiClient
         .get<{ providers: PatientProviderRow[] }>(`patients/${patientId}/providers`)
@@ -145,7 +145,7 @@ function usePatientProviders(patientId: string | null) {
 
 function useReferralSources() {
   return useQuery({
-    queryKey: ['staff-settings', 'referral-sources'],
+    queryKey: referralsCrossFeatureKeys.referralSources(),
     queryFn: () =>
       apiClient
         .get<{ sources: ReferralSourceRow[] }>('staff-settings/referral-sources')
@@ -231,7 +231,7 @@ function useCreatePatientProvider(patientId: string | null) {
     }) =>
       apiClient.post<{ provider: PatientProviderRow }>(`patients/${patientId}/providers`, dto),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['referral-out', patientId ?? 'none', 'providers'] })
+      qc.invalidateQueries({ queryKey: referralOutKeys.providers(patientId) })
     },
   })
 }

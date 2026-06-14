@@ -105,7 +105,7 @@ export function AsyncAiJobsSettingsPanel({ patientId }: AsyncAiJobsSettingsPanel
   });
 
   const summaryJobsQuery = useQuery({
-    queryKey: ['clinical-ai-jobs', normalizedPatientId, 'maudsley'],
+    queryKey: patientsKeys.clinicalAiJobs(normalizedPatientId, 'maudsley'),
     queryFn: () =>
       llmAiJobsApi.listAiJobs({ patientId: normalizedPatientId, action: 'maudsley' }).then((response) => response.jobs),
     enabled: hasPatientId,
@@ -113,7 +113,7 @@ export function AsyncAiJobsSettingsPanel({ patientId }: AsyncAiJobsSettingsPanel
   });
 
   const formulationJobsQuery = useQuery({
-    queryKey: ['clinical-ai-jobs', normalizedPatientId, 'formulation'],
+    queryKey: patientsKeys.clinicalAiJobs(normalizedPatientId, 'formulation'),
     queryFn: () =>
       llmAiJobsApi.listAiJobs({ patientId: normalizedPatientId, action: 'formulation' }).then((response) => response.jobs),
     enabled: hasPatientId,

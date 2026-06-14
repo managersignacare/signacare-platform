@@ -168,6 +168,14 @@ export async function requireValidHpii(auth: AuthContext): Promise<void> {
   const valid = hpii !== null && validateHpiiFormat(hpii);
   if (valid) return;
 
+  const releaseEnv = (process.env.SIGNACARE_RELEASE_ENV ?? '').trim().toLowerCase();
+  const stagingBypassEnabled =
+    releaseEnv === 'staging'
+    && (process.env.ALLOW_INVALID_HPII_IN_STAGING ?? '').trim().toLowerCase() === 'true';
+  if (stagingBypassEnabled) {
+    return;
+  }
+
   throw new AppError(
     hpii === null
       ? 'Prescribing requires a valid HPI-I on the prescriber staff record (none set)'

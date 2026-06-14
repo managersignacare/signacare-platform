@@ -24,6 +24,7 @@ import { apiClient } from '../../../../../shared/services/apiClient';
 import { useAuthStore } from '../../../../../shared/store/authStore';
 import { unstyledButtonSx } from '../../../../../shared/styles/unstyledButton';
 import { printContent } from '../../../../../shared/utils/printContent';
+import { sharedClinicProfileKeys } from '../../../../../shared/queryKeys';
 import { pathologyKeys, patientsKeys } from '../../../queryKeys';
 
 type OrderUrgency = 'routine' | 'urgent' | 'stat';
@@ -231,7 +232,7 @@ export function PathologyTab({ patientId }: PathologyTabProps) {
   });
 
   const { data: clinicProfile } = useQuery({
-    queryKey: ['clinic-profile', 'pathology-request-print'],
+    queryKey: sharedClinicProfileKeys.pathologyRequestPrint(),
     queryFn: () => apiClient.get<ClinicProfileSummary>('clinics/me'),
     enabled: !!user?.clinicId,
     staleTime: 5 * 60_000,
@@ -242,7 +243,7 @@ export function PathologyTab({ patientId }: PathologyTabProps) {
     isLoading: ordersLoading,
     isError: ordersError,
   } = useQuery({
-    queryKey: ['pathology-orders', patientId],
+    queryKey: pathologyKeys.orders(patientId),
     queryFn: () => apiClient.get<PathologyOrderResponse[]>(`pathology/patients/${patientId}/orders`),
     enabled: !!patientId,
     staleTime: 30_000,
@@ -409,7 +410,7 @@ export function PathologyTab({ patientId }: PathologyTabProps) {
     mutationFn: (payload: PathologyOrderCreateDTO) =>
       apiClient.post<PathologyOrderResponse>('pathology/orders', payload),
     onSuccess: (createdOrder) => {
-      qc.invalidateQueries({ queryKey: ['pathology-orders', patientId] });
+      qc.invalidateQueries({ queryKey: pathologyKeys.orders(patientId) });
       setSuccessMsg(`Pathology request ${createdOrder.orderNumber} created.`);
       setRequestOpen(false);
       printPathologyOrder(createdOrder);

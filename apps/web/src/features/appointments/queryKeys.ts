@@ -24,4 +24,6 @@ export const appointmentKeys = {
     ['episodes', patientId, 'active-for-appt'] as const,
   episodeAllocation: (episodeId: string) =>
     ['episode-allocation', episodeId] as const,
+  dialogPatient: (patientId: string) =>
+    [...appointmentKeys.all, 'dialog-patient', patientId] as const,
 } as const;
